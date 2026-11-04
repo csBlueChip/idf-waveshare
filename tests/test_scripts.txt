@@ -1,0 +1,170 @@
+wavedemo - scripts: board test procedure
+========================================
+
+Manual test: do each step, check the result before the next one.
+  >  command to send
+  *  action
+  =  expected reply / what you should see
+
+Setup
+  - Copy the contents of the project's sd/ folder to the card (FILES, or
+    the card in a PC). SD:/sys/ then has the system scripts; they only
+    run with NV sys.autorun 1 (section G).
+  - Scripts start with QUIET 2: no command OKs and no <<BTN|IMU|UI>>
+    events on the console while they run.
+  - Web or telnet console. USB serial terminal open for the log.
+  - NV sys.autorun 0 (NV GET sys.autorun).
+
+
+A. LIST AND RUN
+---------------
+
+A1  > RUN
+    = ask count dbg demo hang rec shapes   (one per line), OK
+A2  > RUN count 3
+    = OK, then "count 1 of 3" ... "count 3 of 3" every 0.5 s, "done",
+      <<SCRIPT count END>>
+A3  > RUN nosuch
+    = OK, then <<SCRIPT nosuch ERR nosuch.s: file not found>>
+A4  > RUN bad-name
+    = ERR name: letters, digits, '_' (max 31)
+A5  > LIST count
+    = the file with line numbers, OK
+
+
+B. STOP / PAUSE / CONT
+----------------------
+
+B1  > RUN count 20
+B2  > LED 0 255 0      (while it runs)
+    = ERR script running
+B3  > PAUSE
+    = OK; counting stops; <<SCRIPT count PAUSED count:8>> (or :6)
+B4  > VARS
+    = $arg = "20"  $i = ...  $n = "20", OK
+B5  > LED 0 255 0      (while paused: commands work)
+    = OK, LED green
+B6  > CONT
+    = OK, counting goes on
+B7  > STOP
+    = OK, <<SCRIPT count STOPPED>>
+B8  > STOP
+    = ERR no script running
+B9  > LED 0 0 0
+
+
+C. DEBUGGER
+-----------
+
+C1  > LOAD count 2
+    = OK, <<SCRIPT count PAUSED count:2>>
+C2  > STEP
+    = OK, <<SCRIPT count PAUSED count:3>>
+C3  > LIST count 1 5
+    = lines 1..5, '>' on line 3
+C4  > BPT 7
+    = OK
+C5  > BPT
+    = #1 : count.s:7  WAIT 500, OK
+C6  > CONT
+    = "count 1 of 2", <<SCRIPT count PAUSED count:7>>
+C7  > STACK
+    = count.s:7, OK
+C8  > BPT DEL ALL
+    = OK
+C9  > CONT
+    = "count 2 of 2", "done", <<SCRIPT count END>>
+C10 > VARS
+    = ERR no script paused
+
+
+D. EVENTS AND INPUT
+-------------------
+
+D1  > RUN demo
+    = OK, "demo: BOOT short = hexagon ...", screen black
+D2  * press BOOT once
+    = a white hexagon is drawn; nothing on the console (no OKs, no event)
+D3  * tap the board
+    = "tap - ax=..." (no <<IMU TAP>>); a double tap clears the screen
+      (no W:/H:/OK reply)
+D4  * double-press BOOT
+    = <<SCRIPT demo END>> (no hexagon)
+D5  > RUN ask
+    = "name? (10 s)"
+D6  > Bob
+    = "hello Bob"; ~1 s later "timer event: TIMER 1 5" (or 4..6),
+      <<SCRIPT ask END>>
+D7  > RUN ask        then wait 10 s without typing
+    = "no answer", then the timer line
+
+
+E. STOP NOW
+-----------
+
+E1  > RUN rec
+    = "recording 20 s ..."
+E2  > STOP
+    = OK; the recording goes on to its end (20 s), then
+      <<SCRIPT rec STOPPED>>
+E3  > RUN rec
+E4  > STOP NOW
+    = OK; within ~0.1 s: ERR aborted (from IMU REC), <<SCRIPT rec STOPPED>>
+
+
+F. CLIENT GONE
+--------------
+
+F1  > RUN count 100
+F2  * disconnect the client (close the page / telnet)
+    = the Wait screen appears; the log shows <<SCRIPT count STOPPED>>
+      (no ON UI handler)
+F3  * reconnect
+    > RUN
+    = works (no script running)
+
+
+G. SYSTEM SCRIPTS
+-----------------
+
+G1  * check SD:/sys/ has onBoot.s onWait.s onConnect.s (from sd/sys/)
+    > RUN sys/onWait UI:WEB
+    = <<SCRIPT sys/onWait END>> (top level only: no output); > LIST sys/onWait
+      lists it
+G2  > NV SET sys.autorun 1
+    > REBOOT
+    = LED flashes green at start-up; then blue for 1 s (onBoot); log:
+      "onBoot ran ..." and "onWait before: UI WEB" (or TELNET)
+G3  * connect
+    = log "onWait after"; splash; then "welcome (UI:WEB)" on the client
+
+
+H. BOOT ESCAPE
+--------------
+
+H1  * copy SD:/scripts/hang.s over SD:/sys/onBoot.s; REBOOT
+    = start-up stops after the boot square (no Wait screen)
+H2  * hold BOOT for 3 s
+    = reboot; LED flashes red; normal Wait screen
+H3  > NV GET sys.autorun
+    = sys.autorun=0
+
+
+I. USB CONSOLE (BPT! with no client)
+------------------------------------
+
+I1  * copy SD:/scripts/dbg.s over SD:/sys/onBoot.s
+    > NV SET sys.autorun 1
+    > REBOOT
+I2  = USB terminal: <<SCRIPT sys/onBoot PAUSED sys/onBoot:4>>
+I3  * in the USB terminal type: VARS
+    = $arg = ""  $x = 1, OK
+I4  * type: CONT
+    = OK; log "dbg done x=2"; the Wait screen appears
+
+
+J. CLEAN UP
+-----------
+
+J1  > NV SET sys.autorun 0
+J2  * copy sd/sys/onBoot.s back to SD:/sys/onBoot.s (H and I replaced it)

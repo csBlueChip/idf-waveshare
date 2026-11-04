@@ -1,0 +1,10 @@
+. scripts for RUN / LOAD (name.s)
+demo.s spec example: BOOT short = hexagon, double = end, tap prints
+shapes.s library: drawPoly n cx cy r
+count.s counts with WAIT 500 (STOP / PAUSE / STEP tests)
+ask.s INPUT and a TIMER
+rec.s IMU REC for STOP NOW
+hang.s endless loop: copy over SD:/sys/onBoot.s to test the BOOT escape
+dbg.s BPT! with no client: copy over SD:/sys/onBoot.s (USB console)
+data APPEND / LOGCAT files
+DESCRIPT.ION file descriptions for this folder

@@ -1,0 +1,4 @@
+dependencies:
+  espressif/led_strip: "^3.0.0"
+  espressif/libpng: "^1.6.59"
+  espressif/esp_tinyusb: "^3.0.0"

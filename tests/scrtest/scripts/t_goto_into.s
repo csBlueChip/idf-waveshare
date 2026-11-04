@@ -1,0 +1,6 @@
+LOOP $i = 1 TO 2
+  :in
+END
+LOOP 1 TIMES
+  GOTO in
+END

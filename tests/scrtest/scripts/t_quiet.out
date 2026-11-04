@@ -1,0 +1,12 @@
+> default
+> ERR e2
+> quiet 0
+> a
+> OK
+> ERR e0
+> quiet 1
+> ERR e1
+> quiet 3
+> bad level: usage: QUIET 0|1|2|3
+<<SCRIPT t_quiet END>>
+[result END]

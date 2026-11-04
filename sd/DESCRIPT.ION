@@ -1,0 +1,8 @@
+. SD card layout: copy the contents of this folder to the card (FAT32)
+images PNG images for IMG
+imu IMU REC recordings
+scrshots SCR SHOT screenshots
+scripts scripts for RUN
+sys settings, splash, system scripts
+www web files served in WEB mode
+DESCRIPT.ION file descriptions for this folder

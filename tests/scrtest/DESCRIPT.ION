@@ -1,0 +1,5 @@
+. PC tests of the script interpreter (not part of the firmware)
+host.c PC host: fake commands, events, virtual time
+run.sh build and run all tests: sh run.sh [-update]
+scripts test scripts t_*.s, expected output t_*.out, options t_*.opt
+DESCRIPT.ION file descriptions for this folder

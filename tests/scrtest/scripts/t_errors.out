@@ -1,0 +1,12 @@
+> caught 1: '+' needs numbers (join text by putting values side by side)
+> ERR from a command
+> caught 2: from a command
+> caught 3: SQRT of a negative number
+> caught 4: RUN is a console command (not allowed in a script)
+> caught 5: PAUSE is a console command: use BPT!
+> caught 6: divide by zero
+> caught 7: unknown function NOPE
+> caught 8: unknown function nofn
+> caught 9: WAIT EVENT inside an event handler
+<<SCRIPT t_errors ERR t_errors:16: $undefined is not set>>
+[result ERROR]

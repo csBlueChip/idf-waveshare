@@ -1,0 +1,14 @@
+# secrets (see Makefile)
+secrets.mk
+
+# build output and downloaded components
+build/
+managed_components/
+sdkconfig
+sdkconfig.old
+
+# archives
+*.zip
+
+# PC script tests: output of failed runs
+tests/scrtest/scripts/*.got

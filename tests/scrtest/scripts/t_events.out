@@ -1,0 +1,21 @@
+> 1st: BTN 1 SHORT ret=[]
+> handler IMU [TAP] 1=TAP
+> handler IMU [2TAP] 1=2TAP
+> line after events
+> waited: BTN 2 DOUBLE
+> handler IMU [TAP] 1=TAP
+> handler IMU [MOTION] 1=MOTION
+> after handlers:  ret=[]
+> merged: TIMER 1 3
+> next tick: TIMER 1 uptime ok
+> timeout: []
+> got TIMER 2 ret=2
+> got TIMER 2 ret=2
+> got TIMER 2 ret=2
+> input: [hello there] ok=1
+> input timeout: [] ok=0
+> ui handler: LINK UP
+> dropped=0
+CMD: UI WEB
+<<SCRIPT t_events END>>
+[result END]

@@ -1,0 +1,42 @@
+# default.nvram - every NV setting at its default value
+# NV IMPORT default   restores them (sys.bootcnt is firmware-owned, not here)
+# Format: key=value, one per line; '#' starts a comment.
+
+rad.ssid=wavedemo
+rad.pwd=waveP@55word
+rad.ble=ESP32-S3-Demo
+rad.ip=192.168.4.1
+rad.mask=/24
+rad.pwr=8.5
+rad.nogw=0
+rad.maxcli=1
+ui.boot=BLE
+ui.baud=115200
+ui.echo=1
+scr.bl=100
+scr.pflip=0
+scr.lflip=0
+btn.deb=30
+btn.long=600
+btn.dbl=300
+btn.rpt=0
+btn.touch=0.015
+web.hist=50
+disk.read=0 255 0
+disk.write=255 0 0
+imu.arange=4
+imu.arate=224
+imu.grange=512
+imu.grate=224
+imu.wom=100
+imu.tap.thr=1.3
+imu.tap.gap=500
+imu.mot.thr=100
+imu.still.thr=64
+imu.step.thr=200
+imu.step.min=10
+imu.orient.hold=500
+imu.orient.flat=30
+sys.autorun=0
+sys.aron=0 255 0
+sys.aroff=255 0 0

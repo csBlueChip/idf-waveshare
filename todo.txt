@@ -1,0 +1,28 @@
+WAVEDEMO - TODO
+===============
+
+To do
+  1. Script board test, retest: D2 (no OKs while drawing - QUIET 2 is now
+     the default) and D4 (double press - demo.s now BTN 1 1 0 1).
+  2. Script board test: sections G, H, I (system scripts now in SD:/sys/:
+     onBoot.s onWait.s onConnect.s).
+  3. OTA firmware update.
+  4. RAM: after flashing (fresh sdkconfig!) run INFO and MEM with web
+     open; compare with 33 KB free before. Optional next: free the BLE
+     stack when BLE is not the interface (~25-35 KB, needs testing).
+
+On hold
+  5. tests/test_serial.txt - waiting for the UART to be wired up.
+
+Parked (code kept, switched off)
+  6. IMU pedometer: the chip never counted steps (IMU_STEP_ENABLE 0 in
+     imu.c; IMU STEP replies "not implemented").
+  7. Chip significant-motion engine: its timing could not be restarted;
+     SIGMO is timed in firmware instead (IMU_SIGMO_CHIP 0 in imu.c).
+
+Done
+  - Script board test A1..F3 passed (except D2, D4: see 1).
+  - System scripts moved to SD:/sys/ without the '_' (RUN sys/onBoot).
+  - QUIET 0..3, default 2 (no command OKs / replies, no events to the
+    client; ERRs shown).
+  - demo.s / spec example: BTN 1 1 0 1 (double press works).

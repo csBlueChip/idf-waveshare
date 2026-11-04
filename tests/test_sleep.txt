@@ -1,0 +1,201 @@
+wavedemo - IMU SLEEP test procedure
+===================================
+
+Manual test: type each command, check the result before the next step.
+  >  command to send
+  =  expected reply / what you should see
+  *  action on the board
+
+Setup: telnet or web console (UI TELNET / UI WEB), board on a still
+surface, firmware with LED hide (led.c with ledHide).
+
+
+A. PREPARATION
+--------------
+
+A1  > IMU WOM 100
+    = OK
+A2  > LED 0 255 0
+    = OK, LED green
+A3  > BL 60
+    = OK, backlight 60 %
+A4  > IMU TAP 1 0 0
+    = OK
+A5  * tap the board once
+    = <<IMU TAP>>
+A6  > IMU MOTION 1
+    = ERR MOTION cannot run with TAP (IMU TAP NONE first)
+A7  > IMU TAP NONE
+    = OK
+A8  > IMU MOTION 1
+    = OK
+A9  * move the board, then leave it still 2 s
+    = <<IMU MOTION>>
+A10 > IMU TAP 1 0 0
+    = ERR TAP cannot run with MOTION (turn it off first)
+A11 > IMU STEP 1
+    = ERR not implemented
+A12 > INFO
+    = note the Timestamp boot number bNNNN (B)
+
+
+B. SCR - screen and LED off
+---------------------------
+
+B1  > IMU SLEEP
+    = OK; backlight off; LED off
+B2  * leave it still for 30 s
+    = stays dark; no events
+B3  > IMU
+    = ERR IMU asleep
+B4  > ACC
+    = ERR IMU asleep
+B5  > LED 0 0 255
+    = OK; LED stays dark (colour stored)
+B6  * lift / move the board
+    = <<IMU WAKE>> (a <<IMU MOTION>> may follow); backlight back at
+      60 %; LED blue (latest colour)
+B7  * leave it still 2 s, then move it
+    = <<IMU MOTION>>  (detectors kept)
+B8  > IMU SLEEP SCR
+    = OK; backlight off; LED off
+B9  * press BOOT briefly without moving the board
+    = <<IMU WAKE>>; backlight 60 %; LED blue
+
+
+C. WAKE THRESHOLD
+-----------------
+
+C1  > IMU SLEEP SCR 255
+    = OK; dark
+C2  * nudge the board gently
+    = stays asleep
+C3  * shake the board firmly
+    = <<IMU WAKE>>
+C4  > IMU SLEEP SCR 20
+    = OK; dark
+C5  * touch the board lightly
+    = <<IMU WAKE>>
+C6  > IMU WOM
+    = 100  (override not stored)
+C7  > IMU WOM 50
+    = OK
+C8  > NV GET imu.wom
+    = imu.wom=50
+C9  > IMU SLEEP
+    = OK; dark; wakes on a lighter touch than in B6
+C10 > IMU WOM 100
+    = OK
+
+
+D. RAD - screen, LED and radio off
+----------------------------------
+
+D1  > IMU SLEEP RAD
+    = OK; ~0.3 s later the connection drops; backlight and LED off
+D2  * check the phone/PC Wi-Fi list
+    = rad.ssid gone
+D3  * leave it still for 30 s
+    = stays dark; SSID stays gone
+D4  * move the board
+    = Wait screen fades in; LED blue; SSID back
+D5  * reconnect the console
+    = connects (no <<IMU WAKE>> - client was not there)
+D6  > IMU
+    = TAP NONE, MOTION 1 ... (detectors kept)
+D7  > IMU SLEEP RAD
+    = OK; connection drops; dark
+D8  * press BOOT briefly (release quickly: a held BOOT on the Wait
+      screen shows the password)
+    = Wait screen; SSID back; reconnect works
+D9  (optional, BLE) > UI BLE, connect over BLE, > IMU SLEEP RAD
+    = OK; BLE drops; device not advertising until moved
+
+
+E. CPU - deep sleep
+-------------------
+
+E1  > INFO
+    = note Timestamp boot number (B)
+E2  > IMU SLEEP CPU
+    = OK; connection drops; backlight and LED off
+E3  * leave it still for 1 min
+    = stays off
+E4  * move the board
+    = reboot: boot square, Wait screen
+E5  * reconnect
+    > INFO
+    = Reset: deep sleep; Timestamp boot number B+1
+E6  > IMU
+    = all detectors off (normal boot state)
+E7  > IMU SLEEP CPU
+    = OK; off
+E8  * press BOOT briefly
+    = normal reboot as in E4
+    FAIL: screen stays dark and the PC shows a new ESP32-S3 USB serial
+    device = download mode; press RESET to recover and report it
+
+
+F. ERRORS
+---------
+
+F1  > IMU SLEEP XYZ
+    = ERR usage: IMU SLEEP [SCR|RAD|CPU] [thr 1..255 mg]
+F2  > IMU SLEEP SCR 0
+    = ERR usage: ...
+F3  > IMU SLEEP SCR 256
+    = ERR usage: ...
+F4  > IMU SLEEP SCR 10 20
+    = ERR usage: ...
+F5  > IMU SLEEP
+    = OK; dark
+F6  > IMU SLEEP
+    = ERR IMU asleep
+F7  * move the board
+    = <<IMU WAKE>>
+
+
+G. POWER (optional, USB power meter)
+------------------------------------
+
+G1  note the current: awake, SCR, RAD, CPU
+    = each lower than the one before
+
+
+
+H. SIGMO (firmware-timed)
+-------------------------
+
+H1  > IMU MOTION 0   then   > IMU SIGMO 4000
+    = OK, OK
+H2  * move the board ~1 s, put it down for ~4 s, move it again ~1 s
+    = no <<IMU SIGMO>>
+H3  * leave it still 2 s, then keep it moving for ~5 s
+    = <<IMU SIGMO>> ~4 s after the movement started (once)
+H4  * keep moving another 5 s
+    = no second SIGMO
+H5  * still 2 s, then repeat H3
+    = <<IMU SIGMO>> again
+H6  > IMU SIGMO 60001
+    = ERR ms must be 0 or 100..60000
+H7  > IMU SIGMO 4000 REPEAT
+    = OK
+H8  > IMU SIGMO
+    = 4000 REPEAT
+H9  * still 2 s, then keep it moving for ~13 s
+    = <<IMU SIGMO>> at ~4, ~8 and ~12 s
+H10 * leave it still 2 s
+    = no more SIGMO; then move ~5 s: one SIGMO at ~4 s (new session)
+H11 > IMU SIGMO 4000 AGAIN
+    = ERR usage: IMU SIGMO [ms [REPEAT]]
+H12 > IMU SIGMO 0
+    = OK
+H13 > IMU SIGMO
+    = 0
+
+CLEAN UP
+--------
+
+> IMU MOTION 0
+> LED 0 0 0
+> BL 100

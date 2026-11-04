@@ -1,0 +1,285 @@
+wavedemo - Step B1 test procedure
+=================================
+
+Manual test: do each step, check the result before the next one.
+  >  command to send (then Enter)
+  *  action
+  =  expected reply / what you should see
+
+Setup
+  - Console on TELNET or WEB (control console).
+  - For section F: a terminal on the USB-C port (local echo off).
+  - SD card inserted (section E).
+
+
+A. BOOT ORDER
+-------------
+
+A1  * Power-cycle the device; watch the screen.
+    = Boot square, then the Wait screen of the ui.boot interface. Nothing
+      connectable before the Wait screen appears.
+A2  * Connect the client.
+    = <<UI CONNECT>> is the first line the client receives, then the
+      splash screen.
+
+
+B. BUTTON EVENTS (renames)
+--------------------------
+
+B1  > BTN 1 1 1 1
+    = OK
+B2  * Press and hold BOOT ~1 s, release.
+    = <<BTN 1 DOWN>> while held, <<BTN 1 UP>> on release
+      (no "LONG" in either)
+B3  > BTN 1 SET rpt 200
+    = OK
+B4  * Press and hold BOOT ~1.5 s, release.
+    = <<BTN 1 REPEAT>> at ~600 ms, then every ~200 ms; no UP
+B5  > BTN 1 SET rpt 0
+    = OK
+B6  > BTN 1 0 0 0
+    = OK
+
+
+C. EVENTS FILTER
+----------------
+
+C1  > EVENTS
+    = BTN 1 IMU 1 UI 1 SCRIPT 1
+      OK
+C2  > IMU TAP 1 0 0
+    = OK
+C3  * Tap the device firmly.
+    = <<IMU TAP>>
+C4  > EVENTS IMU 0
+    = OK
+C5  > EVENTS
+    = BTN 1 IMU 0 UI 1 SCRIPT 1
+      OK
+C6  * Tap the device.
+    = nothing
+C7  > EVENTS ALL 0
+    = OK
+C8  > EVENTS
+    = BTN 0 IMU 0 UI 0 SCRIPT 0
+      OK
+C9  > EVENTS ALL 1
+    = OK
+C10 * Tap the device.
+    = <<IMU TAP>>
+C11 > EVENTS FOO 1
+    = ERR usage: EVENTS [BTN|IMU|UI|SCRIPT|ALL 0|1]
+C12 > EVENTS IMU 2
+    = ERR usage: EVENTS [BTN|IMU|UI|SCRIPT|ALL 0|1]
+C13 > EVENTS IMU 0
+    = OK
+C14 > REBOOT   (web console)
+    = OK, then at once: [disconnected - device rebooting]; the page
+      reconnects by itself once Wi-Fi is back: <<UI CONNECT>>
+C15 > EVENTS
+    = BTN 1 IMU 1 UI 1 SCRIPT 1      (filter is this boot only)
+      OK
+C16 > IMU TAP NONE
+    = OK
+
+
+D. TEXT COMMANDS
+----------------
+
+D1  > PRINT hello world
+    = hello world
+      OK
+D2  > PRINT   two spaces
+    = "  two spaces" (two leading spaces kept)
+      OK
+D3  > PRINT    "quoted"
+    = quoted
+      OK
+D4  > PRINT "say \"hi\""
+    = say "hi"
+      OK
+D5  > PRINT 'it\'s'
+    = it's
+      OK
+D6  > PRINT \"hi" there
+    = "hi" there
+      OK
+D7  > PRINT "abc" x
+    = ERR text after closing quote
+D8  > PRINT "abc
+    = ERR missing closing quote
+D9  > PRINT a\nb \\ \# \$ \3c
+    = a
+      b \ # $ c
+      OK
+D10 > PRINT
+    = (empty line)
+      OK
+D11 > TBOX 1 0 0 172 3
+    = OK
+D12 > ECHO 1 "  spaced"
+    = OK; box 1 shows "  spaced"
+D13 > ECHO 1 \n\2big \$5
+    = OK; new line, "big $5" in font 2
+D14 > ECHO 1 "x" y
+    = ERR text after closing quote
+D15 > DEBUG test "a b"
+    = OK on the console; the log port shows: test "a b"
+      (with a network UI: both UART and USB terminals)
+D16 > DEBUG "quoted \"debug\""
+    = OK; log port shows: quoted "debug"
+
+
+E. APPEND
+---------
+
+E1  > APPEND log1 first line
+    = OK
+E2  > APPEND log1 "  second, quoted"
+    = OK
+E3  > APPEND log1 a\nb
+    = OK
+E4  > FILES   (or remove the card and read it on a PC)
+    = SD:/scripts/data/log1.txt contains:
+        first line
+          second, quoted
+        a
+        b
+E5  * Back to the console (reboot after FILES as usual).
+E6  > APPEND bad-name x
+    = ERR file: letters, digits, '_' only
+E7  > APPEND abcdefghijabcdefghijabcdefghijab x
+    = ERR file: max 31 characters
+E8  > APPEND
+    = ERR usage: APPEND file text
+E9  * Remove the SD card (device running).
+    > APPEND log1 x
+    = ERR no SD card      (log: "card gone - unmounting")
+    > APPEND log1 x
+    = ERR no SD card
+E10 * Re-insert the card. (E11 mounts it again: no command needed)
+E11 > LOGCAT
+    = log1                            32
+      1 file
+      OK
+E12 > LOGCAT log1
+    = first line
+        second, quoted
+      a
+      b
+      OK
+E13 > LOGCAT log1 >debug
+    = OK on the console; the four lines appear on the log port(s)
+E14 > APPEND empty ""
+    = OK
+    > LOGCAT empty
+    = one blank line, then OK
+E15 > LOGCAT nofile
+    = ERR no such file
+E16 > LOGCAT bad-name
+    = ERR file: letters, digits, '_' only
+E17 > LOGCAT log1 >foo
+    = ERR usage: LOGCAT [file [>DEBUG]]
+E18 * Remove the SD card.
+    > LOGCAT log1
+    = ERR no SD card
+    > LOGCAT
+    = ERR no SD card
+E19 * Re-insert the card.
+E20 * On a PC, put a file with Windows line ends and a non-ASCII
+      character (e.g. "cafe" with an accented e) in /scripts/data/pc.txt.
+    > LOGCAT pc
+    = lines shown without stray CRs; the accented letter as ?? (2 bytes
+      in UTF-8)
+
+
+F. LOG MODE
+-----------
+
+F1  > LOG
+    = LOG AUTO
+      OK
+F2  > UI
+    = TELNET (or WEB); "rx: UI" log line on the USB terminal (and UART)
+F3  > LOG UART
+    = LOG UART
+      OK
+F4  > UI
+    = log line on UART only, not on USB
+F5  > LOG USB
+    = LOG USB, OK; then > UI: log line on USB only
+F6  > LOG BOTH
+    = LOG BOTH, OK; then > UI: log line on both
+F7  > LOG XYZ
+    = ERR usage: LOG [UART|USB|BOTH|AUTO]
+F8  > LOG AUTO
+    = LOG AUTO
+      OK
+
+
+G. WAIT
+-------
+
+G1  > WAIT 1
+    = OK (immediately)
+G2  > WAIT 3000
+    = OK after 3 s
+G3  > WAIT 60001
+    = ERR ms must be 0..60000
+G4  > WAIT 0
+    = OK
+G5  (resolution: from a PC script, time "WAIT 7" x 100; total ~700 ms
+     plus link latency, not ~1000 ms as with 5 ms ticks rounding up)
+
+
+H. UI NEXT AND UI EVENTS
+------------------------
+
+H1  > UI NEXT        (from WEB)
+    = SSID/PWD/IP/PORT reply, OK; device switches to TELNET (Wait screen)
+H2  * Connect with telnet.
+    = <<UI CONNECT>>
+H3  > NV SET rad.maxcli 2   then REBOOT, reconnect telnet
+    * Join the device's Wi-Fi with a second device (phone).
+    = <<UI LINK UP>> on the telnet client
+H4  > NV SET rad.maxcli 1   then REBOOT, reconnect
+H5  > UI NEXT        (from TELNET)
+    = OK; switches to BLE
+    (continue with UI NEXT from each interface: BLE -> USB -> UART -> WEB)
+
+
+I. NV
+-----
+
+I1  > NV GET sys.autorun
+    = sys.autorun=0
+I2  > NV SET sys.autorun 2
+    = ERR sys.autorun must be 0..1
+I3  > NV SET rad.ssid ab:cd
+    = ERR rad.ssid must be 1..32 chars, no spaces, ':' or '|'
+I4  > NV SET rad.pwd abcd|efgh
+    = ERR rad.pwd must be 8..63 chars, no spaces, ':' or '|'
+I5  > NV SET rad.ble my:dev
+    = ERR rad.ble must be 1..29 chars, no spaces, ':' or '|'
+I6  > NV SET rad.ble ESP32-S3-Demo
+    = OK
+
+
+J. WEB HEARTBEAT
+----------------
+
+J1  * Web console connected, leave it idle 30 s.
+    = nothing shown (pings/pongs are hidden); still connected
+J2  > WAIT 20000      then wait 10 s without typing
+    = still connected (the board answers <<PING>> while WAIT runs);
+      OK after 20 s
+J3  * Unplug the device's power (or press RESET).
+    = within ~6 s: [disconnected - no reply], input shows
+      "disconnected - reconnecting..."
+J4  * Power the device again; rejoin its Wi-Fi if the PC doesn't.
+    = page reconnects by itself: <<UI CONNECT>>
+J5  > FILES
+    = [disconnected] at once (FILES stops the web console); after the
+      eject / 30 s restart the page reconnects by itself
+J6  * Walk out of Wi-Fi range (or switch PC Wi-Fi off) for 10 s.
+    = [disconnected - no reply] within ~6 s; reconnects when back

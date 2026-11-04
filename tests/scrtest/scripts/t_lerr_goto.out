@@ -1,0 +1,2 @@
+<<SCRIPT t_lerr_goto ERR t_lerr_goto:4: GOTO lab: jumps into a block>>
+[result ERROR]

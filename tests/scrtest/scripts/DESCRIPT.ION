@@ -1,0 +1,59 @@
+. interpreter test scripts: t_name.s runs, output compared with t_name.out; t_name.opt = extra arguments
+t_bpt.opt extra arguments for t_bpt.s
+t_bpt.out expected output of t_bpt.s
+t_bpt.s breakpoints in two files
+t_debug.opt extra arguments for t_debug.s
+t_debug.out expected output of t_debug.s
+t_debug.s LOAD, STEP, STEP IN/OUT, BPT!, PAUSE
+t_errors.out expected output of t_errors.s
+t_errors.s ONERROR GOTO across calls, run-time errors
+t_events.out expected output of t_events.s
+t_events.s ON, WAIT EVENT, TIMER merge, INPUT, UI switch
+t_example.out expected output of t_example.s
+t_example.s the spec example (demo + shapes)
+t_expr.out expected output of t_expr.s
+t_expr.s expressions, numbers, text, functions, formats
+t_flow.out expected output of t_flow.s
+t_flow.s IF, LOOP forms, BREAK/NEXT, SWITCH, GOTO
+t_func.out expected output of t_func.s
+t_func.s functions, CALL file.fn, RETURN, recursion, .STACK
+t_goto_into.out expected output of t_goto_into.s
+t_goto_into.s GOTO into a block (error)
+t_lerr_ascii.out expected output of t_lerr_ascii.s
+t_lerr_ascii.s load error: ascii
+t_lerr_block.out expected output of t_lerr_block.s
+t_lerr_block.s load error: block
+t_lerr_call.out expected output of t_lerr_call.s
+t_lerr_call.s load error: call
+t_lerr_const.out expected output of t_lerr_const.s
+t_lerr_const.s load error: const
+t_lerr_else.out expected output of t_lerr_else.s
+t_lerr_else.s load error: else
+t_lerr_fn.out expected output of t_lerr_fn.s
+t_lerr_fn.s load error: fn
+t_lerr_goto.out expected output of t_lerr_goto.s
+t_lerr_goto.s load error: goto
+t_lerr_long.out expected output of t_lerr_long.s
+t_lerr_long.s load error: long
+t_lerr_rec.out expected output of t_lerr_rec.s
+t_lerr_rec.s load error: rec
+t_lerr_stack.out expected output of t_lerr_stack.s
+t_lerr_stack.s load error: stack
+t_lerr_vars.out expected output of t_lerr_vars.s
+t_lerr_vars.s load error: vars
+t_quiet.out expected output of t_quiet.s
+t_quiet.s QUIET levels
+t_stop.out expected output of t_stop.s
+t_stop.s STOP while running
+t_sysfn.opt extra arguments for t_sysfn.s
+t_sysfn.out expected output of t_sysfn.s
+t_sysfn.s running one function (system scripts)
+t_text.out expected output of t_text.s
+t_text.s PRINT/DEBUG/ECHO text rules, .CONST, INSERT, TRACE
+t_vars.out expected output of t_vars.s
+t_vars.s variables, words, NV read, built-ins, GET, ACC/GYR
+inc.s INSERTed by t_text
+lerr_rec2.s second file of the recursive INSERT test
+lib.s library for CALL lib.fn tests
+shapes.s spec example library (drawPoly)
+DESCRIPT.ION file descriptions for this folder

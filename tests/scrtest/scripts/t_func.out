@@ -1,0 +1,14 @@
+> total=7 ret=70
+> twice=42
+> fact4=24
+> Hello, World
+> helper in lib
+> wrap=[ abc ]
+> arg=[a b:c|d] n=4 1=a 2=b 3=c 4=d
+> depth 1
+> depth 2
+> depth 3
+> depth 4
+> depth 5
+<<SCRIPT t_func ERR t_func:35: stack overflow (.STACK 5)>>
+[result ERROR]

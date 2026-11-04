@@ -1,0 +1,774 @@
+WAVEDEMO SCRIPTING LANGUAGE - SPECIFICATION (DRAFT)
+===================================================
+
+Status: implemented (src/scr_*.c, src/script.c). Notes from the
+implementation:
+  - Expressions are evaluated from the statement text when they run (not
+    pre-compiled at load); load still checks blocks, names, VARS, files.
+  - onWait / onConnect: before, instead and after are three separate
+    runs (each starts with fresh globals); before / after of onWait and
+    all of onConnect run while the console waits (client lines are
+    taken afterwards), so INPUT there only times out.
+  - Watchdog: the script yields one tick every second (no task-watchdog
+    registration needed).
+  - STOP NOW cuts IMU REC and screen transitions short; image decode is
+    not cut.
+
+
+1. FILES
+--------
+
+  - Scripts live on the SD card in /scripts/, named name.s; names are
+    letters, digits and '_' only, case-insensitive.
+  - ASCII text, one or more statements per line, max 200 chars per line
+    (same as the console). Line endings CR, LF or CR LF are all accepted;
+    a UTF-8 BOM at the start is ignored; any other non-ASCII character is
+    a load error (naming the line).
+  - File names: max 31 characters, not counting .s.
+  - System scripts live in /sys/ (onBoot.s, onWait.s, onConnect.s;
+    section 13); by hand they are named sys/name (RUN sys/onBoot,
+    LIST sys/onBoot, BPT sys/onBoot:4, messages sys/onBoot:4).
+  - Max file size, including INSERTed text: 32 KB
+  - Edit the files on a PC (FILES gives USB disk access).
+
+
+2. CONSOLE COMMANDS
+-------------------
+
+  RUN                   list the scripts in /scripts
+  RUN name [args]       start name.s; args become $arg (section 4)
+  STOP                  kill the running script at once ("kill -9");
+                        only the command in progress finishes (WAIT ms
+                        and WAIT EVENT end at once)
+  STOP NOW              as STOP, and a long command in progress is cut
+                        short too (ERR aborted): WAIT, IMU REC, screen
+                        transitions, image decode
+  PAUSE                 hold the script after its current line
+  CONT                  resume a paused script (error if not paused)
+
+  Debugging (section 2a): LOAD  STEP  BPT  VARS  LIST  STACK
+
+  While a script runs, only STOP, STOP NOW and PAUSE are accepted; every
+  other console line is refused:
+    ERR script running
+  While it is paused, every console command works (normal commands for
+  inspection, plus STOP, CONT and the debug commands).
+  Only one script runs at a time.
+
+  RUN can start any script, including system scripts (RUN sys/onWait).
+
+  LOG [UART|USB|BOTH|AUTO]   where log messages go (no argument: show).
+                        AUTO = the normal rule (UI = UART -> USB, UI = USB
+                        -> UART, else both). Useful when the USB port is
+                        the debug console before a client connects.
+
+  EVENTS                list what the client receives:
+                          BTN 1 IMU 1 UI 1 SCRIPT 1
+  EVENTS src 0|1        src = BTN | IMU | UI | SCRIPT | ALL
+                        0 = the client no longer receives <<src ...>>
+                        events. This session only (all 1 after reboot).
+                        Scripts always receive every event.
+
+  Messages to the UI (never seen by scripts):
+    <<SCRIPT name END>>                    finished or EXIT
+    <<SCRIPT name STOPPED>>                killed by STOP
+    <<SCRIPT name ERR file:n: reason>>     stopped by an error (file and
+                                           line, so INSERTs are clear)
+    <<SCRIPT name PAUSED file:n>>          paused (PAUSE, BPT, STEP) before
+                                           line n of file
+
+
+2a. DEBUGGING (console)
+-----------------------
+
+  LOAD name [args]      load name.s and pause before its first line
+  CONT                  run on (until the end, a breakpoint or PAUSE)
+  STEP                  run the next line, then pause again (a line
+                        with ';' is one compound step; breakpoints and
+                        TRACE also work per line)
+  STEP IN               as STEP, but if the line calls a function, pause
+                        at the function's first line
+  STEP OUT              run until the current function returns (its
+                        RETURN or END), then pause
+  BPT                   list breakpoints, numbered:
+                          #1 : demo.s:12  LET $x = $x + 1
+  BPT [file:]n          set a breakpoint before line n
+                        (file = the main script if left out)
+  BPT DEL ALL           remove all breakpoints
+  BPT DEL #n            remove breakpoint number n
+  BPT DEL [file:]n      remove the breakpoint at that line
+  Breakpoints are kept between runs, until BPT DEL or reboot.
+  VARS                  list the variables of the paused script (locals of
+                        the current function, then globals)
+  LIST [name [from [to]]]
+                        list the active script (or name.s) with line
+                        numbers, all or lines from..to; '>' marks the
+                        paused line, '*' breakpoints
+  STACK                 (paused only) the call stack, innermost last:
+                          demo.s:12 > shapes.s:4 (drawPoly)
+
+  In a script:  BPT!    always pause here, as a breakpoint - also in
+                        system scripts started automatically, so they can
+                        be debugged. If no client is connected (e.g. in
+                        onBoot or onWait), the USB serial port acts as
+                        the console while the script is paused.
+
+
+3. LINES AND TEXT
+-----------------
+
+  - Statements are separated by new lines or ';'. A ';' inside quotes is
+    text; outside quotes "\;" is a literal ';'.
+  - '#' starts a comment to the end of the line; "\#" is a literal '#';
+    a '#' inside quotes is text.
+  - Blank lines and comment-only lines are ignored.
+  - Keywords and command names are case-insensitive.
+  - Any line that is not a script statement is a console command
+    (CLS 0 0 0, IMU TAP 1 0 0, ...). Before it runs, every $variable in
+    it is replaced by its value; "\$" is a literal '$'.
+      FBOX $x $y 10 10 255 0 0
+  - Order: a line is split into statements at ';' and its comment is
+    removed FIRST, then variables are substituted (one pass) - a ';', '#'
+    or '$' inside a variable's value is never re-read.
+  - A command longer than 200 chars after substitution is an error:
+    line too long after substitution.
+  - Numbers substitute with up to 3 decimal places, trailing zeros removed
+    (12, 12.5, 0.333); commands that need whole numbers need INT/ROUND.
+  - ${x} marks where a name ends: "${x}mm". The braces go round the name,
+    after the prefix:  ${x}  $${g}  $${scr.bl}  $.{w}
+  - ${x/base,min,dec} shows a number in a base with at least min digits
+    (leading zeros) and up to dec decimal places; default /10,0,3 (the
+    normal display). Missing parts keep their default.
+      ${byte/2,8} -> 00101101   $${globalByte/16,2} -> 2D
+      ${pi/10,0,2} -> 3.14      ${n/10,4} -> 0042
+    base 2..36 (digits 0-9, then A-Z). A negative value gets a '-' in
+    front of the digits. Decimal places apply to base 10 only; in other
+    bases the fraction is dropped (2.7 -> 2, -2.5 -> -2).
+  - Script keywords and console commands never share a name (section 3a).
+
+  Word rule (used for $v[n], $arg[n] - everywhere):
+    words are split on  space  tab  ':'  '|'  '\n'  '\r'
+
+
+3a. RESERVED WORDS
+------------------
+
+  Script statements:
+    LET GET VARS DEL INS IF ELIF ELSE END LOOP TO STEP WHILE TIMES FOREVER BREAK
+    NEXT SWITCH GOTO EXIT FN RETURN CALL INSERT ON OFF ONERROR QUIET TRACE
+    PRINT DEBUG APPEND RNG TIMER BPT!  .STACK .CONST
+  Also reserved: EVENT (WAIT EVENT), NOW (STOP NOW), INPUT
+  Console only: RUN STOP PAUSE CONT LOAD STEP BPT VARS LIST STACK
+  Console and scripts: LOG EVENTS
+  Functions: INT ROUND ABS MIN MAX SQRT SIN COS ATAN2 LEN UPPER LOWER MID
+             FIND RND
+
+  None of these may be used as a console command name.
+  Not collisions:
+    STEP     in LOOP ... STEP n it is part of the LOOP line, not a verb
+    VARS     special case: declaration in a script, variable dump at the
+             console
+    WAIT     WAIT ms and WAIT EVENT [ms] are two forms of one verb
+    ACC GYR  the x y z targets are required in a script and not allowed
+             at the console (section 6)
+
+
+4. VARIABLES
+------------
+
+  $name       local: belongs to the current function call
+  $$name      global: shared by all functions and files of this run
+  $$a.b       NV setting a.b (a global name containing '.'), READ-ONLY:
+                LET $b = $$scr.bl   reads it
+                LET $$scr.bl = 50   is an error - use  NV SET scr.bl 50
+                (stops a careless script from silently wearing out the
+                flash with repeated writes)
+  $.name      built-in, read-only (below)
+
+  - Names: letters, digits, '_'; must not start with a digit; max 15
+    chars; case-insensitive. '.' is not allowed except in NV names and the
+    $. prefix. The same rule applies to function names and labels.
+  - A value is a number or text. An unquoted number (a literal or a
+    result) makes a number: LET $x = 3.14159 and LET $x = 3.14159 * 1 are
+    the same, kept as a 64-bit float, displayed 3.142. A quoted value is
+    text, kept exactly: LET $id = "007" prints 007. Text that reads as a
+    number is used as one by arithmetic and comparisons; 007 == 7 is
+    true. The 3-decimal form is for display only (printing,
+    substitution, use as text). A value reads as a number if it is:
+                          [sign] digits [.digits] [e[sign]digits]
+    (12  -3.5  1e3  2.5e-2), or a whole number 0x1F / 0b101. Leading
+    zeros are decimal (007 = 7; no octal). Anything else is text
+    (1.2.3.4 is text).
+  - Max value length: 512 chars (longer text is cut).
+  - Max variables: 64 locals per call, 64 globals
+  - Reading a variable that has never been set is an error.
+  - $v[n]     n-th word of $v (word rule, counting from 1); n may be an
+              expression. $v[0] = number of words. n < 0 or n > $v[0]
+              is an error.
+
+  VARS (optional declaration)
+    VARS $a $b $c        one or more VARS lines at the very start of a
+    VARS $$g             function body (or of the script's main body);
+                         declared locals start as "" (empty); a declared
+                         global ($$g) only becomes allowed - it is set to
+                         "" only if it does not exist yet
+    - If a body has VARS lines, only the names listed there may be used
+      in it ($arg and the FN parameters are always valid). Any other name
+      is an error - this catches typos like  LET $cuont = 1.
+    - Without VARS, any name may be set (the variable is created by its
+      first LET / GET / LOOP).
+    - Names are checked when the script loads.
+
+  Arguments
+    $arg        the whole argument string of the current function (or of
+                the script, from RUN)
+    $arg[n]     its n-th word; $arg[0] = number of words
+                (the word rule splits on ':' too: RUN clock 12:30 gives
+                $arg[1]=12 $arg[2]=30; quotes do not group words:
+                RUN x "a b" gives $arg[1]="a $arg[2]=b")
+
+  Built-ins ($. = read-only)
+    $.ax $.ay $.az      acceleration, g  } each one is a fresh reading;
+    $.gx $.gy $.gz      rotation, dps    } for one snapshot use ACC/GYR $x $y $z
+    $.temp              IMU temperature, ^C
+    $.bat               battery, V
+    $.steps             step count (always 0 while IMU STEP is not
+                        implemented)
+    $.orient            0..3, 4 = FLAT (last detected; -1 if none)
+    $.rnd               random 0..65535 (see RNG)
+    $.ok                1 if the last command replied OK, else 0
+    $.err               text of the last ERR (empty if none)
+    $.ret               value from the last RETURN / WAIT EVENT
+    $.event             full text of the last event, e.g. "BTN 1 SHORT"
+                        (WAIT EVENT; empty after a time-out)
+    $.time              timestamp as used for file names, e.g. b002A_001523
+    $.uptime            ms since boot
+    $.runtime           ms since the script started
+    $.w $.h $.rot       screen width, height, rotation (current ROT)
+    $.fw                firmware version, e.g. 1.0.0
+    $.dropped           events lost from a full queue since the start
+
+
+5. EXPRESSIONS
+--------------
+
+  Numbers 12  -3.5    Text "abc" or 'abc'    Variables $x $$x $.x $v[n]
+  Text is built by substitution ("x=$x y=$y", '\$' for a literal '$') or
+  by putting values side by side, which joins them with one space
+  ($a $b -> "a b"); there is no text operator.
+    - An operator always wins:  $a -1  subtracts;  $a "-1"  joins text.
+    - Joined values may not appear on the left of a comparison (arithmetic
+      is fine there: IF $a + 1 > 5).
+  Operators (high to low; bitwise above comparisons, as in Python):
+    ( )
+    !  -  ~  (unary)    ! = not (gives 1 or 0), ~ = bitwise not
+                        !$a == $b  means  (!$a) == $b
+    *  /  %
+    +  -          numbers only ('+' on text is an error)
+    <<  >>        shift
+    &             bitwise and
+    ^             bitwise xor
+    |             bitwise or
+    <  <=  >  >=  ==  !=     two numbers compare as numbers; otherwise
+                             as text, case-sensitive
+    ~=                       text equal, ignoring case
+                               IF $var == "foo"   case-sensitive
+                               IF $var ~= "foo"   case-insensitive
+    AND
+    OR
+  AND / OR are lazy: the right side is only worked out when needed
+    (IF $n != 0 AND 10 / $n > 2  never divides by zero).
+  Bitwise operators work on whole numbers; a value with a fraction is an
+  error. Numbers are 64-bit floats, so whole numbers (and bitwise results)
+  are exact only up to 2^53 (9007199254740992).
+  Functions:
+    INT(x)          whole part (towards 0)
+    ROUND(x)        nearest whole number
+    ABS(x)
+    MIN(a, b)  MAX(a, b)
+    SQRT(x)         x < 0 is an error
+    SIN(d)  COS(d)  d in degrees
+    ATAN2(y, x)     result in degrees
+    LEN(t)          length of text t
+    UPPER(t)  LOWER(t)
+    MID(t, start, len)   part of t (start counts from 1; past the end
+                         gives what is there, possibly "")
+    FIND(t, part)   position of part in t (from 1), 0 if not found;
+                    case-sensitive
+    RND(a, b)       random whole number a..b (inclusive), from the current
+                    generator (see RNG)
+
+  False = 0 or empty text; anything else is true.
+  Comparisons and AND / OR / ! give 1 (true) or 0 (false).
+  Divide by zero is an error.
+  % is C-style (fmod): the result has the sign of the left side
+    7.5 % 2 = 1.5    -7.5 % 2 = -1.5    7.5 % -2 = 1.5
+
+
+6. ASSIGNMENT AND REPLIES
+-------------------------
+
+  LET $v = expr          also LET $$v = ... (not NV: $$a.b is read-only)
+  LET $v = CALL f [args] call f, $v = its return value (also sets $.ret)
+  LET $v[n] = expr       replace word n of $v; n must be 1..$v[0], and the
+                         new value must be exactly one non-empty word
+                         (empty, or containing a separator, is an error -
+                         the other words never move)
+  DEL $v[n]              remove word n (n = 1..$v[0]) and the separator
+                         before it (after it for word 1); the words after
+                         it move down one place
+  INS $v[n] = expr       insert one non-empty word before word n
+                         (n = 1..$v[0]), followed by a space; the old
+                         $v[n] becomes $v[n+1].
+                         To append, use  LET $v = $v $x  (or LET $v += $x)
+  LET $v += expr         if $v and expr are both numbers: add them;
+                         otherwise add a word: $v becomes "$v expr" (one
+                         space between; if $v is empty, just expr)
+  LET $v -= expr  *= /=  numbers only (text is an error; /= 0 is an error)
+  $v++  $v--            add / subtract 1; numbers only (text is an error);
+                         an empty value counts as 0 (also for += -= *= /=), so
+                         VARS-declared counters can start at once
+                         (also $$v++ / $$v--)
+  LET $v = $v $new       two values side by side, with no operator between
+                         them, are joined with one space (also in IF etc.)
+  GET $v = command       run the console command, keep its reply in $v
+                         (lines joined with '|', final OK not included);
+                         sets $.ok / $.err; nothing goes to the UI.
+                         A failing command does not trigger ONERROR:
+                         GET catches it ($.ok = 0, $.err = reason)
+                           GET $a = ACC
+                           LET $ax = $a[2]       # "aX:  0.012|aY: ..."
+  ACC $x $y $z           one IMU snapshot into three variables (g)
+  GYR $x $y $z           same for the gyroscope (dps)
+                         (the names are targets, not substituted; in a
+                         script the three targets are required, at the
+                         console they are not allowed)
+
+
+7. OUTPUT
+---------
+
+  ECHO n text      to text box n on the glass (existing command)
+  PRINT text       to the UI (the console client)
+  DEBUG text       to the log port(s), as dbgf()
+
+  All three take the text the same way, with $variable substitution:
+    - text starts after the separating space; further spaces are kept:
+        ECHO 1  foo        -> " foo"
+    - if the first non-space character is " or ', the text is a quoted
+      string up to the matching quote:
+        ECHO 1     "foo"   -> "foo"
+      inside "...": \" is a literal "      inside '...': \' is a literal '
+      text after the closing quote is an error
+    - a leading \" or \' means "not quoted, starts with a quote"; no
+      further quotes need escaping:
+        PRINT \"hi" there  -> "hi" there
+    - escapes (as ECHO today, plus \$):
+        \n        new line
+        \\        a literal \
+        \#        a literal #
+        \$        a literal $
+        \1..\9    font 1..9 for the rest of this ECHO (ECHO only;
+                  PRINT and DEBUG drop them)
+
+  APPEND file text  add text as one line to SD:/scripts/data/file.txt
+                   (folder and file created if missing; same text rules
+                   as PRINT; file: letters, digits, '_'). No SD card or a
+                   write failure is an error.
+
+  QUIET 0|1|2|3    what the client sees of the script (default 2):
+                     0  everything
+                     1  no replies / OKs of the commands the script runs
+                     2  as 1, and no <<BTN|IMU|UI>> events (default)
+                     3  as 2, and no ERRs of those commands
+                   PRINT output and <<SCRIPT ...>> messages are always sent;
+                   the script itself always gets every event.
+  TRACE 1|0        each line is logged with DEBUG as it runs (default 0)
+
+
+8. CONTROL FLOW
+---------------
+
+  IF expr
+  ELIF expr          (any number)
+  ELSE
+  END
+
+  LOOP $v = start TO end [STEP n]       STEP: whole number, not 0, may
+  END                                   be negative; default 1; end is
+                                        included; the number of passes is
+                                        worked out once at the start;
+                                        after the loop $v = last + STEP
+                                        (e.g. LOOP $i = 1 TO 5 -> $i = 6)
+  LOOP WHILE expr                       test before each pass
+  END
+  LOOP n TIMES                          n evaluated once, fraction
+                                        dropped; n <= 0 = no pass
+  END
+  LOOP FOREVER                          until BREAK / EXIT / RETURN
+  END
+
+  BREAK [n]          leave n loops (default 1)
+  NEXT [n|$v]        next pass of the innermost loop, of the n-th loop
+                     out, or of the LOOP that counts $v
+
+  SWITCH expr
+  value)   statements...                 one value
+  a|b|c)   statements...                 any of these
+  1..5)    statements...                 a number from 1 to 5 (inclusive;
+                                         may be mixed: 1..5|9|20..30)
+  *)       statements...                 anything else
+  END
+    - no fall-through: only the first matching label runs; no match and
+      no *) label: nothing runs
+    - a label's statements may continue over several lines, up to the
+      next label or END
+    - one-line form: SWITCH $arg[2] ; TAP) PRINT tap ; *) PRINT "ignored" ; END
+    - match is case-sensitive text; SWITCH ~expr matches ignoring case
+        SWITCH ~$arg[2] ; tap) PRINT tap ; END
+
+  :label             jump target (within the current function)
+  GOTO label         only to a label in the same or an enclosing block of
+                     the same function: leaving loops / SWITCH is fine,
+                     jumping into a block is an error
+  EXIT               end the script, from any nesting level
+
+  Blocks nest up to 8 deep.
+
+
+9. FUNCTIONS
+------------
+
+  FN name [$a [$b ...]]
+    ...
+    RETURN [expr]          sets $.ret (empty without expr); in the main
+                           body RETURN works as EXIT
+  END
+
+  - The arguments are $arg / $arg[n]; named parameters $a $b ... are also
+    filled from the words. Fewer words than named parameters is an error.
+  - Two functions with the same name in one file (inserted text included)
+    is a load error.
+  - FN blocks are skipped when reached; they run only when called.
+  - Functions can be defined anywhere at the top level of a file.
+
+  CALL name [args]                 function in the same file
+  CALL file.name [args]            function in file.s (loaded on first
+                                   use, kept for the run)
+                                   e.g. CALL shapes.drawPoly $x $y $r
+    only that function runs - the other file's top-level code never runs.
+    Every file named in a literal CALL file.x or ON ... file.x is loaded
+    and checked when the script loads, so its errors show before the
+    script starts.
+
+  .STACK n           call depth (default 8, max 32); going deeper is
+                     an error: stack overflow.
+                     Execution settings (.STACK and any later '.' ones)
+                     must be at the top of the script, before any other
+                     statement; elsewhere they are a load error.
+
+  .CONST NAME value...   a named constant (top of the script, like .STACK)
+                     .CONST WHITE 0xFF 0xFF 0xFF
+                     LED WHITE              -> LED 255 255 255
+                     IF $n > MAXN ...
+    - In a command line, an argument word equal to a constant name is
+      replaced by its value; numbers in the value are written in decimal
+      (commands do not read 0x..). The command name itself is never
+      replaced.
+    - In expressions a constant is used by its bare name.
+    - Names follow the variable rule, are case-insensitive, and must not
+      equal a reserved word, a function or a console command (load
+      error). Pick names that cannot be a command argument (e.g. not P,
+      AUTO, NONE) - such a word would be replaced too. UPPER-CASE names
+      are the convention.
+    - Constants are visible in the whole script and in files it calls.
+
+  INSERT file.s      the text of file.s is inserted here when the
+                     script loads. Nested INSERTs allowed (max depth 4);
+                     a file already in the chain is an error:
+                       recursive INSERT file.s (line n)
+                     Inserting the same file twice in sequence is fine.
+
+
+10. EVENTS
+----------
+
+  ON BTN function        register a handler for a source
+  ON IMU function        (function may be file.name)
+  ON UI  function
+  ON TIMER function
+  ON BTN OFF             remove it
+  One handler per source; a new ON replaces the old one (the handler can
+  SWITCH on $arg to deal with every event of its source).
+
+  - The handler gets one argument: the event text WITHOUT the source word.
+        <<BTN 1 SHORT>>    ON BTN handler    $arg[1]=1     $arg[2]=SHORT
+        <<IMU STEP 120>>   ON IMU handler    $arg[1]=STEP  $arg[2]=120
+        <<UI LINK UP>>     ON UI handler     $arg[1]=LINK  $arg[2]=UP
+  - All events are queued from the moment the script starts (queue of
+    16; when full the oldest is dropped).
+  - Handlers run between script lines and in WAIT EVENT (not during
+    WAIT ms), one at a time; a handler is never re-entered, and WAIT EVENT
+    inside a handler is an error.
+  - Events still go to the UI client as before.
+
+  WAIT EVENT [ms]
+    Events of a source WITH a handler are handled between lines as they
+    come, so they are normally gone before WAIT EVENT; queued events of
+    sources WITHOUT a handler stay queued for WAIT EVENT.
+    WAIT EVENT takes the oldest queued event at once, or waits for the
+    next event of any source (or the time-out). If its source has a
+    handler, the handler runs first and $.ret is its return value;
+    otherwise $.ret is empty. $.event = the full event text (empty on
+    time-out).
+      LOOP WHILE $waiting ; WAIT EVENT ; END
+
+  WAIT ms (existing command) pauses only the script; 1 ms resolution.
+
+  TIMER n ms             timer n (1..4) sends <<TIMER n>> every ms
+                         milliseconds; TIMER n 0 stops it. Handled with
+                         ON TIMER function ($arg[1] = n) or WAIT EVENT.
+                         At most one event per timer waits in the queue;
+                         if more ticks come before it is taken, they are
+                         merged: <<TIMER n cnt>>, cnt = ticks it stands
+                         for ($arg[2]; absent = 1).
+                         Timer events go to the script only (not to the
+                         client); all timers stop when the script ends.
+
+  INPUT $v [ms]
+    waits for the next console line from the client and puts it in $v
+    (it is not run as a command). Time-out: $v = "" and $.ok = 0.
+    STOP, STOP NOW and PAUSE still act as commands while INPUT waits.
+    Events stay queued; handlers run after INPUT returns.
+    No client connected: INPUT returns at once with $.ok = 0 and a
+    UI DISCONNECT event is queued.
+      PRINT "name?" ; INPUT $name 30000
+
+  Event list (after the renames in section 14)
+    BTN n SHORT | DOUBLE | DOWN | UP | REPEAT        n = 1..10
+    IMU TAP | 2TAP | 3TAP | MOTION | STILL | SIGMO
+    IMU STEP n          (never sent while IMU STEP is not implemented)
+    IMU ORIENT 0..3 | ORIENT FLAT
+    IMU WAKE
+    UI CONNECT | DISCONNECT
+    UI LINK UP | LINK DOWN
+    TIMER n [cnt]                                    (scripts only)
+
+
+11. ERRORS
+----------
+
+  ONERROR STOP           stop the script (default)
+  ONERROR CONT           carry on; $.ok = 0, $.err = reason
+  ONERROR GOTO label     jump to label
+  - The setting is for the whole run; an error inside a called function
+    uses it too (GOTO: the label must be in the function that set it; the
+    calls in between are left).
+
+  Covered: a command replying ERR (e.g. NV SET with a bad value), a bad
+  expression, divide by zero, SQRT of a negative number, stack overflow,
+  an unknown function, reading an unset variable, a name not in VARS,
+  LET to an NV name, a console-only command in a script.
+
+  Allowed in scripts: REBOOT, FILES, IMU SLEEP (any level).
+  Not allowed (error): RUN STOP CONT LOAD STEP BPT VARS LIST STACK;
+  PAUSE in a script gives the error "use BPT!".
+  A UI command that switches (UI WEB, UI NEXT, ...) in any script ends
+  the script straight after it (as UI ... ; EXIT); UI alone (show) does
+  not.
+
+  Load errors always stop the script before it starts: unbalanced
+  IF/LOOP/SWITCH/FN/END, unknown statement form, recursive INSERT,
+  file not found, file too big.
+
+
+12. RANDOM NUMBERS
+------------------
+
+  RNG TRNG               hardware random generator
+  RNG PRNG [seed]        user-supplied generator (C hook in the firmware:
+                         uint32_t scrPrng(uint32_t *state) - you write it)
+  - Every script run starts on TRNG.
+  - The PRNG keeps its state between runs (until reboot); a seed resets it.
+  - $.rnd = next value 0..65535 from the current generator.
+
+
+13. SYSTEM SCRIPTS
+------------------
+
+  NV sys.autorun 0|1      run the system scripts (default 0)
+  NV sys.aron / sys.aroff start-up LED flash colour for autorun 1 / 0
+
+  In SD:/sys/ (by hand: RUN sys/onBoot ...):
+  onBoot.s       runs once at the end of boot, BEFORE any interface is
+                  started (section 13a). Plain top-level code, no
+                  arguments.
+
+  onWait.s       runs each time a Wait screen is shown.
+  onConnect.s    runs when a client connects (built-in: splash).
+
+  onWait and onConnect have three functions, all optional:
+    FN before     runs before the built-in handler or 'instead'
+    FN instead    replaces the built-in handler; an empty or missing
+                  'instead' means the built-in one is used (only VARS lines
+                  count as empty; a single RETURN or EXIT is a handler)
+    FN after      runs once the built-in handler or 'instead' has ended
+                  (for onWait: when a client connects or the UI switches)
+  Each gets one argument:
+    onWait:    the details fields (rad.ssid, rad.pwd and rad.ble may not
+                contain ':' or '|' - the NV check refuses them - so the
+                fields always split correctly)
+                  UI:WEB:80|SSID:xxx|Pwd:secret|IP:1.2.3.4|Mask:/24|Link:Waiting
+                  UI:TELNET:23|SSID:...|Pwd:...|IP:...|Mask:...|Link:Active
+                  UI:BLE|Name:ESP32-S3-Demo
+                  UI:UART|Baud:115200|Pins:TX43 RX44
+                  UI:USB
+    onConnect: UI:name   (e.g. UI:WEB)
+  While onConnect runs the new client's commands get ERR script running;
+  onConnect may PRINT e.g. "please wait..." when it starts.
+
+  onWait 'instead':
+    - The built-in Wait screen and its BOOT handling (long press =
+      password, double press = next UI) are off.
+    - To see BOOT, the script enables BTN 1 (BTN 1 1 1 1) and uses ON BTN;
+      e.g. on DOUBLE it can do  UI NEXT.
+    - A UI command (UI WEB, UI NEXT, ...) ends the script straight after
+      it (as in every script), so the next Wait screen can run onWait.
+    - To see the client, the script registers ON UI; it must exit itself
+      on UI CONNECT (the firmware does not stop it).
+
+  Escape hatch: while onBoot or any onWait function (before, instead,
+  after) runs, the firmware watches BOOT itself (the watcher starts before
+  onBoot); held DOWN for 3 s, it sets NV sys.autorun = 0 and reboots (a
+  broken system script can never lock you out). So a system script that
+  uses BTN 1 must never ask for a hold of 3 s or more - that is always the
+  escape. The built-in Wait screen never runs at the same time as a script
+  ('after' starts once it has ended), so a long press there always just
+  shows the password.
+
+  Start-up LED: 100 ms flash in NV sys.aron (autorun 1, default green) or
+  sys.aroff (autorun 0, default red); 0 0 0 = no flash.
+
+  onWait cannot start until onBoot has exited.
+
+  A RUN script still running when its client disconnects:
+    - it has an ON UI handler: it gets UI DISCONNECT; the Wait screen /
+      onWait wait until the script exits
+    - no ON UI handler: the script is stopped (<<SCRIPT name STOPPED>>),
+      then the Wait screen / onWait run
+
+  onBoot never sees a UI event: no interface is running while it runs.
+
+  RUN can start a system script by hand (e.g. RUN sys/onWait, for testing).
+
+
+13a. BOOT ORDER
+---------------
+
+  1. all hardware init, boot square
+  2. onBoot (if sys.autorun 1), with the 3 s BOOT watcher active;
+     no interface is up: no Wi-Fi, no BLE advertising, no serial console
+     (PRINT goes nowhere; DEBUG reaches the log ports)
+  3. the boot interface (NV ui.boot) starts
+  4. serial UI: the start-up banner (still the last start-up line)
+  5. Wait screen (built-in and/or onWait)
+
+  The Link field in the onWait argument is the state when onWait starts;
+  later changes arrive as UI LINK UP / DOWN once it has ON UI.
+
+
+14. FIRMWARE CHANGES NEEDED (besides the interpreter)
+-----------------------------------------------------
+
+  - Button events: LONG DOWN|UP|REPEAT become DOWN|UP|REPEAT
+      <<BTN n DOWN>> <<BTN n UP>> <<BTN n REPEAT>>   (clients see this too);
+    the README notes that a long press is reported as DOWN ... UP.
+  - New UI events (also sent to clients, like BTN / IMU events):
+      <<UI CONNECT>> <<UI DISCONNECT>> <<UI LINK UP>> <<UI LINK DOWN>>
+  - ECHO: $variable substitution, \$, and the quoting rules (section 7).
+  - New commands: RUN STOP PAUSE CONT LOAD STEP BPT VARS LIST STACK PRINT DEBUG
+    RNG EVENTS LOG.
+  - UI NEXT: switch to the next interface in the BOOT double-press order
+    (WEB -> TELNET -> BLE -> USB -> UART -> WEB).
+  - NV: sys.autorun; rad.ssid, rad.pwd, rad.ble refuse ':' and '|'.
+  - WAIT ms (console and scripts), WAIT EVENT ms and INPUT ms use the
+    high-resolution timer: 1 ms resolution (the 200 Hz tick is unchanged).
+  - Boot order (section 13a): the boot interface starts after onBoot.
+  - ACC / GYR: optional  $x $y $z  targets in scripts.
+
+  - btn.c: comment that button 1 must always be the BOOT pin (agreed,
+    waiting for go).
+
+  Implementation notes:
+  - Scripts are tokenised once at load (names and functions resolved to
+    slots, expressions pre-parsed) so lines run fast; trig uses the C
+    library (or tables if memory allows and speed needs it).
+  - Watchdog: while a script runs, the script task is registered with the
+    task watchdog and resets it after every line; the idle-task check is
+    off for that time. Once a second the script pauses for 1 tick (5 ms)
+    so the idle task can do its housekeeping (~0.5 % of script speed).
+    STOP and the BOOT watcher are serviced between lines.
+  - Variable values are allocated as needed in PSRAM (worst case ~1 MB:
+    64 locals x 512 chars x stack 32).
+
+
+15. LIMITS (summary)
+--------------------
+
+  All limits are #defines in src/script_cfg.h (one place to tweak them):
+
+  line                 200 chars
+  file + INSERTs       32 KB
+  INSERT depth         4
+  block nesting        8
+  call stack           .STACK n, default 8, max 32
+  variables            64 local per call, 64 global
+  name length          15
+  value length         512
+  event queue          16
+  timers               4
+  constants            32
+  script file name     31 chars
+
+
+16. EXAMPLE
+-----------
+
+  # shapes.s
+  FN drawPoly $n $cx $cy $r          # n sides, centre cx cy, radius r
+    VARS $i $a $x1 $y1 $x2 $y2
+    LET $x1 = ROUND($cx + $r) ; LET $y1 = ROUND($cy)
+    LOOP $i = 1 TO $n
+      LET $a = 360 * $i / $n
+      LET $x2 = ROUND($cx + $r * COS($a))
+      LET $y2 = ROUND($cy + $r * SIN($a))
+      LINE $x1 $y1 $x2 $y2 255 255 255
+      LET $x1 = $x2 ; LET $y1 = $y2
+    END
+  END
+
+  # demo.s
+  ON BTN onBtn
+  ON IMU onImu
+  BTN 1 1 0 1
+  IMU TAP 1 1 0
+  LET $$run = 1
+  LOOP WHILE $$run
+    WAIT EVENT
+  END
+  EXIT
+
+  FN onBtn
+    SWITCH $arg[2]
+    SHORT)  CALL shapes.drawPoly 6 86 160 40
+    DOUBLE) LET $$run = 0
+    END
+  END
+
+  FN onImu
+    SWITCH $arg[1]
+    TAP)   PRINT "tap - ax=$.ax"
+    2TAP)  CLS 0 0 0
+    *)     DEBUG ignored $arg
+    END
+  END

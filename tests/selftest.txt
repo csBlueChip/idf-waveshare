@@ -1,0 +1,209 @@
+# wavedemo self-test - paste into a telnet session (UI TELNET first)
+# Comments and blank lines are ignored by the device.
+
+# ---------- basics ----------
+HELP
+FONT                                   # 1 DejaVu Sans Mono 24 (fw), 2 Liberation Serif 24 (prop)
+UI                                     # TELNET
+LED 255 0 0
+LED 0 0 0
+foo bar                                # unknown |foo bar|
+BL 40
+BL 100
+
+# ---------- rotation ----------
+CLS 0 40 90
+ROT 1                                  # W:320 H:172, screen unchanged
+FBOX 0 0 40 10 255 255 255             # bar top-right of glass, running down
+ROT 4                                  # same as ROT 0
+FBOX 0 0 40 10 255 0 0                 # red bar top-left
+
+# ---------- graphics ----------
+CLS 0 0 0
+PLOT 86 160 255 255 255
+LINE 0 0 171 319 255 255 0
+LINE 0 319 171 0 0 255 255
+BOX 10 10 152 300 255 255 255
+FBOX 20 20 40 40 255 0 0
+CIRC 86 160 60 255 128 0
+FCIRC 86 160 30 0 200 0
+TRI 20 250 150 270 60 300 255 255 255
+FTRI 20 200 150 220 60 240 200 0 200
+CIRC -20 300 60 255 0 255              # clipped
+BOX 0 0 0 5 1 2 3                      # ERR w and h must be 1..1000
+
+# ---------- double buffer ----------
+SCR AUTO 0
+CLS 255 255 255                        # not shown yet
+FCIRC 86 160 50 255 0 0                # not shown yet
+SCR UPD                                # both appear together
+SCR AUTO 1
+
+# ---------- transitions ----------
+SCR TR                                 # > CUT
+CLS 0 0 0
+SCR TR PUSH 600 R                      # one-shot
+SCR TR                                 # PUSH 600 R
+CLS 0 0 255                            # blue slides in from the right
+SCR TR                                 # > CUT  (used up)
+SCR TRP FADE 800                       # persistent
+FCIRC 86 160 60 255 255 0              # fades in (circle area only)
+SCR TR PUSH 400 T
+SCR TR                                 # PUSH 400 T > FADE 800
+CLS 0 0 0                              # slides in from the top (one-shot wins)
+SCR TR CUT
+CLS 255 255 255                        # instant
+FBOX 20 20 60 60 255 0 0               # fades again
+SCR TRP                                # FADE 800
+ROT 1
+SCR TR PUSH 600 R                      # direction follows ROT
+CLS 0 80 0                             # enters from the logical right (glass bottom)
+ROT 0
+TBOX 1 6 6 160 2 40
+ECHO 1 typing skips transitions        # types normally, no fades
+SCR TR FADE 5                          # ERR usage
+SCR TR PUSH 300                        # ERR usage (direction required)
+SCR TR NONE NONE                       # one-shot disarmed, persistent CUT
+SCR TR                                 # > CUT
+
+# ---------- sensors ----------
+CLS 0 0 0
+ACC
+GYR
+TEMP
+ROT 1
+CLS 0 0 0
+ACC                                    # landscape: left column
+GYR                                    # landscape: right column
+TEMP
+ROT 0
+
+BAT                                    # Vb: x.yy V, under gZ
+ROT 1
+CLS 0 0 0
+ACC
+GYR
+TEMP
+BAT                                    # landscape: right column, under gZ
+ROT 0
+
+# ---------- system ----------
+INFO
+WAIT 1500                              # OK after 1.5 s
+WAIT 60001                             # ERR ms must be 0..60000
+
+# ---------- more transitions ----------
+CLS 0 0 0
+SCR TR WIPE 800 R
+CLS 0 0 255                            # blue wipes in from the right (hard edge)
+SCR TR WIPE 800 T
+CLS 0 0 0                              # black wipes in from the top
+SCR TR DISSOLVE 1000
+FBOX 20 40 132 200 255 0 0             # red box dissolves in (box area only)
+SCR TR DISSOLVE 1000
+FBOX 20 40 132 200 0 0 0               # dissolves out, different pattern
+SCR TR WIPE 500                        # ERR usage (direction required)
+
+# ---------- screenshots (SD card) ----------
+SCR SHOT                               # next free number, e.g. 00000001.png
+SCR SHOT                               # +1
+SCR SHOT selftest                      # selftest.png
+SCR SHOT selftest                      # ERR file exists
+SCR SHOT selftest.png -f               # selftest.png (overwritten)
+SCR SHOT a/b                           # ERR bad file name
+
+# ---------- NV / RAD (settings are backed up and restored) ----------
+NV EXPORT selftest_backup              # SD:/sys/selftest_backup.nvram
+NV GET
+NV GET scr.bl
+NV SET scr.bl 60                       # next boot: backlight 60 %
+NV SET rad.pwr 7.3                     # stored as 7.25
+NV GET rad.pwr
+NV SET rad.pwd short                   # ERR rad.pwd must be 8..63 chars, no spaces
+NV SET btn.l 10                        # ERR btn.l must be 50..5000
+NV SET nope 1                          # ERR unknown key nope
+NV SET web.hist 5                      # ERR web.hist must be 10..500
+RAD GET
+RAD SET ssid labnet pwd secret123 pwr 10
+RAD GET ssid pwd pwr
+RAD SET ip 192.168.4.255               # ERR rad.ip is not a host address for rad.mask
+RAD SET ssid ok pwd bad                # ERR ... (nothing stored)
+RAD GET ssid
+NV RESET scr.bl
+NV GET scr.bl                          # scr.bl=100
+NV IMPORT missing                      # ERR file not found
+NV RESET                               # all defaults
+NV IMPORT selftest_backup              # back to what you had
+NV GET
+
+# ---------- images (SD card /images) ----------
+IMG
+CLS 0 0 0
+IMG 1                                  # x y default 0 0
+IMG poseidon.PNG 60 100
+IMG 9                                  # ERR not found
+IMG 1 5                                # ERR usage
+
+# ---------- text boxes ----------
+CLS 0 40 90
+TBOX 1 6 6 160 4
+TINK 1 255 255 255
+ECHO 1 his name is \2Rupert\1 today
+ECHO 1  -- one space skipped, one kept
+ECHO 1 \na\\b \x literal, price \#5
+TBOX 2 6 120 160 3 0 2 2                # speed 0, lead 2, font 2
+TCLS 2 230 230 230
+TINK 2 0 0 0
+ECHO 2 Word wrap keeps words whole in the serif font.
+TSCRL 2 1
+ECHO 2 \nScrolled line one\nScrolled line two
+TYX 2 0 80
+ECHO 2 X
+TBOX 3 6 210 136 3 40                  # typing effect, 40 ms per character
+TCLS 3 40 40 40
+TINK 3 255 200 0
+ECHO 3 Supercalifragilisticexpialidocious!   # types out
+TBOX 3 SET s 0
+SCR AUTO 0
+TBOX 3 SET s 80
+ECHO 3 \ninstant                         # SCR AUTO 0: no typing
+SCR AUTO 1
+TBOX 3 SET s 0
+
+# ---------- sideways box ----------
+ROT 1
+TBOX 4 20 0 200 1
+TCLS 4 120 0 0
+ROT 0
+ECHO 4 Y axis label                    # still sideways
+
+# ---------- SET and errors ----------
+TBOX 3 SET h 2
+TBOX 3 SET f 2
+ECHO 3 \n now serif
+TBOX 3 SET w 10                        # ERR w must be at least 20 for font 2
+TBOX 3 SET f 7                         # ERR font 7 not available
+TBOX 5 0 0 10 1                        # ERR w must be at least 12 for font 1
+TBOX 5 0 0 15 4
+ECHO 5 a\2bcd                          # ERR font 2 too wide for box (bcd printed)
+ECHO 1 \7oops                          # ERR font 7 not available (text printed)
+ECHO 6 x                               # ERR box not defined (TBOX)
+TYX 1 500 0                            # ERR y x must be inside the box
+
+# ---------- buttons ----------
+BTN                                    # all off, global deb=30 long=600 dbl=300 rpt=0
+BTN 1 1 1 1                            # BOOT button: short, DOWN/UP, double
+BTN 2 1 0 0                            # GP2 switch: SHORT on press
+BTN 2 SET rpt 300                      # ...typematic: SHORT again at long, then every 300 ms
+BTN 3 0 1 0 TOUCH                      # GP4 touch pad (hands off while it calibrates)
+BTN 3 SET rpt 100                      # ...REPEAT every 100 ms while held
+BTN CAL                                # BTN 3 CAL <benchmark>
+BTN 1 1 0 0 TOUCH                      # ERR button 1 is TACT only
+BTN 2 1 2 0                            # ERR short long double must be 0|1
+BTN                                    # shows the settings above
+# now press the buttons: <<BTN n ...>> messages arrive between replies
+
+# ---------- end ----------
+# UI WEB                               # uncomment: web console - join the AP, open http://192.168.4.1/
+# UI BLE                               # uncomment to finish back on BLE
+# FILES                                # uncomment to test disk mode (reboots)

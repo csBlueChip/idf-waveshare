@@ -1,0 +1,18 @@
+. WAVEDEMO - Waveshare ESP32-S3-LCD-1.47B resource demo (ESP-IDF v6.1)
+.gitignore files git ignores (build output, secrets.mk, sdkconfig, zips)
+CMakeLists.txt ESP-IDF top-level project file
+Makefile build / flash shortcuts (supplied by the user)
+partitions.csv flash partition table (two OTA slots, NVS, coredump)
+sdkconfig.defaults build settings: PSRAM, BLE, USB disk, Wi-Fi, RAM placement
+dependencies.lock exact versions of the managed components (keep in git)
+README.txt user documentation: commands, NV keys, SD card, screens, IMU, scripts
+scripting.txt script language specification
+scripting_ref.txt script language quick reference
+notes.txt working notes: rules, build setup, hardware facts, decisions, progress
+todo.txt todo list
+DESCRIPT.ION file descriptions for this folder
+src firmware sources (ESP-IDF component)
+assets files built into the firmware
+tools helper scripts for developers
+tests board test procedures and PC tests
+sd SD card layout: copy the contents to the card

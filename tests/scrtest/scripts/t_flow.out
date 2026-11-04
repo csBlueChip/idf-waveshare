@@ -1,0 +1,19 @@
+> elif ok
+> else ok
+> to: x 1 2 3 4 5 after 6
+> down: n10 n7 n4 n1 after -2
+> empty loop i=5
+> while n=3
+> times c=3
+> forever c=4
+> nested: 1:1 1:3 3:1
+> switch five
+> second line
+> ci ok
+> default ok
+> range ok
+> no match ok
+> goto k=3
+> left loop i=2
+<<SCRIPT t_flow END>>
+[result END]

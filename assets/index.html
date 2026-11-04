@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>wavedemo</title>
+<style>
+	/* The page itself scrolls (not an inner box): Android's sign-in window only
+	 * lets you scroll up if the page can scroll; its pull-to-refresh takes the rest. */
+	html, body { margin: 0; background: #111; color: #ddd; }
+	body { font: 14px/1.35 ui-monospace, Menlo, Consolas, "DejaVu Sans Mono", monospace; }
+	#out { margin: 0; padding: 8px; white-space: pre-wrap; word-break: break-all; }
+	#out .cmd { color: #8cf; }
+	#out .sys { color: #f96; }
+	#bar { position: fixed; left: 0; right: 0; bottom: 0; display: flex; gap: 6px; padding: 6px;
+	       border-top: 1px solid #333; background: #1a1a1a; }
+	#in { flex: 1; min-width: 0; padding: 8px; font: inherit; color: #eee; background: #000;
+	      border: 1px solid #444; border-radius: 4px; }
+	#send { padding: 8px 16px; font: inherit; color: #000; background: #8cf; border: 0; border-radius: 4px; }
+	#send:disabled { background: #555; }
+	#hbtn { padding: 8px 12px; font: inherit; color: #ddd; background: #333; border: 1px solid #444; border-radius: 4px; }
+	#hlist { position: fixed; left: 6px; right: 6px; max-height: 40vh; box-sizing: border-box; overflow-y: auto; display: none;
+	         background: #1a1a1a; border: 1px solid #444; border-radius: 4px;
+	         overscroll-behavior: contain; touch-action: pan-y; }	/* swipes stay in the list (no pull-to-refresh) */
+	#hlist div { padding: 10px 8px; border-bottom: 1px solid #2a2a2a; white-space: pre; overflow: hidden; text-overflow: ellipsis; }
+	#hlist div:active { background: #333; }
+	#hlist .none { color: #777; }
+</style>
+</head>
+<body>
+<pre id="out"></pre>
+<div id="hlist"></div>
+<div id="bar">
+	<button id="hbtn" title="history">^</button>
+	<input id="in" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+	       maxlength="200" placeholder="connecting...">
+	<button id="send" disabled>Send</button>
+</div>
+<script>
+(function () {
+	var out = document.getElementById("out");
+	var inp = document.getElementById("in");
+	var btn = document.getElementById("send");
+	var hbtn = document.getElementById("hbtn");
+	var hlist = document.getElementById("hlist");
+	var bar = document.getElementById("bar");
+	var KEY = "wdhist";
+	var histMax = 50;
+	var hist = loadHist();
+	var pos = hist.length;		/* hist.length = the line being typed */
+	var draft = "";
+	var ws = null;
+
+	/* ---------- reply box ---------- */
+	function pageEnd() { return document.scrollingElement.scrollHeight; }
+	function add(text, cls) {
+		var atEnd = window.innerHeight + window.scrollY >= pageEnd() - 4;
+		var span = document.createElement("span");
+		if (cls) span.className = cls;
+		span.textContent = text;
+		out.appendChild(span);
+		if (atEnd) window.scrollTo(0, pageEnd());	/* follow new output only if already at the end */
+	}
+	/* keep the last line clear of the fixed input bar (it changes height with the keyboard etc.) */
+	/* Pad for the fixed bar, and keep the page 2 px taller than the window so it
+	 * can always scroll (Android's sign-in window only scrolls the history
+	 * list when the page itself can scroll). */
+	function fitBar() {
+		document.body.style.paddingBottom = bar.offsetHeight + "px";
+		out.style.boxSizing = "border-box";
+		out.style.minHeight = (window.innerHeight - bar.offsetHeight + 2) + "px";
+	}
+	window.addEventListener("resize", fitBar);
+
+	/* ---------- history (browser storage, never sent to the board) ---------- */
+	function loadHist() {
+		var h = null;
+		try { h = JSON.parse(localStorage.getItem(KEY)); } catch (e) {}
+		if (!Array.isArray(h)) {			/* one-off: take over the old cookie */
+			var m = document.cookie.match(/(?:^|;\s*)wdhist=([^;]*)/);
+			try { h = m ? JSON.parse(decodeURIComponent(m[1])) : []; } catch (e) { h = []; }
+			if (!Array.isArray(h)) h = [];
+		}
+		document.cookie = "wdhist=; max-age=0; path=/";	/* delete it: it made requests too big */
+		return h;
+	}
+	function saveHist() {
+		while (hist.length > histMax) hist.shift();
+		try { localStorage.setItem(KEY, JSON.stringify(hist)); } catch (e) {}
+	}
+
+	/* ---------- connection ---------- */
+	function setConnected(on) {
+		btn.disabled = !on;
+		inp.placeholder = on ? "command" : "disconnected - reconnecting...";
+	}
+	/* Reconnect loop. A WebSocket is only started once the board answers a plain
+	 * request (/cfg, 2 s limit), and is given 3 s to open: the browser allows one
+	 * WebSocket attempt per address at a time, so an attempt hanging on a dead
+	 * network (~21 s on Windows) would hold up every later one. */
+	var RETRY_MS = 2000, PROBE_MS = 2000, OPEN_MS = 3000;
+	function retry() { setTimeout(connect, RETRY_MS); }
+	function connect() {
+		var ctl   = window.AbortController ? new AbortController() : null;
+		var timer = setTimeout(function () { if (ctl) ctl.abort(); }, PROBE_MS);
+		fetch("/cfg", { cache: "no-store", signal: ctl ? ctl.signal : undefined })
+			.then(function (r) {
+				clearTimeout(timer);
+				if (!r.ok) throw new Error("cfg");
+				openSocket();
+			})
+			.catch(function () {
+				clearTimeout(timer);
+				retry();
+			});
+	}
+	/* Heartbeat: after IDLE_MS with nothing received, send <<PING>>; the board
+	 * answers <<PONG>> (not shown). No reply within PONG_MS = link dead (e.g. the
+	 * board lost power): drop the socket and reconnect. A board that restarts on
+	 * purpose closes with code 4001 first. */
+	var IDLE_MS = 3000, PONG_MS = 3000, PING = "<<PING>>", PONG = "<<PONG>>\n";
+	function openSocket() {
+		var opened = false, lastRx = 0, pingAt = 0, beat = null;
+		var sock = ws = new WebSocket("ws://" + location.host + "/ws");
+		var guard = setTimeout(function () {		/* not open in time: give up, retry */
+			if (!opened) sock.close();
+		}, OPEN_MS);
+		function closed(code, why) {
+			clearTimeout(guard);
+			clearInterval(beat);
+			sock.onclose = sock.onmessage = null;
+			if (ws === sock) ws = null;
+			setConnected(false);
+			if (code === 4000) {		/* another page took over: stay off */
+				add("[disconnected - opened in another window]\n", "sys");
+				inp.placeholder = "disconnected - press F5 to reconnect";
+				return;
+			}
+			if (opened) add("[disconnected" + why + "]\n", "sys");	/* once, not per retry */
+			retry();
+		}
+		sock.onopen = function () {
+			opened = true;
+			clearTimeout(guard);
+			lastRx = Date.now();
+			beat = setInterval(function () {
+				var now = Date.now();
+				if (pingAt) {
+					if (now - pingAt > PONG_MS) {
+						sock.close();
+						closed(0, " - no reply");
+					}
+				} else if (now - lastRx >= IDLE_MS) {
+					pingAt = now;
+					sock.send(PING);
+				}
+			}, 500);
+			setConnected(true);
+		};
+		sock.onmessage = function (e) {
+			lastRx = Date.now();
+			pingAt = 0;				/* anything proves the link is alive */
+			if (e.data !== PONG) add(e.data);
+		};
+		sock.onclose = function (e) {
+			closed(e.code, e.code === 4001 ? " - device rebooting" : "");
+		};
+		sock.onerror = function () { /* onclose follows */ };
+	}
+	/* leaving or reloading the page: close it, so no attempt is left behind */
+	window.addEventListener("pagehide", function () {
+		if (ws) { ws.onclose = null; ws.close(); ws = null; }
+	});
+
+	/* ---------- input ---------- */
+	function send() {
+		var line = inp.value;
+		if (line.trim() === "") return;
+		if (!ws || ws.readyState !== 1) {
+			add("[not connected]\n", "sys");
+			return;
+		}
+		add("$ " + line + "\n", "cmd");
+		ws.send(line);
+		hist.push(line);
+		saveHist();
+		pos = hist.length;
+		draft = "";
+		inp.value = "";
+	}
+	btn.onclick = function () { send(); inp.focus(); };
+	inp.onkeydown = function (e) {
+		if (e.key === "Enter") {
+			e.preventDefault();
+			send();
+		} else if (e.key === "ArrowUp") {
+			e.preventDefault();
+			if (pos === hist.length) draft = inp.value;
+			if (pos > 0) inp.value = hist[--pos];
+		} else if (e.key === "ArrowDown") {
+			e.preventDefault();
+			if (pos < hist.length) {
+				pos++;
+				inp.value = (pos === hist.length) ? draft : hist[pos];
+			}
+		}
+	};
+
+	/* ---------- history list (^ button, for phones) ---------- */
+	/* Android's sign-in window treats a downward swipe as pull-to-refresh while
+	 * the page is at the very top, and takes it from the list. So while the
+	 * list is open keep the page at least 1 px off the top (it is always
+	 * >= 2 px taller than the window, see fitBar). */
+	function offTop() {
+		if (hlist.style.display === "block" && window.scrollY < 1) {
+			window.scrollTo(0, 1);
+		}
+	}
+	window.addEventListener("scroll", offTop);
+	function hideList() { hlist.style.display = "none"; }
+	function showList() {
+		hlist.textContent = "";
+		if (hist.length === 0) {
+			var e = document.createElement("div");
+			e.className = "none";
+			e.textContent = "(no history)";
+			hlist.appendChild(e);
+		}
+		hist.forEach(function (cmd, i) {		/* oldest at top, newest next to the input */
+			var e = document.createElement("div");
+			e.textContent = cmd;
+			e.onclick = function () {
+				inp.value = cmd;
+				pos = i;
+				hideList();
+				inp.focus();
+			};
+			hlist.appendChild(e);
+		});
+		hlist.style.bottom = bar.offsetHeight + "px";
+		hlist.style.display = "block";
+		hlist.scrollTop = hlist.scrollHeight;
+		offTop();					/* page 1 px off the top */
+	}
+	hbtn.onclick = function (e) {
+		e.stopPropagation();
+		if (hlist.style.display === "block") hideList(); else showList();
+	};
+	hlist.onclick = function (e) { e.stopPropagation(); };
+	document.addEventListener("click", hideList);
+
+	fetch("/cfg").then(function (r) { return r.json(); }).then(function (c) {
+		if (c.hist > 0) histMax = c.hist;
+		saveHist();
+		pos = hist.length;
+	}).catch(function () {});
+
+	setConnected(false);
+	fitBar();
+	connect();
+	inp.focus();
+})();
+</script>
+</body>
+</html>

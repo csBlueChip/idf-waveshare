@@ -1,0 +1,15 @@
+<<SCRIPT t_bpt PAUSED t_bpt:3>>
+[paused] stack:   t_bpt.s:3
+[paused] vars:
+  $arg = ""
+  $a = 1
+[resume CONT]
+<<SCRIPT t_bpt PAUSED lib:11>>
+[paused] stack:   t_bpt.s:4 > lib.s:11 (wrap)
+[paused] vars:
+  $arg = "x"
+  $t = "x"
+[resume CONT]
+> done 2
+<<SCRIPT t_bpt END>>
+[result END]

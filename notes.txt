@@ -1,0 +1,211 @@
+WAVEDEMO - WORKING NOTES
+========================
+
+Read this first (with README.txt and scripting.txt) after any loss of
+conversation context. Keep it current, like the README.
+
+
+1. WORKING RULES (from the user)
+--------------------------------
+
+  - Never produce code or files until the user explicitly says "go" for
+    an agreed scope. Propose, wait, then do. (Asking for something is not
+    a "go" - propose the scope first.)
+  - Lead step by step; do not run ahead or invent features.
+  - Short, to-the-point answers; yes/no answers under ~20 words.
+  - Code reviews: list only the issues, never praise.
+  - When unsure: say "I don't know, the following is a guess...".
+  - Tab indentation in source. All device I/O is ASCII ('^' for degrees).
+  - Keep README.txt (and header comments, nv.h) current with every change.
+  - Do NOT give md5 sums (user's request).
+  - Deliver files with download buttons (SendUserFile) when asked / after
+    changes.
+
+
+2. BUILD AND TEST SETUP
+-----------------------
+
+  Project (the user's copy):   /mnt/user-data/outputs/wavedemo
+    src/        firmware sources (ESP-IDF component)
+    assets/     index.html (web console, embedded), usbdrive.png
+    tests/      board test procedures (*.txt), scrtest/ (PC interpreter tests)
+    sd/         SD card layout: images imu scrshots scripts(+data) sys www
+    tools/      mkfont.py
+    README.txt  user documentation      scripting.txt  script spec
+    scripting_ref.txt  quick reference  notes.txt      this file
+    todo.txt    todo list               .gitignore, DESCRIPT.ION (every folder)
+    Makefile    from the user (not in our copy)
+
+  Build mirror (scratchpad):
+    S=/tmp/claude-0/-home-claude/39b5da28-fbd1-59c0-8531-b2a4280e26e3/scratchpad
+    $S/wd       copy of the project used for building
+    $S/esp-idf  ESP-IDF v6.1
+
+  Build:
+    cp -a src/. $S/wd/src/ ; cp assets/index.html $S/wd/assets/
+    cd $S/wd && . $S/esp-idf/export.sh && idf.py build
+    (rsync is not installed; use cp -a. Check: no "error:"/"warning:" in
+    the log - warnings are errors, -Werror.)
+
+  Host test programs: $S/*sim (nvsim, scrsim, trsim, websim, dnssim,
+  pathsim, imusim, recsim, sersim, bootsim, ...). Pattern: extract the
+  pure functions from a source file with python, stub the ESP-IDF calls,
+  build with gcc, run.
+
+  Datasheets: $S/ds/qmi8658a.pdf (+ ds.txt)   Schematic: $S/sch/s.pdf
+
+
+3. HARDWARE FACTS (checked)
+---------------------------
+
+  Board: Waveshare ESP32-S3-LCD-1.47B, ESP32-S3R8 (8 MB PSRAM), 16 MB flash.
+  LCD ST7789 172x320, SPI: MOSI 45, SCLK 40, CS 42, DC 41, RST 39, BL 46.
+  RGB LED: GPIO38.   SD (4-bit SDMMC): CLK 14, CMD 15, D0 16, D1 18,
+  D2 17, D3 21.   I2C: SDA 48, SCL 47.
+  IMU QMI8658A at 0x6B: INT1 = GPIO13, INT2 = GPIO12 (from the schematic).
+  IMU orientation table (imu.c s_orientMap) checked on the board:
+    ROT 0 = -Y up, ROT 1 = -X up, ROT 2 = +Y up, ROT 3 = +X up.
+  Battery: divider /3 (fixed in bat.c).
+  UART0 (console / UART UI): TX GPIO43, RX GPIO44.
+  USB-C: the chip's USB-Serial/JTAG (FILES switches it to TinyUSB MSC).
+  BOOT button: GPIO0 = BTN 1 (must stay so; see open items).
+  FreeRTOS tick: 200 Hz (CONFIG_FREERTOS_HZ=200).
+
+
+4. OPEN ITEMS
+-------------
+
+  To do:
+    - OTA firmware update.
+    - Scripting: implemented; board test tests/test_scripts.txt to run.
+
+  Board tests still to run (by the user):
+    - tests/test_serial.txt  (UART/USB UIs, log routing, +++/---, banner)
+                              ON HOLD: user has no UART wired up yet
+
+  IMU findings (board, with IMU DEBUG):
+    - Tap engine reports nothing (STATUS1 no 0x02, TAP_STATUS stays 0x80)
+      while any other engine is on (CTRL8 C7 / D1). -> TAP exclusive with
+      MOTION/STILL/SIGMO/STEP (ERR on enable). MOTION+STILL+SIGMO work together.
+    - Pedometer never counts (no STATUS1 0x10 at 56/224 Hz, step.min 1 or
+      10; config matches datasheet Table 38). -> IMU_STEP_ENABLE 0 in imu.c:
+      IMU STEP = "not implemented"; code kept; NV step.* kept (unused).
+    - Chip SIGMO timing is right (4000 -> 3.98 s with continuous motion)
+      but its window runs from the first any-motion and quiet does not
+      restart it: move 1 s / rest 4 s / move fired at once. -> SIGMO timed
+      in firmware from the motion session start (IMU_SIGMO_CHIP 0; chip
+      code kept), max 60000. test_sleep section H checks it.
+    - IMU DEBUG lines: "IMU <ms> ST1=.. TAP=..", "IMU <ms> CTRL8=..",
+      "IMU <ms> <<IMU ...>>" (copy of each event).
+
+  Checked on the board (done): test_stepb1 (all), test_sleep (all), tap fix,
+  ORIENT + view flip, Wait screen ORIENT L AUTO, BOOT double/long press on
+  the Wait screen, btn.* renames.
+
+
+5. SCRIPTING - IMPLEMENTATION PLAN (agreed)
+-------------------------------------------
+
+  Spec: scripting.txt (complete, no open points). Quick ref:
+  scripting_ref.txt. All limits as #defines in src/script_cfg.h.
+
+  Step A - the interpreter (no existing firmware files touched):
+    loader (INSERT, .STACK, .CONST, load checks), expressions, variables,
+    control flow, functions / CALL file.fn, events / TIMER / WAIT EVENT /
+    INPUT, debugger logic. Built and tested on the PC with stub commands
+    against tests/scripts/*.s (each with its expected output).
+    Deliver files + test results before touching the firmware.
+
+  Step B - firmware integration:
+    new console commands (RUN STOP PAUSE CONT LOAD STEP BPT VARS LIST
+    STACK PRINT DEBUG RNG EVENTS LOG APPEND ...), boot order (interface
+    starts after onBoot), system scripts + 3 s BOOT escape, event renames
+    (LONG DOWN/UP/REPEAT -> DOWN/UP/REPEAT), UI events (CONNECT,
+    DISCONNECT, LINK UP/DOWN), UI NEXT, NV sys.autorun, NV check refusing
+    ':' and '|' in rad.ssid/pwd/ble, WAIT on the high-resolution timer,
+    ACC/GYR $x $y $z, STOP NOW abort checks, btn.c comment, README.
+    Ends with a build and a board test procedure tests/test_scripts.txt.
+
+  Step B1 (the part of B that needs no interpreter) - DONE, built clean:
+    btn.c   DOWN/UP/REPEAT (no LONG), BTN 1 = BOOT comment
+    ui.c    EVENTS filter inside uiSend(); <<UI CONNECT|DISCONNECT|LINK
+            UP|LINK DOWN>>; UI NEXT; uiBegin() replaces uiStartupDone():
+            the interface starts at the end of main() (later: after onBoot)
+    log.c   LOG [UART|USB|BOTH|AUTO] (logSetMode / logGetMode)
+    text.c  textUnquote() + textUnescape() (shared text rules); ECHO uses
+            them, adds \$
+    cmd.c   raw commands now get the text after ONE separator (extra
+            spaces kept for PRINT); ECHO skips its own leading blanks
+    sys.c   PRINT, DEBUG, APPEND (SD:/scripts/data/x.txt), WAIT on a
+            one-shot esp_timer + semaphore (per call)
+    nv.c    sys.autorun 0|1 (unused yet); rad.ssid/pwd/ble refuse ':' '|'
+    web.c   <<PING>> answered <<PONG>> in the server task (never queued);
+            esp_restart shutdown handler closes the page with code 4001.
+            index.html: ping after 3 s idle, no pong in 3 s = reconnect.
+    sys.c   LOGCAT [file [>DEBUG]] (list / dump SD:/scripts/data files;
+            reads 1 KB blocks, SD lock released while sending)
+    usbdisk FILES image: SD:/sys/usbdrive.png (PSRAM, max 512 KB, must fit
+            172x320) else the embedded assets/usbdrive.png; read while the
+            card is still FAT-mounted (before sdOpenRaw).
+    main.c  start-up LED flash 100 ms: NV sys.aron (autorun 1) / sys.aroff
+            (autorun 0); 0 0 0 = none. Right after ledInit().
+    RAM     (user: minimise internal RAM) statics marked EXT_RAM_BSS_ATTR
+            (nv s_val s_stage lines, sys/script names + buffers, cmd table,
+            text boxes/ECHO, web chunk, dns, ble tmp, ui lines, script
+            queue); sdkconfig.defaults: SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY,
+            SPIRAM_TRY_ALLOCATE_WIFI_LWIP, NIMBLE_MEM_ALLOC_MODE_EXTERNAL,
+            SPIRAM_MALLOC_ALWAYSINTERNAL 4096, FREERTOS_USE_TRACE_FACILITY
+            (MEM). Script task created per run (16 KB only while running).
+            Static DIRAM 201 KB -> 157 KB (.bss 58 -> 13 KB). Needs a fresh
+            sdkconfig (delete it, full rebuild). Not done: BLE de-init when
+            BLE is not the UI (~25-35 KB, needs testing).
+            Keep internal: btn s_btn, log s_buf, scrtr buf.
+    git     .gitignore; sd/ = card layout (images imu scrshots scripts
+            scripts/data sys www) with example scripts and favicon; a
+            DESCRIPT.ION in every folder (file descriptions, keeps empty
+            folders in git). User supplies the Makefile (secrets.mk for
+            PASSWORD). dependencies.lock kept in git.
+    rename  scripts are name.s (Windows runs .scr); DESCRIPT.ION in every
+            folder; sd/sys/default.nvram (all NV defaults); onWait.s and
+            onConnect.s define before/instead/after (empty = ignored).
+  Notes for Step A:
+    - cmd.c strips '#' comments and is NOT quote-aware: '#' inside quotes
+      needs \# at the console. The script loader has its own rules.
+    - LINK DOWN drops the telnet/web session first, so a client never sees
+      it; LINK UP is sent on every station IP (wifi.c).
+  Step A + B: "go" given (both in one run). Design:
+    core (portable C, PC-testable): src/scr.h (API), src/scr_host.h (host
+      hooks), src/scr_int.h, src/scr_load.c (files, INSERT, split, blocks,
+      FN/labels/VARS/.CONST checks), src/scr_eval.c (values, expressions,
+      substitution), src/scr_exec.c (frames, statements, events, debugger).
+      Expressions are evaluated from statement text at run time (not
+      pre-compiled; deviation from the implementation note, simpler).
+    firmware: src/script.c/.h (task, console commands, event queue, timers,
+      system scripts, BOOT watcher, host hooks); hooks in main.c, ui.c.
+    PC tests: tests/scrtest/ (host stub + scripts *.s with *.out).
+  Progress:
+    [done] Step A core: script_cfg.h scr.h scr_host.h scr_int.h scr_load.c
+           scr_eval.c scr_exec.c; PC tests tests/scrtest (sh run.sh: 24
+           pass; ASan/UBSan clean). Run state in an allocated block (PSRAM).
+    [done] Step B: script.c/.h (task prio 1 = main, 16 KB stack; event
+           queue + TIMER merge; host hooks; RUN LOAD STOP PAUSE CONT STEP
+           BPT VARS LIST STACK; system scripts; BOOT 3 s watcher; USB
+           console while paused without a client). Hooks: main.c
+           (scriptInit, scriptBoot, scriptConsoleLine), ui.c (uiSend ->
+           scriptEvent + uiSendText, uiHasClient, onWait/onConnect/client
+           gone in uiEvent / uiStartScreen, USB rx), cmd.c cmdExists
+           (CMD_MAX_COMMANDS 64), imu.c imuOrientLast + REC abort,
+           scrtr.c abort. Firmware builds clean.
+    [done] System scripts in SD:/sys/ (onBoot onWait onConnect), named
+           sys/name by hand; QUIET 0..3 default 2 (2 hides <<BTN|IMU|UI>>
+           from the client: scriptEvent() returns true, uiSend skips).
+    [todo] Board test: see todo.txt (D2, D4 retest; G, H, I).
+  Deviations (also in scripting.txt status): expressions not pre-compiled;
+  onWait/onConnect functions are separate runs; onConnect and
+  onWait before/after block the console (client lines wait); image
+  decode not cut by STOP NOW; watchdog by 1-tick yield per second.
+  Lesson: python str.index() on a name also finds its prototype - always
+  anchor on the definition line and assert order (lost scr_exec.c once,
+  recovered).
+  While implementing, record progress here (files written, tests passing,
+  what is next) so a context loss loses nothing.

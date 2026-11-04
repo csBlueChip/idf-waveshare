@@ -1,0 +1,8 @@
+# 16 MB flash. ~7.8 MB above coredump left unallocated for later use.
+# Name,    Type, SubType,  Offset,   Size
+nvs,       data, nvs,      0x9000,   0x10000
+otadata,   data, ota,      0x19000,  0x2000
+phy_init,  data, phy,      0x1B000,  0x1000
+ota_0,     app,  ota_0,    0x20000,  4M
+ota_1,     app,  ota_1,    0x420000, 4M
+coredump,  data, coredump, 0x820000, 64K

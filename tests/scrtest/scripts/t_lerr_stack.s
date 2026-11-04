@@ -1,0 +1,2 @@
+PRINT a
+.STACK 4

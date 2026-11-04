@@ -1,0 +1,2 @@
+<<SCRIPT t_goto_into ERR t_goto_into:5: GOTO in: jumps into a block>>
+[result ERROR]

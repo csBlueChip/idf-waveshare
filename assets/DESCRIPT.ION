@@ -1,0 +1,4 @@
+. files built into the firmware
+index.html web console page
+usbdrive.png FILES screen image (built-in; SD:/sys/usbdrive.png replaces it)
+DESCRIPT.ION file descriptions for this folder

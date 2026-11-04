@@ -1,0 +1,63 @@
+<<SCRIPT t_debug PAUSED t_debug:2>>
+[paused] stack:   t_debug.s:2
+[paused] vars:
+  $arg = ""
+[resume STEP]
+<<SCRIPT t_debug PAUSED t_debug:3>>
+[paused] stack:   t_debug.s:3
+[paused] vars:
+  $arg = ""
+[resume STEP]
+<<SCRIPT t_debug PAUSED t_debug:4>>
+[paused] stack:   t_debug.s:4
+[paused] vars:
+  $arg = ""
+  $a = 1
+[resume IN]
+<<SCRIPT t_debug PAUSED t_debug:12>>
+[paused] stack:   t_debug.s:4 > t_debug.s:12 (f)
+[paused] vars:
+  $arg = "5"
+  $p = "5"
+[resume STEP]
+<<SCRIPT t_debug PAUSED t_debug:13>>
+[paused] stack:   t_debug.s:4 > t_debug.s:13 (f)
+[paused] vars:
+  $arg = "5"
+  $p = "5"
+  $in = "5"
+[resume OUT]
+<<SCRIPT t_debug PAUSED t_debug:5>>
+[paused] stack:   t_debug.s:5
+[paused] vars:
+  $arg = ""
+  $a = 1
+[resume CONT]
+<<SCRIPT t_debug PAUSED t_debug:7>>
+[paused] stack:   t_debug.s:7
+[paused] vars:
+  $arg = ""
+  $a = 1
+  $b = 2
+  $c = 3
+[resume STEP]
+> after BPT
+<<SCRIPT t_debug PAUSED t_debug:8>>
+[paused] stack:   t_debug.s:8
+[paused] vars:
+  $arg = ""
+  $a = 1
+  $b = 2
+  $c = 3
+[resume CONT]
+<<SCRIPT t_debug PAUSED t_debug:9>>
+[paused] stack:   t_debug.s:9
+[paused] vars:
+  $arg = ""
+  $a = 1
+  $b = 2
+  $c = 3
+[resume CONT]
+> end
+<<SCRIPT t_debug END>>
+[result END]

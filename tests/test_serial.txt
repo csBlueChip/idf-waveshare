@@ -1,0 +1,158 @@
+wavedemo - serial UI (UART / USB) and log routing test procedure
+===============================================================
+
+Manual test: do each step, check the result before the next one.
+  >  command to send (then Enter, unless the step says otherwise)
+  *  action
+  =  expected reply / what you should see
+
+Setup
+  - PC terminal A on the USB-C port (any speed).
+  - PC terminal B on UART0: a 3.3 V USB-UART adapter on the header,
+    adapter RX -> TX GPIO43, adapter TX -> RX GPIO44, GND -> GND,
+    115200 8N1.
+  - Both terminals: local echo OFF, send CR or CR LF on Enter.
+  - Start from telnet or web (UI TELNET / UI WEB) as the control console.
+
+
+A. NV SETTINGS
+--------------
+
+A1  > NV GET ui.baud
+    = ui.baud=115200
+A2  > NV GET ui.echo
+    = ui.echo=1
+A3  > NV SET ui.baud 12345
+    = ERR ui.baud must be 9600|19200|38400|57600|115200|230400|460800|921600
+A4  > NV SET ui.echo 2
+    = ERR ui.echo must be 0..1
+A5  > NV SET ui.boot XYZ
+    = ERR ui.boot must be BLE|TELNET|WEB|UART|USB
+
+
+B. LOG ROUTING WITH A NETWORK UI
+--------------------------------
+
+B1  * (UI is TELNET or WEB) watch terminals A and B, then
+    > UI
+    = TELNET (or WEB) on the control console; log lines (e.g. "I (...) main:
+      rx: UI") appear on BOTH A and B
+
+
+C. USB UI
+---------
+
+C1  > UI USB
+    = OK on the control console; the client drops; glass: fade to black,
+      Wait screen "UI  : USB"
+C2  * watch terminal B (UART) while switching
+    = log lines continue on B; nothing new on A until you type
+C3  * terminal A: type   INFO   then Enter
+    = characters echo as typed; glass: splash (connect); the INFO lines
+      and OK come back on A, each line ending CR LF (no stair-stepping)
+C4  * terminal A: type   LEDX, Backspace, then Enter
+    = "LEDX" then the X is erased on screen; reply: ERR ... (LED needs
+      r g b) - shows the line was "LED"
+C5  * terminal A: Enter three times on an empty line
+    = [Startup Complete - USB UI active]
+C6  * terminal A: Enter twice, type   UI   Enter, then Enter once
+    = no banner (the count restarts after a command)
+C7  * terminal A: type   +++   and wait 1 s (no Enter)
+    = new line, then [debug enabled, --- to stop]
+C8  > UI
+    = USB, OK on A; the log line for "rx: UI" now ALSO shows on A
+      (and still on B)
+C9  * terminal A: type   ---   and wait 1 s
+    = [debug disabled]
+C10 > UI
+    = USB, OK; log line only on B, not on A
+C11 * terminal A: type   +++   then Enter at once
+    = unknown |+++|   (no debug)
+C12 * terminal A: type   +++x   wait 1 s, then Enter
+    = unknown |+++x|  (no debug)
+C13 * terminal A: type   +++   wait 1 s (debug on), then
+    > NV SET ui.echo 0
+    = OK
+C14 > UI UART
+    = BAUD:115200, PINS:TX43 RX44, OK on A; glass Wait "UI  : UART",
+      "Baud: 115200", "Pins: TX43 RX44". A is now the log port (logs
+      keep coming there); debug ended with the UI switch
+
+
+D. UART UI (ui.echo now 0)
+--------------------------
+
+D1  * terminal B: type   INFO   Enter
+    = nothing echoed while typing (ui.echo 0); splash; INFO lines + OK on B
+D2  * terminal A (USB): watch while sending  > UI  on B
+    = UART, OK on B; log lines on A only
+D3  > NV SET ui.echo 1
+    = OK (takes effect next time the UART UI starts)
+D4  * terminal B: Enter three times
+    = [Startup Complete - UART UI active]
+D5  * terminal B: type   +++   wait 1 s
+    = [debug enabled, --- to stop]; logs now on A and B
+D6  * terminal B: type   ---   wait 1 s
+    = [debug disabled]
+D7  > IMU REC 1000
+    = header + ~224 lines (imu.arate 224), OK - or ERR FIFO overflow:
+      at 115200 the data (~12 KB/s) is faster than the line (~11.5 KB/s)
+D8  > IMU REC 3001
+    = ERR ms must be 1..3000 on UART
+
+
+E. BAUD RATE
+------------
+
+E1  > NV SET ui.baud 921600
+    = OK
+E2  * terminal B:   UI USB
+    * terminal A:   UI UART
+    = BAUD:921600 ... OK on A
+E3  * set terminal B to 921600, type   INFO   Enter
+    = works at 921600
+E4  * terminal A: watch logs while sending  > UI  on B
+    = logs on A only
+E4a * terminal B:   IMU REC 3000
+    = header + ~670 lines, OK (no overflow at 921600)
+E5  > UI USB   (from B)
+    * terminal B back to 115200
+    = log lines on B readable again (UART back at 115200 when not the UI)
+E6  > NV SET ui.baud 115200   (from A)
+    = OK
+
+
+F. BOOT INTO A SERIAL UI
+------------------------
+
+F1  > NV SET ui.boot UART
+    = OK
+F2  > REBOOT
+    = OK; reboot. Terminal B: boot messages, then the LAST line on B is
+      [Startup Complete - UART UI active]; later logs appear on A only
+F3  * terminal B: type   UI   Enter
+    = splash; UART, OK
+F4  > NV SET ui.boot USB
+    > REBOOT
+    = after the reboot (re-open terminal A if the PC dropped it):
+      [Startup Complete - USB UI active] on A (if A was open in time;
+      otherwise press Enter three times)
+F5  > NV SET ui.boot TELNET     (or your usual boot UI)
+    > REBOOT
+
+
+G. BOOT BUTTON LOOP
+-------------------
+
+G1  * on the WEB Wait screen, double-press BOOT repeatedly
+    = WEB -> TELNET -> BLE -> USB -> UART -> WEB
+      (the glass shows each Wait screen in turn)
+
+
+H. DBGF / LIMITS (code check)
+-----------------------------
+
+H1  * add   dbgf("dbgf test %d", 42);   anywhere at start-up, build, flash
+    = "dbgf test 42" on the log port(s), one line, CR LF ending
+H2  * USB UI active, run   FILES
+    = USB console ends (USB becomes the disk); reboot on eject as usual

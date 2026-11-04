@@ -1,0 +1,6 @@
+. settings (NV EXPORT/IMPORT name.nvram), splash.png, usbdrive.png, system scripts
+onBoot.s system script: end of start-up (NV sys.autorun 1)
+onWait.s system script: FN before / instead / after around each Wait screen
+onConnect.s system script: FN before / instead / after around the connect splash
+default.nvram all NV settings at their defaults (NV IMPORT default)
+DESCRIPT.ION file descriptions for this folder
