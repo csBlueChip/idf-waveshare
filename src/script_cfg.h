@@ -1,6 +1,6 @@
 #pragma once
 
-/* Script language limits (see scripting.txt section 15). One place to tweak. */
+/* Script language limits (see SCRIPTING.txt section 15). One place to tweak. */
 
 #define SCR_LINE_MAX		200		/* source line / command after substitution */
 #define SCR_FILE_MAX		(32 * 1024)	/* a file plus its INSERTs */
@@ -15,7 +15,10 @@
 #define SCR_EVQ			16		/* event queue */
 #define SCR_TIMERS		4
 #define SCR_CONSTS		32
-#define SCR_FNAME_MAX		31		/* script file name, without .s */
+#define SCR_FNAME_MAX		31		/* script / data file name, without extension */
+#define SCR_FILES_DEF		4		/* data files with a position: NV run.files default */
+#define SCR_FILES_MAX		16		/* run.files / .FILES upper limit */
+#define SCR_FREAD_MAX		200		/* bytes per FREAD */
 #define SCR_QUIET_DEF		2		/* QUIET at the start of a run */
 
 /* Internal sizes */

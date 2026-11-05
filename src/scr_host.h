@@ -65,3 +65,17 @@ int scrHostInput(char *out, size_t n, int ms);
 /* Paused (<<SCRIPT ... PAUSED>> already sent): block until CONT / STEP /
  * STOP. Returns SCR_GO_*. */
 int scrHostPause(void);
+
+/* Data files with a position per run when the script has no .FILES (NV
+ * run.files), 1..SCR_FILES_MAX. */
+int scrHostFilesDefault(void);
+
+/* Data files (FREAD FWRITE ... and VARS SAVE / LOAD): fname is "name.txt" or
+ * "name.var" in the script data folder (SD:/scripts/data). Offsets from 0.
+ * Size in bytes, -1 = no such file (*err NULL) or an error (*err set);
+ * *ro = read-only. */
+long scrHostFileSize(const char *fname, bool *ro, const char **err);
+/* Read up to n bytes at off: count read, -1 = error (*err). */
+int scrHostFileRead(const char *fname, long off, char *buf, int n, const char **err);
+/* Write n bytes at off (file created; trunc: emptied first). NULL or an error. */
+const char *scrHostFileWrite(const char *fname, long off, const char *data, int n, bool trunc);

@@ -45,6 +45,8 @@ implementation:
                         transitions, image decode
   PAUSE                 hold the script after its current line
   CONT                  resume a paused script (error if not paused)
+  !!STOP [NOW], !!PAUSE the same while the script runs; while it waits
+                        in INPUT only these forms work (section 10)
 
   Debugging (section 2a): LOAD  STEP  BPT  VARS  LIST  STACK
 
@@ -156,7 +158,8 @@ implementation:
   Script statements:
     LET GET VARS DEL INS IF ELIF ELSE END LOOP TO STEP WHILE TIMES FOREVER BREAK
     NEXT SWITCH GOTO EXIT FN RETURN CALL INSERT ON OFF ONERROR QUIET TRACE
-    PRINT DEBUG APPEND RNG TIMER BPT!  .STACK .CONST
+    PRINT DEBUG FWRITE FREAD FTELL FSEEK FCLOSE RNG TIMER BPT!  .STACK .CONST
+    (VARS SAVE / VARS LOAD; SAVE is reserved too)
   Also reserved: EVENT (WAIT EVENT), NOW (STOP NOW), INPUT
   Console only: RUN STOP PAUSE CONT LOAD STEP BPT VARS LIST STACK
   Console and scripts: LOG EVENTS
@@ -238,14 +241,14 @@ implementation:
     $.rnd               random 0..65535 (see RNG)
     $.ok                1 if the last command replied OK, else 0
     $.err               text of the last ERR (empty if none)
-    $.ret               value from the last RETURN / WAIT EVENT
+    $.ret               value from the last RETURN / WAIT EVENT / FSTAT
     $.event             full text of the last event, e.g. "BTN 1 SHORT"
                         (WAIT EVENT; empty after a time-out)
     $.time              timestamp as used for file names, e.g. b002A_001523
     $.uptime            ms since boot
     $.runtime           ms since the script started
     $.w $.h $.rot       screen width, height, rotation (current ROT)
-    $.fw                firmware version, e.g. 1.0.0
+    $.fw                firmware version, e.g. 0.5.0
     $.dropped           events lost from a full queue since the start
 
 
@@ -371,10 +374,70 @@ implementation:
         \1..\9    font 1..9 for the rest of this ECHO (ECHO only;
                   PRINT and DEBUG drop them)
 
-  APPEND file text  add text as one line to SD:/scripts/data/file.txt
-                   (folder and file created if missing; same text rules
-                   as PRINT; file: letters, digits, '_'). No SD card or a
-                   write failure is an error.
+  FLOG file text   add text plus a new line at the end of
+                   SD:/scripts/data/file.txt (folder and file created if
+                   missing; same text rules as PRINT; file: letters,
+                   digits, '_'). Also a console command.
+
+7a. DATA FILES
+--------------
+
+  Text files SD:/scripts/data/file.txt (file = letters, digits, '_', max
+  31, given without .txt; only FCAT / FSTAT / FDELETE also take
+  name.var and name.nvram, below).
+
+  Console and scripts:
+    FLOG file text                  append text + new line (section 7)
+    FCAT file [start,count] [>DEBUG]
+                                    show the file / count lines from line
+                                    start; error if the file is missing
+    FDIR [txt|var|nvram|*]          list: name size ro|rw (default txt;
+                                    * = all, with extensions)
+    FSTAT file                      size:ro|rw (ro = read-only attribute,
+                                    set on a PC); in a script -> $.ret
+    FDELETE file                    delete (not a read-only file)
+    FCAT / FSTAT / FDELETE also take name.var (VARS SAVE files) and
+    name.nvram (SD:/sys; FCAT shows a '!' line as !key=[redacted]):
+      FDELETE persist.var
+
+  Scripts only (each file has a position):
+    FWRITE file text                write text at the position (PRINT text
+                                    rules; no new line added), overwriting
+                                    or growing the file; created if missing
+    FREAD $v file n|EOL             read n bytes (1..200), or to the end of
+                                    the line (CR/LF dropped, position after
+                                    it; a line over 200 bytes is cut and
+                                    the next read continues)
+    FTELL $v file                   the position
+    FSEEK file START                position 1
+    FSEEK file END [n]              size + 1 - n (END = END 0 = end of file)
+    FSEEK file SET n                position n
+    FSEEK file OFFS n               current position + n (may be negative)
+    FCLOSE file                     forget the position
+
+  Positions count from 1, as everything in this language: byte #1 is the
+  first byte; an empty file has size 0 and the first byte written is #1;
+  the end of the file is size + 1. FSEEK results are kept within
+  1 .. size + 1. A file starts at position 1 when first used (FREAD,
+  FWRITE, FTELL, FSEEK); up to run.files (default 4) or .FILES n files
+  at once; all are closed when the
+  script ends.
+
+  FREAD past the end: $v gets the bytes that were there, $.ok = 0 and the
+  error "over-read n" (n = bytes missing). FREAD EOL with nothing left:
+  error "EOF". Errors go through ONERROR as usual. Non-ASCII bytes read
+  as '?'. FWRITE / FLOG / FDELETE refuse a read-only file.
+
+  VARS SAVE name [$a $$b ...]       write SD:/scripts/data/name.var, a new
+                                    file each time. No list: all GLOBALS
+                                    ($$) only; locals only when listed.
+  VARS LOAD name [$a $$b ... | ALL] set the listed variables (no list =
+                                    ALL); a listed name not in the file is
+                                    an error; VARS rules apply.
+    File lines: $$score=12.5   $$name="say \"hi\"\n"   (\" \\ \n \r
+    escaped; numbers keep full precision). The file may be edited on a PC.
+    VARS SAVE / LOAD may be used anywhere (VARS $a ... declarations only
+    at the start of a body).
 
   QUIET 0|1|2|3    what the client sees of the script (default 2):
                      0  everything
@@ -463,6 +526,9 @@ implementation:
 
   .STACK n           call depth (default 8, max 32); going deeper is
                      an error: stack overflow.
+  .FILES n           data files with a position at once (1..16; default
+                     NV run.files, 4); one more is an error: too many
+                     files open.
                      Execution settings (.STACK and any later '.' ones)
                      must be at the top of the script, before any other
                      statement; elsewhere they are a load error.
@@ -538,7 +604,9 @@ implementation:
   INPUT $v [ms]
     waits for the next console line from the client and puts it in $v
     (it is not run as a command). Time-out: $v = "" and $.ok = 0.
-    STOP, STOP NOW and PAUSE still act as commands while INPUT waits.
+    While INPUT waits only !!STOP, !!STOP NOW and !!PAUSE (any case)
+    are commands; any other line is the input text (so "stop" is a
+    valid answer). Outside INPUT, STOP and !!STOP both work.
     Events stay queued; handlers run after INPUT returns.
     No client connected: INPUT returns at once with $.ok = 0 and a
     UI DISCONNECT event is queued.

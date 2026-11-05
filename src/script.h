@@ -6,7 +6,7 @@
 #include "esp_err.h"
 
 /*
- * Scripts: firmware side of the interpreter (scr_*.c, language in scripting.txt).
+ * Scripts: firmware side of the interpreter (scr_*.c, language in SCRIPTING.txt).
  * One script task runs one script at a time; scripts live in SD:/scripts/name.s.
  *
  * Commands registered by scriptInit():

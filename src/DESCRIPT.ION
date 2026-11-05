@@ -49,7 +49,7 @@ sd.c SD card mount / check, file lists
 sd.h SD card API
 ser.c serial ports UART0 and USB-Serial/JTAG
 ser.h serial API
-sys.c INFO MEM WAIT REBOOT PRINT DEBUG APPEND LOGCAT, boot counter, timestamps
+sys.c INFO MEM WAIT REBOOT PRINT DEBUG FLOG FCAT FDIR FSTAT FDELETE, boot counter, timestamps
 sys.h system commands API
 telnet.c telnet console server
 telnet.h telnet API

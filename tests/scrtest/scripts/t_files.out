@@ -1,0 +1,31 @@
+> new file position 1
+> after write: pos=19 stat=18:rw
+> eol: [line one] [line two] [] ok=0 err=EOF
+> set 6 read 3: [one]
+> offs -4: 5
+> end: 19
+> end 4 read 10: [two
+] ok=0 err=over-read 6
+> clamp low: 1
+> clamp high: 19
+> overwrite: [line ONE]
+> whole: [line ONE
+line two
+appended by FLOG
+] err=over-read 165
+> missing: nofile.txt: no such file
+> bad name: file: letters, digits, '_' only (no extension)
+> five: too many files open (max 4): FCLOSE one
+> after fclose: pos 1
+> ro: log.txt is read-only
+> stat: 35:ro
+> ERR read-only
+> delete ro: read-only
+> load list: score=12.5 name=[]
+> load all: score=12.5 name=[say "hi"
+next]
+> game2: local=7
+> missing var: $$nothere not in game2.var
+> missing file: nosuch.var: no such file
+<<SCRIPT t_files END>>
+[result END]

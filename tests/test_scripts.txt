@@ -163,6 +163,34 @@ I4  * type: CONT
     = OK; log "dbg done x=2"; the Wait screen appears
 
 
+K. DATA FILES AND VARS SAVE / LOAD
+----------------------------------
+
+K1  * put files.s in SD:/scripts/ with:
+        FWRITE notes "ab\ncd\n"
+        FSEEK notes START
+        FREAD $a notes EOL
+        FTELL $p notes
+        FSTAT notes
+        PRINT "[$a] pos=$p stat=$.ret"
+        LET $$hi = 42
+        VARS SAVE keep
+        LET $$hi = 0
+        VARS LOAD keep
+        PRINT "hi=$$hi"
+    > RUN files
+    = "[ab] pos=4 stat=6:rw", "hi=42", <<SCRIPT files END>>
+K2  > FDIR
+    = notes                                  6 rw  ... OK
+K3  > FCAT notes 2,1
+    = cd, OK
+K4  > FSTAT notes
+    = 6:rw, OK
+K5  > FDELETE notes
+    = OK; > FSTAT notes = ERR no such file
+K6  * on a PC: SD:/scripts/data/keep.var holds the line $$hi=42
+
+
 J. CLEAN UP
 -----------
 

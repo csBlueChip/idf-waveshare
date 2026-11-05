@@ -12,7 +12,8 @@ CMD: ECHO 1 x=42 value=say "hi" \#1
  42
 CMD: ECHO 1 "q=say \"hi\" \#1 
  42"
-CMD: APPEND log 42 and \$
+FCAT log.txt:
+42 and \$
 CMD: LED 255 255 255
 CMD: LED 1 255 255 255 10
 > const in expr ok
@@ -22,7 +23,7 @@ CMD: FBOX 42mm 172
 CMD: CLS 0 0 0
 CMD: CLS 1 1 1
 > OK
-DEBUG: t_text:29 LET $y = 1 ; LET $z = 2
-DEBUG: t_text:30 TRACE 0
-<<SCRIPT t_text ERR t_text:31: text after closing quote>>
+DEBUG: t_text:30 LET $y = 1 ; LET $z = 2
+DEBUG: t_text:31 TRACE 0
+<<SCRIPT t_text ERR t_text:32: text after closing quote>>
 [result ERROR]

@@ -130,14 +130,14 @@ D16 > DEBUG "quoted \"debug\""
     = OK; log port shows: quoted "debug"
 
 
-E. APPEND
+E. FLOG / FCAT / FDIR (were APPEND / LOGCAT)
 ---------
 
-E1  > APPEND log1 first line
+E1  > FLOG log1 first line
     = OK
-E2  > APPEND log1 "  second, quoted"
+E2  > FLOG log1 "  second, quoted"
     = OK
-E3  > APPEND log1 a\nb
+E3  > FLOG log1 a\nb
     = OK
 E4  > FILES   (or remove the card and read it on a PC)
     = SD:/scripts/data/log1.txt contains:
@@ -146,49 +146,49 @@ E4  > FILES   (or remove the card and read it on a PC)
         a
         b
 E5  * Back to the console (reboot after FILES as usual).
-E6  > APPEND bad-name x
+E6  > FLOG bad-name x
     = ERR file: letters, digits, '_' only
-E7  > APPEND abcdefghijabcdefghijabcdefghijab x
+E7  > FLOG abcdefghijabcdefghijabcdefghijab x
     = ERR file: max 31 characters
-E8  > APPEND
-    = ERR usage: APPEND file text
+E8  > FLOG
+    = ERR usage: FLOG file text
 E9  * Remove the SD card (device running).
-    > APPEND log1 x
+    > FLOG log1 x
     = ERR no SD card      (log: "card gone - unmounting")
-    > APPEND log1 x
+    > FLOG log1 x
     = ERR no SD card
 E10 * Re-insert the card. (E11 mounts it again: no command needed)
-E11 > LOGCAT
-    = log1                            32
+E11 > FDIR
+    = log1                                  32 rw
       1 file
       OK
-E12 > LOGCAT log1
+E12 > FCAT log1
     = first line
         second, quoted
       a
       b
       OK
-E13 > LOGCAT log1 >debug
+E13 > FCAT log1 >debug
     = OK on the console; the four lines appear on the log port(s)
-E14 > APPEND empty ""
+E14 > FLOG empty ""
     = OK
-    > LOGCAT empty
+    > FCAT empty
     = one blank line, then OK
-E15 > LOGCAT nofile
+E15 > FCAT nofile
     = ERR no such file
-E16 > LOGCAT bad-name
+E16 > FCAT bad-name
     = ERR file: letters, digits, '_' only
-E17 > LOGCAT log1 >foo
-    = ERR usage: LOGCAT [file [>DEBUG]]
+E17 > FCAT log1 >foo
+    = ERR usage: FCAT file [start,count] [>DEBUG]
 E18 * Remove the SD card.
-    > LOGCAT log1
+    > FCAT log1
     = ERR no SD card
-    > LOGCAT
+    > FDIR
     = ERR no SD card
 E19 * Re-insert the card.
 E20 * On a PC, put a file with Windows line ends and a non-ASCII
       character (e.g. "cafe" with an accented e) in /scripts/data/pc.txt.
-    > LOGCAT pc
+    > FCAT pc
     = lines shown without stray CRs; the accented letter as ?? (2 bytes
       in UTF-8)
 

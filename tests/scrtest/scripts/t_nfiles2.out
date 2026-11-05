@@ -1,0 +1,3 @@
+> third: too many files open (max 2): FCLOSE one
+<<SCRIPT t_nfiles2 END>>
+[result END]

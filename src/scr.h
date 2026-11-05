@@ -6,7 +6,7 @@
 
 /*
  * Script interpreter core (portable C, no ESP-IDF). The language is defined in
- * scripting.txt; the firmware side (task, commands, events) is script.c, which
+ * SCRIPTING.txt; the firmware side (task, commands, events) is script.c, which
  * implements the hooks in scr_host.h. Only one script runs at a time; all
  * functions below are called from the script task, except the console helpers
  * (scrCmd*), which are called while the script is paused or not running.

@@ -1,0 +1,2 @@
+<<SCRIPT t_lerr_files2 ERR t_lerr_files2:1: .FILES must be 1..16>>
+[result ERROR]

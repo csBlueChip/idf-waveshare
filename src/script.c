@@ -1,5 +1,6 @@
 #include "script.h"
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -163,8 +164,17 @@ void scriptConsoleLine(const char *line)
 		while (*p == ' ' || *p == '\t') {
 			p++;
 		}
+		/* while INPUT waits only !!STOP [NOW] / !!PAUSE are commands (any other
+		 * line is the input text); otherwise STOP / PAUSE with or without !! */
+		bool bang = p[0] == '!' && p[1] == '!';
+		if (bang) {
+			p += 2;
+		}
 		bool ctl = (strncasecmp(p, "STOP", 4) == 0 && (p[4] == '\0' || p[4] == ' ' || p[4] == '\t')) ||
 		           (strncasecmp(p, "PAUSE", 5) == 0 && (p[5] == '\0' || p[5] == ' ' || p[5] == '\t'));
+		if (ctl && !bang && s_inputWait && !s_inputHave) {
+			ctl = false;				/* "stop" typed as input text */
+		}
 		if (ctl) {
 			/* run here, not through cmdExecute: its post-command screen update
 			 * must not race the script's own drawing */
@@ -726,6 +736,11 @@ __attribute__((weak)) uint32_t scrPrng(uint32_t *state)
 	return *state = x;
 }
 
+int scrHostFilesDefault(void)
+{
+	return nvGetInt("run.files");
+}
+
 int64_t scrHostMs(void)
 {
 	return esp_timer_get_time() / 1000;
@@ -884,6 +899,104 @@ int scrHostPause(void)
 	int go = s_go;
 	s_go = -1;
 	return go;
+}
+
+/* ================= Data files ================= */
+
+#define SCRIPT_DATA_DIR		SCRIPT_DIR "/data"
+
+/* "name.txt" / "name.var" -> SD:/scripts/data/..., false = bad name */
+static bool dataPath(const char *fname, char *out, size_t n)
+{
+	const char *dot = strrchr(fname, '.');
+	if (!dot || (strcasecmp(dot, ".txt") != 0 && strcasecmp(dot, ".var") != 0) ||
+	    !nameOk(fname, dot - fname) || strchr(fname, '/')) {
+		return false;
+	}
+	snprintf(out, n, "%s/%s", SCRIPT_DATA_DIR, fname);
+	return true;
+}
+
+long scrHostFileSize(const char *fname, bool *ro, const char **err)
+{
+	char        path[sizeof(SCRIPT_DATA_DIR) + SCR_FNAME_MAX + 8];
+	struct stat st;
+	if (!dataPath(fname, path, sizeof(path))) {
+		*err = "bad file name";
+		return -1;
+	}
+	sdLock();
+	if (sdEnsureMounted() != ESP_OK) {
+		sdUnlock();
+		*err = "no SD card";
+		return -1;
+	}
+	bool ok = stat(path, &st) == 0 && S_ISREG(st.st_mode);
+	sdUnlock();
+	if (!ok) {
+		return -1;					/* no such file */
+	}
+	*ro = !(st.st_mode & S_IWUSR);
+	return (long)st.st_size;
+}
+
+int scrHostFileRead(const char *fname, long off, char *buf, int n, const char **err)
+{
+	char path[sizeof(SCRIPT_DATA_DIR) + SCR_FNAME_MAX + 8];
+	if (!dataPath(fname, path, sizeof(path))) {
+		*err = "bad file name";
+		return -1;
+	}
+	sdLock();
+	if (sdEnsureMounted() != ESP_OK) {
+		sdUnlock();
+		*err = "no SD card";
+		return -1;
+	}
+	FILE *f   = fopen(path, "rb");
+	int   got = -1;
+	if (f) {
+		got = (fseek(f, off, SEEK_SET) == 0) ? (int)fread(buf, 1, n, f) : 0;
+		if (ferror(f)) {
+			got = -1;
+		}
+		fclose(f);
+	}
+	sdUnlock();
+	if (got < 0) {
+		*err = f ? "read failed" : "no such file";
+	}
+	return got;
+}
+
+const char *scrHostFileWrite(const char *fname, long off, const char *data, int n, bool trunc)
+{
+	char        path[sizeof(SCRIPT_DATA_DIR) + SCR_FNAME_MAX + 8];
+	struct stat st;
+	if (!dataPath(fname, path, sizeof(path))) {
+		return "bad file name";
+	}
+	sdLock();
+	if (sdEnsureMounted() != ESP_OK) {
+		sdUnlock();
+		return "no SD card";
+	}
+	const char *err    = "write failed";
+	bool        exists = stat(path, &st) == 0 && S_ISREG(st.st_mode);
+	if (exists && !(st.st_mode & S_IWUSR)) {
+		err = "read-only";
+	} else if ((mkdir(SCRIPT_DIR, 0775) == 0 || errno == EEXIST) &&
+	           (mkdir(SCRIPT_DATA_DIR, 0775) == 0 || errno == EEXIST)) {
+		FILE *f = fopen(path, (trunc || !exists) ? "w+b" : "r+b");
+		if (f) {
+			bool ok = fseek(f, off, SEEK_SET) == 0 && fwrite(data, 1, n, f) == (size_t)n;
+			if (fclose(f) == 0 && ok) {
+				err = NULL;
+			}
+		}
+	}
+	sdUnlock();
+	return err;
 }
 
 /* ================= Commands ================= */

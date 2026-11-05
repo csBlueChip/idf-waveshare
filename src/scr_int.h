@@ -18,6 +18,7 @@ typedef enum {
 	K_ON, K_ONERROR, K_QUIET, K_TRACE, K_PRINT, K_DEBUG, K_RNG, K_TIMER,
 	K_WAIT, K_INPUT, K_BPT, K_ACC, K_GYR, K_STACK, K_CONST,
 	K_CONSOLE, K_PAUSE,
+	K_VARSIO, K_FWRITE, K_FREAD, K_FTELL, K_FSEEK, K_FCLOSE, K_FILES,
 } scrKind_t;
 
 typedef struct {
@@ -146,6 +147,10 @@ typedef struct {
 	int        curDepth;
 	bool       exitReq;		/* EXIT / UI switch */
 
+	/* data files: positions (1 = first byte) */
+	struct scrFile { char name[SCR_FNAME_MAX + 1]; long pos; } *files;	/* filesMax slots */
+	int        nFiles, filesMax;		/* run.files or .FILES n */
+
 	/* errors */
 	jmp_buf    jb;
 	char       msg[160];
@@ -202,7 +207,7 @@ scrVal_t scrEval(const char **pp, const char *stopWords);
 scrVal_t scrEvalAll(const char *s);			/* whole string, error if extra */
 const char *scrSubst(const char *s, int mode, char quote);	/* arena */
 /* substitution modes: CMD '#' -> "\#", "\$" -> '$'; TEXT '\' -> "\\" (an escape step
- * follows); PLAIN values as they are; RAW (ECHO / APPEND) '\' '#' and the quote
+ * follows); PLAIN values as they are; RAW (ECHO / FLOG) '\' '#' and the quote
  * escaped, "\$" kept (the command does quotes and escapes) */
 enum { SUB_CMD, SUB_TEXT, SUB_PLAIN, SUB_RAW };
 const char *scrUnquote(const char *in);		/* arena; fails on bad quotes */
@@ -220,3 +225,4 @@ int   scrFindFn(scrMod_t *m, const char *name, int len);
 int   scrFindLabel(scrMod_t *m, int fn, const char *name, int len);
 const char *scrSrcName(int src);
 bool  scrIsReserved(const char *w, int len);
+bool  scrNameAllowed(scrMod_t *m, int fn, const char *name, bool global);	/* VARS rule */

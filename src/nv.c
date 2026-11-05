@@ -31,8 +31,11 @@ typedef struct {
 	const char *def;
 	nvCheck_t   check;
 	int         min, max;
-	bool        ro;		/* firmware-owned: no NV SET / RESET key; IMPORT skips it; kept by NV RESET */
+	uint8_t     flags;	/* NV_RO, NV_SECRET */
 } nvKey_t;
+
+#define NV_RO		1	/* firmware-owned: no NV SET / RESET key; IMPORT skips it; kept by NV RESET */
+#define NV_SECRET	2	/* EXPORT writes "!key=value" (FCAT shows [redacted]) */
 
 static const char *nvChkText(const char *in, int min, int max, char *out);
 static const char *nvChkInt(const char *in, int min, int max, char *out);
@@ -47,46 +50,47 @@ static const char *nvChkTenth(const char *in, int min, int max, char *out);
 static const char *nvChkBaud(const char *in, int min, int max, char *out);
 
 static const nvKey_t s_keys[] = {
-	/* key               default          check       min  max    ro */
-	{ "rad.ssid",         "wavedemo",      nvChkText,  1,   32,    false },
-	{ "rad.pwd",          "waveP@55word",  nvChkText,  8,   63,    false },
-	{ "rad.ble",          "ESP32-S3-Demo", nvChkText,  1,   29,    false },
-	{ "rad.ip",           "192.168.4.1",   nvChkIp,    0,   0,     false },
-	{ "rad.mask",         "/24",           nvChkMask,  8,   30,    false },
-	{ "rad.pwr",          "8.5",           nvChkPwr,   2,   20,    false },
-	{ "rad.nogw",         "0",             nvChkInt,   0,   1,     false },
-	{ "rad.maxcli",       "1",             nvChkInt,   1,   4,     false },
-	{ "ui.boot",          "BLE",           nvChkUi,    0,   0,     false },
-	{ "ui.baud",          "115200",        nvChkBaud,  0,   0,     false },
-	{ "ui.echo",          "1",             nvChkInt,   0,   1,     false },
-	{ "scr.bl",           "100",           nvChkInt,   0,   100,   false },
-	{ "scr.pflip",        "0",             nvChkInt,   0,   1,     false },
-	{ "scr.lflip",        "0",             nvChkInt,   0,   1,     false },
-	{ "btn.deb",          "30",            nvChkInt,   0,   200,   false },
-	{ "btn.long",         "600",           nvChkInt,   50,  5000,  false },
-	{ "btn.dbl",          "300",           nvChkInt,   50,  5000,  false },
-	{ "btn.rpt",          "0",             nvChkInt,   0,   5000,  false },
-	{ "btn.touch",        "0.015",         nvChkRatio, 0,   0,     false },
-	{ "web.hist",         "50",            nvChkInt,   10,  500,   false },
-	{ "disk.read",        "0 255 0",       nvChkRgb,   0,   255,   false },
-	{ "disk.write",       "255 0 0",       nvChkRgb,   0,   255,   false },
-	{ "imu.arange",       "4",             nvChkDbl,   2,   16,    false },
-	{ "imu.arate",        "224",           nvChkDbl,   28,  896,   false },
-	{ "imu.grange",       "512",           nvChkDbl,   16,  2048,  false },
-	{ "imu.grate",        "224",           nvChkDbl,   28,  896,   false },
-	{ "imu.wom",          "100",           nvChkInt,   1,   255,   false },
-	{ "imu.tap.thr",      "1.3",           nvChkTenth, 1,   79,    false },
-	{ "imu.tap.gap",      "500",           nvChkInt,   100, 2000,  false },
-	{ "imu.mot.thr",      "100",           nvChkInt,   32,  2000,  false },
-	{ "imu.still.thr",    "64",            nvChkInt,   32,  2000,  false },
-	{ "imu.step.thr",     "200",           nvChkInt,   50,  2000,  false },
-	{ "imu.step.min",     "10",            nvChkInt,   1,   255,   false },
-	{ "imu.orient.hold",  "500",           nvChkInt,   0,   5000,  false },
-	{ "imu.orient.flat",  "30",            nvChkInt,   5,   80,    false },
-	{ "sys.autorun",      "0",             nvChkInt,   0,   1,     false },
-	{ "sys.aron",         "0 255 0",       nvChkRgb,   0,   255,   false },
-	{ "sys.aroff",        "255 0 0",       nvChkRgb,   0,   255,   false },
-	{ "sys.bootcnt",      "0",             nvChkInt,   0,   65535, true },
+	/* key               default          check       min  max    flags */
+	{ "rad.ssid",         "wavedemo",      nvChkText,  1,   32,    0 },
+	{ "rad.pwd",          "waveP@55word",  nvChkText,  8,   63,    NV_SECRET },
+	{ "rad.ble",          "ESP32-S3-Demo", nvChkText,  1,   29,    0 },
+	{ "rad.ip",           "192.168.4.1",   nvChkIp,    0,   0,     0 },
+	{ "rad.mask",         "/24",           nvChkMask,  8,   30,    0 },
+	{ "rad.pwr",          "8.5",           nvChkPwr,   2,   20,    0 },
+	{ "rad.nogw",         "0",             nvChkInt,   0,   1,     0 },
+	{ "rad.maxcli",       "1",             nvChkInt,   1,   4,     0 },
+	{ "ui.boot",          "BLE",           nvChkUi,    0,   0,     0 },
+	{ "ui.baud",          "115200",        nvChkBaud,  0,   0,     0 },
+	{ "ui.echo",          "1",             nvChkInt,   0,   1,     0 },
+	{ "scr.bl",           "100",           nvChkInt,   0,   100,   0 },
+	{ "scr.pflip",        "0",             nvChkInt,   0,   1,     0 },
+	{ "scr.lflip",        "0",             nvChkInt,   0,   1,     0 },
+	{ "btn.deb",          "30",            nvChkInt,   0,   200,   0 },
+	{ "btn.long",         "600",           nvChkInt,   50,  5000,  0 },
+	{ "btn.dbl",          "300",           nvChkInt,   50,  5000,  0 },
+	{ "btn.rpt",          "0",             nvChkInt,   0,   5000,  0 },
+	{ "btn.touch",        "0.015",         nvChkRatio, 0,   0,     0 },
+	{ "web.hist",         "50",            nvChkInt,   10,  500,   0 },
+	{ "disk.read",        "0 255 0",       nvChkRgb,   0,   255,   0 },
+	{ "disk.write",       "255 0 0",       nvChkRgb,   0,   255,   0 },
+	{ "imu.arange",       "4",             nvChkDbl,   2,   16,    0 },
+	{ "imu.arate",        "224",           nvChkDbl,   28,  896,   0 },
+	{ "imu.grange",       "512",           nvChkDbl,   16,  2048,  0 },
+	{ "imu.grate",        "224",           nvChkDbl,   28,  896,   0 },
+	{ "imu.wom",          "100",           nvChkInt,   1,   255,   0 },
+	{ "imu.tap.thr",      "1.3",           nvChkTenth, 1,   79,    0 },
+	{ "imu.tap.gap",      "500",           nvChkInt,   100, 2000,  0 },
+	{ "imu.mot.thr",      "100",           nvChkInt,   32,  2000,  0 },
+	{ "imu.still.thr",    "64",            nvChkInt,   32,  2000,  0 },
+	{ "imu.step.thr",     "200",           nvChkInt,   50,  2000,  0 },
+	{ "imu.step.min",     "10",            nvChkInt,   1,   255,   0 },
+	{ "imu.orient.hold",  "500",           nvChkInt,   0,   5000,  0 },
+	{ "imu.orient.flat",  "30",            nvChkInt,   5,   80,    0 },
+	{ "run.files",        "4",             nvChkInt,   1,   16,    0 },
+	{ "sys.autorun",      "0",             nvChkInt,   0,   1,     0 },
+	{ "sys.aron",         "0 255 0",       nvChkRgb,   0,   255,   0 },
+	{ "sys.aroff",        "255 0 0",       nvChkRgb,   0,   255,   0 },
+	{ "sys.bootcnt",      "0",             nvChkInt,   0,   65535, NV_RO },
 };
 
 #define NV_COUNT	(int)(sizeof(s_keys) / sizeof(s_keys[0]))
@@ -465,7 +469,7 @@ static const char *nvExport(const char *name)
 	}
 	bool ok = true;
 	for (int i = 0; i < NV_COUNT && ok; i++) {
-		ok = fprintf(f, "%s=%s\n", s_keys[i].key, s_val[i]) > 0;
+		ok = fprintf(f, "%s%s=%s\n", (s_keys[i].flags & NV_SECRET) ? "!" : "", s_keys[i].key, s_val[i]) > 0;
 	}
 	ok = (fclose(f) == 0) && ok;
 	sdUnlock();
@@ -507,6 +511,9 @@ static const char *nvImport(const char *name, cmdReply_t reply)
 		if (*s == '\0' || *s == '#') {
 			continue;				/* blank / comment */
 		}
+		if (*s == '!') {
+			s++;					/* "!key=value": FCAT redacts it */
+		}
 		char *eq = strchr(s, '=');
 		if (!eq || n >= NV_FILE_PAIRS) {
 			snprintf(s_err, sizeof(s_err), "line %d: %s", no, eq ? "too many lines" : "expected key=value");
@@ -519,7 +526,7 @@ static const char *nvImport(const char *name, cmdReply_t reply)
 		for (char *x = v - 2; x >= k && (*x == ' ' || *x == '\t'); x--) *x = '\0';	/* trim key */
 		while (*v == ' ' || *v == '\t') v++;					/* trim value */
 		int ki = nvFind(k);
-		if (ki >= 0 && s_keys[ki].ro) {
+		if (ki >= 0 && (s_keys[ki].flags & NV_RO)) {
 			if (!strstr(skipped, s_keys[ki].key) &&
 			    strlen(skipped) + strlen(s_keys[ki].key) + 2 < sizeof(skipped)) {
 				strcat(skipped, " ");
@@ -572,7 +579,7 @@ static const char *nvCmd(int argc, char *argv[], cmdReply_t reply)
 			snprintf(joined, sizeof(joined), "%s", argv[2]);
 		}
 		int i = nvFind(argv[1]);
-		if (i >= 0 && s_keys[i].ro) {
+		if (i >= 0 && (s_keys[i].flags & NV_RO)) {
 			return "read-only key";
 		}
 		const char *k[] = { argv[1] }, *v[] = { joined };
@@ -601,7 +608,7 @@ static const char *nvCmd(int argc, char *argv[], cmdReply_t reply)
 				snprintf(s_err, sizeof(s_err), "unknown key %s", argv[1]);
 				return s_err;
 			}
-			if (s_keys[i].ro) {
+			if ((s_keys[i].flags & NV_RO)) {
 				return "read-only key";
 			}
 			const char *k[] = { s_keys[i].key }, *v[] = { s_keys[i].def };
@@ -611,7 +618,7 @@ static const char *nvCmd(int argc, char *argv[], cmdReply_t reply)
 			return "NV write failed";
 		}
 		for (int i = 0; i < NV_COUNT; i++) {
-			if (s_keys[i].ro) {				/* firmware-owned: keep */
+			if ((s_keys[i].flags & NV_RO)) {				/* firmware-owned: keep */
 				if (nvs_set_str(s_nvs, s_keys[i].key, s_val[i]) != ESP_OK) {
 					return "NV write failed";
 				}

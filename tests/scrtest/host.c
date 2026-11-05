@@ -10,6 +10,9 @@
  *   XGO mode           queues a debugger answer (CONT STEP IN OUT STOP)
  *   XSTOP / XPAUSE     request STOP / PAUSE (seen between statements)
  *   XCLIENT 0|1        client connected (INPUT with none: -1)
+ *   FLOG f text        appends "text\n" to data file f.txt (in memory)
+ *   FSTAT f / FDELETE f / FCAT f   on the in-memory data files (f.var allowed)
+ *   XRO f              make f.txt read-only
  * Time is virtual: WAIT / time-outs advance it; timers tick on it.
  * On a pause it prints STACK and VARS, then takes the next XGO (default CONT).
  */
@@ -35,6 +38,77 @@ static int  s_go[Q];
 static int  s_ngo;
 
 static struct { int ms; int64_t next; } s_tim[5];
+
+/* in-memory data files */
+#define NF 16
+static struct { char name[48]; char *d; long n; bool ro; } s_f[NF];
+
+static int fileFind(const char *fname, bool create)
+{
+	for (int i = 0; i < NF; i++) {
+		if (s_f[i].name[0] && !strcasecmp(s_f[i].name, fname)) {
+			return i;
+		}
+	}
+	if (!create) {
+		return -1;
+	}
+	for (int i = 0; i < NF; i++) {
+		if (!s_f[i].name[0]) {
+			snprintf(s_f[i].name, sizeof(s_f[i].name), "%s", fname);
+			s_f[i].d = NULL;
+			s_f[i].n = 0;
+			s_f[i].ro = false;
+			return i;
+		}
+	}
+	return -1;
+}
+
+long scrHostFileSize(const char *fname, bool *ro, const char **err)
+{
+	int i = fileFind(fname, false);
+	if (i < 0) {
+		return -1;
+	}
+	*ro = s_f[i].ro;
+	return s_f[i].n;
+}
+
+int scrHostFileRead(const char *fname, long off, char *buf, int n, const char **err)
+{
+	int i = fileFind(fname, false);
+	if (i < 0) {
+		*err = "no such file";
+		return -1;
+	}
+	long left = s_f[i].n - off;
+	int  c    = left < 0 ? 0 : left < n ? (int)left : n;
+	memcpy(buf, s_f[i].d + off, c);
+	return c;
+}
+
+const char *scrHostFileWrite(const char *fname, long off, const char *data, int n, bool trunc)
+{
+	int i = fileFind(fname, true);
+	if (i < 0) {
+		return "too many files";
+	}
+	if (s_f[i].ro) {
+		return "read-only";
+	}
+	if (trunc) {
+		s_f[i].n = 0;
+	}
+	long end = off + n;
+	if (end > s_f[i].n) {
+		s_f[i].d = realloc(s_f[i].d, end);
+		memset(s_f[i].d + s_f[i].n, ' ', off > s_f[i].n ? off - s_f[i].n : 0);
+		s_f[i].n = end;
+	}
+	memcpy(s_f[i].d + off, data, n);
+	return NULL;
+}
 
 char *scrHostRead(const char *name, size_t *len, const char **err)
 {
@@ -107,6 +181,41 @@ void scrHostCmd(const char *line, void (*cb)(void *ctx, const char *text), void 
 		s_req |= SCR_CHK_PAUSE;
 	} else if (strncasecmp(line, "XCLIENT ", 8) == 0) {
 		s_client = atoi(line + 8);
+	} else if (!strncasecmp(line, "FLOG ", 5) || !strncasecmp(line, "FSTAT ", 6) || !strncasecmp(line, "FDELETE ", 8) ||
+	           !strncasecmp(line, "FCAT ", 5) || !strncasecmp(line, "XRO ", 4)) {
+		char cmd[16], nm[40], fn[48];
+		int  used = 0;
+		sscanf(line, "%15s %39s %n", cmd, nm, &used);
+		snprintf(fn, sizeof(fn), strchr(nm, '.') && strcasecmp(cmd, "FLOG") ? "%s" : "%s.txt", nm);
+		int i = fileFind(fn, !strcasecmp(cmd, "FLOG"));
+		if (i < 0) {
+			cb(ctx, "ERR no such file\n");
+			return;
+		}
+		if (!strcasecmp(cmd, "FLOG")) {
+			char t[600];
+			snprintf(t, sizeof(t), "%s\n", used ? line + used : "");
+			const char *e = scrHostFileWrite(fn, s_f[i].n, t, strlen(t), false);
+			if (e) {
+				snprintf(buf, sizeof(buf), "ERR %s\n", e);
+				cb(ctx, buf);
+				return;
+			}
+		} else if (!strcasecmp(cmd, "FSTAT")) {
+			snprintf(buf, sizeof(buf), "%ld:%s\n", s_f[i].n, s_f[i].ro ? "ro" : "rw");
+			cb(ctx, buf);
+		} else if (!strcasecmp(cmd, "FDELETE")) {
+			if (s_f[i].ro) {
+				cb(ctx, "ERR read-only\n");
+				return;
+			}
+			free(s_f[i].d);
+			s_f[i].name[0] = '\0';
+		} else if (!strcasecmp(cmd, "XRO")) {
+			s_f[i].ro = true;
+		} else {
+			printf("FCAT %s:\n%.*s", fn, (int)s_f[i].n, s_f[i].d ? s_f[i].d : "");
+		}
 	} else {
 		printf("CMD: %s\n", line);
 	}
@@ -116,7 +225,7 @@ void scrHostCmd(const char *line, void (*cb)(void *ctx, const char *text), void 
 bool scrHostIsCommand(const char *name)
 {
 	static const char *c[] = { "ECHO", "CLS", "LED", "UI", "NV", "IMU", "BTN", "FAIL", "REPLY", "EVT",
-	                           "ACC", "GYR", "FBOX", "LINE", "APPEND", NULL };
+	                           "ACC", "GYR", "FBOX", "LINE", "FLOG", "FCAT", "FDIR", "FSTAT", "FDELETE", NULL };
 	for (int i = 0; c[i]; i++) {
 		if (!strcasecmp(c[i], name)) {
 			return true;
@@ -188,6 +297,7 @@ uint32_t scrPrng(uint32_t *st)
 }
 
 int64_t scrHostMs(void)				{ return s_ms; }
+int     scrHostFilesDefault(void)		{ return 4; }	/* NV run.files */
 
 int scrHostCheck(void)
 {

@@ -1,7 +1,7 @@
 WAVEDEMO - WORKING NOTES
 ========================
 
-Read this first (with README.txt and scripting.txt) after any loss of
+Read this first (with README.txt and SCRIPTING.txt) after any loss of
 conversation context. Keep it current, like the README.
 
 
@@ -31,10 +31,11 @@ conversation context. Keep it current, like the README.
     tests/      board test procedures (*.txt), scrtest/ (PC interpreter tests)
     sd/         SD card layout: images imu scrshots scripts(+data) sys www
     tools/      mkfont.py
-    README.txt  user documentation      scripting.txt  script spec
-    scripting_ref.txt  quick reference  notes.txt      this file
-    todo.txt    todo list               .gitignore, DESCRIPT.ION (every folder)
-    Makefile    from the user (not in our copy)
+    README.txt  user documentation      SCRIPTING.txt  script spec
+    SCRIPTING_REF.txt  quick reference  NOTES.txt      this file
+    TODO.txt    todo list               .gitignore, DESCRIPT.ION (every folder)
+    Makefile    from the user: keep as given (never edit; tab indents), include
+                in every zip. secrets.mk stays in .gitignore (defence in depth).
 
   Build mirror (scratchpad):
     S=/tmp/claude-0/-home-claude/39b5da28-fbd1-59c0-8531-b2a4280e26e3/scratchpad
@@ -106,8 +107,8 @@ conversation context. Keep it current, like the README.
 5. SCRIPTING - IMPLEMENTATION PLAN (agreed)
 -------------------------------------------
 
-  Spec: scripting.txt (complete, no open points). Quick ref:
-  scripting_ref.txt. All limits as #defines in src/script_cfg.h.
+  Spec: SCRIPTING.txt (complete, no open points). Quick ref:
+  SCRIPTING_REF.txt. All limits as #defines in src/script_cfg.h.
 
   Step A - the interpreter (no existing firmware files touched):
     loader (INSERT, .STACK, .CONST, load checks), expressions, variables,
@@ -168,6 +169,44 @@ conversation context. Keep it current, like the README.
     rename  scripts are name.s (Windows runs .scr); DESCRIPT.ION in every
             folder; sd/sys/default.nvram (all NV defaults); onWait.s and
             onConnect.s define before/instead/after (empty = ignored).
+    RAM measured (web open, after the PSRAM changes): free 97 KB (was 33),
+            lowest 57 KB, largest block 31 KB. MEM stacks (lowest free):
+            main 4744/8192, ser 3164/4096, btn 3360/4096, dns 1832/3072,
+            imu 4808/6144, esp_timer 3044/3584, nimble_host 2188/4096,
+            httpd 1164, tcpip 1852/3072, wifi 4096, btController 2840,
+            sys_evt 1108/2304, Tmr Svc 1388/2048, ipc0 388, ipc1 560,
+            IDLE0 756, IDLE1 800 (only paths run since boot).
+            ON HOLD (not done, user's decision) - further RAM batch:
+              stacks ser/btn 4096->2048, dns 3072->2048 (~5 KB);
+              ESP_WIFI_IRAM_OPT, ESP_WIFI_RX_IRAM_OPT, LWIP_IRAM_OPTIMIZATION
+              off (~15-25 KB); FreeRTOS/ringbuf/heap functions into flash
+              (~5-10 KB); ESP_WIFI_STATIC_RX_BUFFER_NUM 10->5 (~8 KB;
+              console can't out-type the UI, so fine); then BLE release
+              when not the UI (~25-35 KB, separate, needs testing).
+    files   APPEND -> FLOG, LOGCAT -> FCAT file [start,count]; new FDIR
+            FSTAT FDELETE (console + script; FSTAT -> $.ret in scripts);
+            script-only FWRITE (at position, no \n) FREAD $v file n|EOL
+            (max 200; over-read n / EOF errors) FTELL FSEEK START|END [n]|
+            SET n|OFFS n FCLOSE; positions from 1 (end = size + 1);
+            run.files / .FILES n open files;
+            VARS SAVE name [list] (no list = globals) / VARS LOAD name
+            [list|ALL] -> SD:/scripts/data/name.var. Host hooks
+            scrHostFile{Size,Read,Write}. PC test t_files.
+    run     NV run.files (1..16, default 4) = data file slots per script;
+            .FILES n at the top (like .STACK) overrides it for that run
+            (larger or smaller). Slots allocated in PSRAM at load
+            (scrHostFilesDefault). sys.autorun / aron / aroff stay sys.
+    fext    FCAT / FSTAT / FDELETE: name = name.txt, or name.var
+            (scripts/data) or name.nvram (sys). FDIR [txt|var|nvram|*].
+            FLOG and script file commands stay .txt. NV table flags
+            NV_RO / NV_SECRET (rad.pwd); EXPORT writes !key=value, IMPORT
+            ignores a leading '!', FCAT of a .nvram shows !key=[redacted]
+            (long secret lines: no pieces after the first). NV GET and the
+            screens still show the password.
+    input   while INPUT waits only !!STOP [NOW] / !!PAUSE are commands
+            (scriptConsoleLine); any other line, "stop" included, is the
+            text. Running outside INPUT: STOP and !!STOP both. Paused /
+            idle: unchanged (plain commands only).
   Notes for Step A:
     - cmd.c strips '#' comments and is NOT quote-aware: '#' inside quotes
       needs \# at the console. The script loader has its own rules.
@@ -199,8 +238,8 @@ conversation context. Keep it current, like the README.
     [done] System scripts in SD:/sys/ (onBoot onWait onConnect), named
            sys/name by hand; QUIET 0..3 default 2 (2 hides <<BTN|IMU|UI>>
            from the client: scriptEvent() returns true, uiSend skips).
-    [todo] Board test: see todo.txt (D2, D4 retest; G, H, I).
-  Deviations (also in scripting.txt status): expressions not pre-compiled;
+    [todo] Board test: see TODO.txt (D2, D4 retest; G, H, I).
+  Deviations (also in SCRIPTING.txt status): expressions not pre-compiled;
   onWait/onConnect functions are separate runs; onConnect and
   onWait before/after block the console (client lines wait); image
   decode not cut by STOP NOW; watchdog by 1-tick yield per second.

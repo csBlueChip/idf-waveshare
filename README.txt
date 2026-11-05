@@ -1,7 +1,7 @@
 WAVEDEMO - Waveshare ESP32-S3-LCD-1.47B resource demo
 =====================================================
 
-Firmware 1.0.0, ESP-IDF v6.1. Command console over BLE, telnet or web.
+Firmware 0.5.0, ESP-IDF v6.1. Command console over BLE, telnet or web.
 
 
 1. CONSOLE
@@ -27,7 +27,7 @@ Rules:
   - Unknown commands reply: unknown |<line>|
   - '#' starts a comment; "\#" is a literal '#'.
   - Blank and comment-only lines are ignored silently.
-  - Text arguments (ECHO, PRINT, DEBUG, APPEND):
+  - Text arguments (ECHO, PRINT, DEBUG, FLOG; FWRITE in scripts):
       text starts after one separating space; further spaces are kept
       "text" or 'text'   quoted (leading spaces before the quote dropped);
                          \" inside "..." / \' inside '...' = the quote;
@@ -56,15 +56,28 @@ General
                                 block; each task's lowest free stack
   PRINT text                    reply text (text rules: section 1)
   DEBUG text                    text to the log port(s), as dbgf()
-  APPEND file text              add text as one line to
-                                SD:/scripts/data/file.txt (file: letters,
-                                digits, '_', max 31; folders and file
-                                created; no SD card = ERR)
-  LOGCAT                        list SD:/scripts/data: "name size" per
-                                file (name without .txt), then "n files"
-  LOGCAT file [>DEBUG]          show file.txt line by line (to the log
-                                port(s) with >DEBUG); CR dropped, non-ASCII
-                                shown as '?', lines over 200 chars split
+Data files (text files SD:/scripts/data/file.txt; file = letters, digits,
+'_', max 31, given without .txt)
+
+  FLOG file text                add text plus a new line at the end of the
+                                file (folders and file created)
+  FCAT file [start,count] [>DEBUG]
+                                show the file, or count lines from line
+                                start (1-based); to the log port(s) with
+                                >DEBUG; CR dropped, non-ASCII shown as '?',
+                                lines over 200 chars split
+  FDIR [txt|var|nvram|*]        list the files: name, size, ro|rw (default
+                                txt; * lists all three, with extensions)
+  FSTAT file                    size:ro or size:rw (ro = read-only, set on
+                                a PC); in a script the reply goes to $.ret
+  FDELETE file                  delete the file (not a read-only one)
+  FCAT / FSTAT / FDELETE: file = name (name.txt), name.var
+  (SD:/scripts/data, VARS SAVE files) or name.nvram (SD:/sys). In a .nvram
+  file FCAT shows a line starting with '!' as !key=[redacted].
+  FLOG and the script commands FWRITE / FREAD / FTELL / FSEEK / FCLOSE
+  (section 9) use .txt files only.
+  No SD card, a missing file or a read-only file is an ERR.
+
   LOG                           show where logs go (section 7)
   LOG UART|USB|BOTH|AUTO        set it (this boot only; default AUTO)
   EVENTS                        show which events the client receives:
@@ -255,10 +268,12 @@ Settings (stored in flash, used at the next boot)
                                 sys.aroff)
   NV RESET                      all settings to defaults (except sys.bootcnt)
   NV RESET key                  one setting to default
-  NV EXPORT name                write /sys/name.nvram
+  NV EXPORT name                write /sys/name.nvram (rad.pwd is written
+                                as !rad.pwd=...: FCAT shows [redacted])
   NV IMPORT name                load /sys/name.nvram (all lines checked,
                                 nothing stored if any is bad; sys.bootcnt
-                                is skipped: "warning: sys.bootcnt ignored")
+                                is skipped: "warning: sys.bootcnt ignored";
+                                a leading '!' on a line is ignored)
   RAD GET                       list radio settings
   RAD GET key ...               show radio settings
   RAD SET key value ...         store radio settings (all or none)
@@ -276,7 +291,7 @@ USB disk
                                 172x320 and 512 KB), else the built-in
                                 image
 
-Scripts (SD:/scripts/name.s; language: scripting.txt, section 9 here)
+Scripts (SD:/scripts/name.s; language: SCRIPTING.txt, section 9 here)
 
   RUN                           list the scripts
   RUN name [args]               start name.s (OK at once, output follows)
@@ -290,8 +305,10 @@ Scripts (SD:/scripts/name.s; language: scripting.txt, section 9 here)
   VARS / STACK                  (paused) variables / call stack
   LIST [name [from [to]]]       list a script with line numbers
                                 ('>' paused line, '*' breakpoint)
-  While a script runs only STOP, STOP NOW and PAUSE work (other lines
-  reply "ERR script running", or go to an INPUT that is waiting).
+  While a script runs only STOP, STOP NOW and PAUSE work, also as
+  !!STOP, !!STOP NOW, !!PAUSE (other lines reply "ERR script running").
+  While INPUT waits only the !! forms are commands: any other line,
+  "stop" included, is the input text.
 
 
 3. NV VARIABLES
@@ -336,6 +353,8 @@ Scripts (SD:/scripts/name.s; language: scripting.txt, section 9 here)
                              (step.*: unused, IMU STEP not implemented)
   imu.orient.hold 500        orientation must hold 0..5000 ms
   imu.orient.flat 30         FLAT within 5..80 degrees of horizontal
+  run.files  4               data files with a position per script 1..16
+                             (when the script has no .FILES n)
   sys.autorun 0              1 = run the system scripts (onBoot ...);
                              not used yet (scripting to come)
   sys.aron   0 255 0         LED flash (100 ms) at start-up when autorun 1
@@ -367,7 +386,8 @@ at its next use.
                         (default name = timestamp, e.g. b002A_001523.png)
   /imu/                 recordings from IMU REC ms name|* (.csv)
   /sys/                 settings files from NV EXPORT / for NV IMPORT,
-                        (name.nvram: key=value lines, '#' comments),
+                        (name.nvram: key=value lines, '#' comments,
+                        !key=value = secret: FCAT shows [redacted]),
                         splash.png (shown when a client connects) and
                         usbdrive.png (FILES screen; built-in if missing),
                         default.nvram (all NV defaults: NV IMPORT default),
@@ -379,10 +399,11 @@ at its next use.
                         Reserved: /www/cfg and /www/ws are never served
                         (the built-in /cfg and /ws always win).
 
-  Note: .nvram files hold the Wi-Fi password in plain text.
+  Note: .nvram files hold the Wi-Fi password in plain text (FCAT
+  redacts it; the file itself is not encrypted).
 
 Created automatically when first needed: /scrshots/, /sys/, /imu/,
-/scripts/data/ (APPEND; LOGCAT lists / shows it).
+/scripts/data/ (FLOG, FWRITE, VARS SAVE; FDIR / FCAT show them).
 
 Timestamp (automatic file names, INFO): bNNNN_hhmmss = boot count in hex
 (NV sys.bootcnt, +1 every boot) and time since boot, e.g. b002A_001523 =
@@ -570,7 +591,7 @@ Create /images/ and /www/ yourself (missing = none).
 9. SCRIPTS
 ----------
 
-  Full language: scripting.txt (quick reference: scripting_ref.txt).
+  Full language: SCRIPTING.txt (quick reference: SCRIPTING_REF.txt).
   Examples: the project's sd/ folder (sd/scripts/, sd/sys/).
 
   - PRINT goes to the client; DEBUG to the log port(s).
@@ -589,6 +610,27 @@ Create /images/ and /www/ yourself (missing = none).
     sys.autorun 0 and reboots (a broken system script can't lock you out).
     onWait before/after and all of onConnect run while the console
     waits: the new client's lines are taken after onConnect ends.
+  - Data files in scripts (SD:/scripts/data/file.txt):
+      FWRITE file text        write the text (no new line added) at the
+                              file's position, overwriting / growing it
+      FREAD $v file n|EOL     read n bytes (1..200) or to the end of the
+                              line (CR/LF dropped); past the end: $.ok 0,
+                              ERR "over-read n" (n = bytes missing); EOL at
+                              the end of the file: ERR "EOF"
+      FTELL $v file           the position
+      FSEEK file START | END [n] | SET n | OFFS n
+      FCLOSE file             forget the position
+    POSITIONS COUNT FROM 1: byte #1 is the first byte; an empty file has
+    size 0 and the first byte written is #1; the end of the file is
+    size + 1 (FSEEK END = END 0). END n = size + 1 - n; results are kept
+    within 1 .. size + 1. A file starts at 1 when first used; up to
+    run.files (NV, default 4) or .FILES n (top of the script, 1..16)
+    files at once; all are closed when the script ends.
+  - VARS SAVE name [$a $$b ...] writes SD:/scripts/data/name.var (a new
+    file each time). WITHOUT A LIST, SAVE STORES THE GLOBALS ONLY ($$);
+    locals are saved only when listed.
+    VARS LOAD name [$a $$b ... | ALL] sets the listed variables (all when
+    there is no list); a listed name not in the file is an error.
   - BPT! in a script with no client connected: the USB serial port is the
     console while it is paused (VARS, STEP, CONT ... typed there).
   - STOP NOW cuts IMU REC and screen transitions short; an image decode

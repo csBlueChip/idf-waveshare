@@ -318,7 +318,7 @@ static const char *constWords(const char *line)
 	return o;
 }
 
-/* quote char of a raw-text command (ECHO n "..." / APPEND f '...') */
+/* quote char of a raw-text command (ECHO n "..." / FLOG f '...') */
 static char rawQuote(const char *line, int skipWords)
 {
 	const char *p = scrSkip(line);
@@ -336,7 +336,7 @@ static bool runCmd(const char *text, cmdCtx_t *c)
 {
 	const char *t = constWords(text);
 	const char *line;
-	if (scrWordIs(t, "ECHO") || scrWordIs(t, "APPEND")) {
+	if (scrWordIs(t, "ECHO") || scrWordIs(t, "FLOG")) {
 		line = scrSubst(t, SUB_RAW, rawQuote(t, 2));	/* the command does quotes / escapes */
 	} else {
 		line = scrSubst(t, SUB_CMD, 0);
@@ -804,6 +804,380 @@ static void pushHandler(const char *ev, int ret)
 	scr.inHandler = true;
 }
 
+/* ================= data files (FWRITE FREAD FTELL FSEEK FCLOSE, VARS SAVE / LOAD) ================= */
+
+/* file name word at *pp (letters, digits, '_', max 31; no extension) */
+static void fileWord(const char **pp, char *name)
+{
+	const char *p = scrSkip(*pp);
+	int         l = 0;
+	while (p[l] && p[l] != ' ' && p[l] != '\t') {
+		char c = p[l];
+		if (!scrIsName(c, false)) {
+			scrFail("file: letters, digits, '_' only (no extension)");
+		}
+		l++;
+	}
+	if (l == 0) {
+		scrFail("file name expected");
+	}
+	if (l > SCR_FNAME_MAX) {
+		scrFail("file: max %d characters", SCR_FNAME_MAX);
+	}
+	memcpy(name, p, l);
+	name[l] = '\0';
+	*pp = scrSkip(p + l);
+}
+
+/* position slot of name.txt (opened at 1 on first use) */
+static long *filePos(const char *name)
+{
+	for (int i = 0; i < scr.nFiles; i++) {
+		if (strcasecmp(scr.files[i].name, name) == 0) {
+			return &scr.files[i].pos;
+		}
+	}
+	if (scr.nFiles >= scr.filesMax) {
+		scrFail("too many files open (max %d): FCLOSE one", scr.filesMax);
+	}
+	snprintf(scr.files[scr.nFiles].name, sizeof(scr.files[0].name), "%s", name);
+	scr.files[scr.nFiles].pos = 1;
+	return &scr.files[scr.nFiles++].pos;
+}
+
+/* size of fname (with extension); missing: -1 (fails if mustExist) */
+static long fileSize(const char *fname, bool *ro, bool mustExist)
+{
+	const char *err = NULL;
+	bool        r   = false;
+	long        n   = scrHostFileSize(fname, &r, &err);
+	if (n < 0 && err) {
+		scrFail("%s: %s", fname, err);
+	}
+	if (n < 0 && mustExist) {
+		scrFail("%s: no such file", fname);
+	}
+	if (ro) {
+		*ro = r;
+	}
+	return n;
+}
+
+static void stFile(scrFrame_t *f, scrStmt_t *s)
+{
+	const char *p = s->arg;
+	char        name[SCR_FNAME_MAX + 1], fname[SCR_FNAME_MAX + 8];
+	scrVar_t   *v = NULL;
+
+	if (s->kind == K_FREAD || s->kind == K_FTELL) {
+		v = target(&p, true);
+	}
+	fileWord(&p, name);
+	snprintf(fname, sizeof(fname), "%s.txt", name);
+
+	switch (s->kind) {
+	case K_FCLOSE:
+		if (*p) {
+			scrFail("usage: FCLOSE file");
+		}
+		for (int i = 0; i < scr.nFiles; i++) {
+			if (strcasecmp(scr.files[i].name, name) == 0) {
+				scr.files[i] = scr.files[--scr.nFiles];
+				break;
+			}
+		}
+		break;
+
+	case K_FTELL:
+		if (*p) {
+			scrFail("usage: FTELL $v file");
+		}
+		scrSetVar(v, scrNum((double)*filePos(name)));
+		break;
+
+	case K_FSEEK: {
+		long *pos  = filePos(name);
+		long  size = fileSize(fname, NULL, false);
+		long  np;
+		double d = 0;
+		if (size < 0) {
+			size = 0;
+		}
+		if (scrWordIs(p, "START") && !*scrSkip(p + 5)) {
+			np = 1;
+		} else if (scrWordIs(p, "END")) {
+			const char *n = scrSkip(p + 3);
+			if (*n && (!scrToNum(scrEvalAll(n), &d) || d != floor(d))) {
+				scrFail("FSEEK END n: n must be a whole number");
+			}
+			np = size + 1 - (long)d;
+		} else if (scrWordIs(p, "SET") || scrWordIs(p, "OFFS")) {
+			bool set = scrWordIs(p, "SET");
+			if (!scrToNum(scrEvalAll(scrSkip(p + (set ? 3 : 4))), &d) || d != floor(d)) {
+				scrFail("FSEEK %s n: n must be a whole number", set ? "SET" : "OFFS");
+			}
+			np = set ? (long)d : *pos + (long)d;
+		} else {
+			scrFail("usage: FSEEK file START | END [n] | SET n | OFFS n");
+		}
+		*pos = np < 1 ? 1 : np > size + 1 ? size + 1 : np;
+		break;
+	}
+
+	case K_FREAD: {
+		long *pos = filePos(name);
+		fileSize(fname, NULL, true);
+		bool  eol = false;
+		double n  = SCR_FREAD_MAX;
+		if (scrWordIs(p, "EOL") && !*scrSkip(p + 3)) {
+			eol = true;
+		} else if (*p) {
+			if (!scrToNum(scrEvalAll(p), &n) || n != floor(n) || n < 1 || n > SCR_FREAD_MAX) {
+				scrFail("FREAD n: n must be 1..%d (or EOL)", SCR_FREAD_MAX);
+			}
+		} else {
+			scrFail("usage: FREAD $v file n|EOL");
+		}
+		char        buf[SCR_FREAD_MAX + 1];
+		const char *err = NULL;
+		int         got = scrHostFileRead(fname, *pos - 1, buf, (int)n, &err);
+		if (got < 0) {
+			scrFail("%s: %s", fname, err ? err : "read failed");
+		}
+		int keep = got, used = got;
+		if (eol) {
+			for (int i = 0; i < got; i++) {
+				if (buf[i] == '\n') {
+					keep = i;
+					used = i + 1;
+					break;
+				}
+			}
+			if (keep > 0 && buf[keep - 1] == '\r') {
+				keep--;
+			}
+		}
+		for (int i = 0; i < keep; i++) {
+			if ((unsigned char)buf[i] >= 0x80 || buf[i] == '\0') {
+				buf[i] = '?';			/* text only */
+			}
+		}
+		scrSetVar(v, scrText(buf, keep));
+		*pos += used;
+		if (eol && got == 0) {
+			scr.ok = false;
+			scrFail("EOF");
+		}
+		if (!eol && got < (int)n) {
+			scr.ok = false;
+			scrFail("over-read %d", (int)n - got);
+		}
+		scr.ok = true;
+		break;
+	}
+
+	case K_FWRITE: {
+		long *pos = filePos(name);
+		bool  ro  = false;
+		fileSize(fname, &ro, false);
+		if (ro) {
+			scrFail("%s is read-only", fname);
+		}
+		const char *t   = scrUnquote(p);
+		const char *sub = scrSubst(t, SUB_TEXT, 0);
+		char       *o   = scrArenaStr(sub, strlen(sub));
+		scrUnescape(o);
+		int         l   = strlen(o);
+		const char *e   = scrHostFileWrite(fname, *pos - 1, o, l, false);
+		if (e) {
+			scrFail("%s: %s", fname, e);
+		}
+		*pos += l;
+		break;
+	}
+
+	default:
+		break;
+	}
+	f->pc++;
+}
+
+/* VARS SAVE name [$a $$b ...]  /  VARS LOAD name [$a $$b ... | ALL] */
+static void stVarsIo(scrFrame_t *f, scrStmt_t *s)
+{
+	const char *p    = s->arg;
+	bool        save = scrWordIs(p, "SAVE");
+	char        name[SCR_FNAME_MAX + 1], fname[SCR_FNAME_MAX + 8];
+	p = scrSkip(p + 4);
+	fileWord(&p, name);
+	snprintf(fname, sizeof(fname), "%s.var", name);
+
+	if (save) {
+		int   cap = 16384, n = 0;
+		char *o   = scrArena(cap);
+		/* one variable as "$name=value" / "$$name=..." */
+		#define PUTV(pre, var) do { \
+			const scrVar_t *vv = (var); \
+			char nb[40]; \
+			if (n + SCR_VAL_MAX * 2 + 48 >= cap) scrFail("too much to save"); \
+			if (vv->num) { snprintf(nb, sizeof(nb), "%.17g", vv->n); \
+				n += snprintf(o + n, cap - n, "%s%s=%s\n", pre, vv->name, nb); } \
+			else { n += snprintf(o + n, cap - n, "%s%s=\"", pre, vv->name); \
+				for (int k = 0; k < vv->len; k++) { char c = vv->s[k]; \
+					if (c == '"' || c == '\\') { o[n++] = '\\'; o[n++] = c; } \
+					else if (c == '\n') { o[n++] = '\\'; o[n++] = 'n'; } \
+					else if (c == '\r') { o[n++] = '\\'; o[n++] = 'r'; } \
+					else o[n++] = c; } \
+				o[n++] = '"'; o[n++] = '\n'; } \
+		} while (0)
+		if (!*p) {
+			for (int i = 0; i < scr.nGlobals; i++) {
+				PUTV("$$", &scr.globals[i]);		/* no list: globals only */
+			}
+		} else {
+			while (*p) {
+				const char *q = p;
+				bool        g = (q[0] == '$' && q[1] == '$');
+				scrVar_t   *var = target(&p, false);
+				(void)q;
+				PUTV(g ? "$$" : "$", var);
+				p = scrSkip(p);
+			}
+		}
+		#undef PUTV
+		const char *e = scrHostFileWrite(fname, 0, o, n, true);
+		if (e) {
+			scrFail("%s: %s", fname, e);
+		}
+		f->pc++;
+		return;
+	}
+
+	/* LOAD */
+	bool all = !*p || (scrWordIs(p, "ALL") && !*scrSkip(p + 3));
+	long size = fileSize(fname, NULL, true);
+	if (size > 32768) {
+		scrFail("%s: too big", fname);
+	}
+	char       *buf = scrArena(size + 1);
+	const char *err = NULL;
+	int         got = scrHostFileRead(fname, 0, buf, (int)size, &err);
+	if (got < 0) {
+		scrFail("%s: %s", fname, err ? err : "read failed");
+	}
+	buf[got] = '\0';
+	/* list names that must be found */
+	const char *list = all ? NULL : p;
+	int         want = 0, found = 0;
+	if (list) {
+		for (const char *q = list; *q; want++) {
+			targetSyntax(&q);
+			q = scrSkip(q);
+		}
+	}
+	char *line = buf;
+	int   ln   = 0;
+	while (*line) {
+		char *e = strchr(line, '\n');
+		if (e) {
+			*e = '\0';
+		}
+		ln++;
+		char *r = line + strlen(line);
+		if (r > line && r[-1] == '\r') {
+			*--r = '\0';
+		}
+		if (*line) {
+			bool  g  = (line[0] == '$' && line[1] == '$');
+			char *nm = line + (g ? 2 : 1);
+			char *eq = strchr(line, '=');
+			if (line[0] != '$' || !eq || eq == nm) {
+				scrFail("%s line %d: expected $name=value", fname, ln);
+			}
+			*eq = '\0';
+			if (strlen(nm) > SCR_NAME_MAX) {
+				scrFail("%s line %d: name too long", fname, ln);
+			}
+			bool take = all;
+			if (!all) {
+				for (const char *q = list; *q;) {
+					const char *st = q;
+					targetSyntax(&q);
+					bool qg = (st[1] == '$');
+					const char *qn = st + (qg ? 2 : 1);
+					if (*qn == '{') {
+						qn++;
+					}
+					int ql = 0;
+					while (scrIsName(qn[ql], ql == 0)) {
+						ql++;
+					}
+					if (qg == g && (int)strlen(nm) == ql && strncasecmp(qn, nm, ql) == 0) {
+						take = true;
+						found++;
+						break;
+					}
+					q = scrSkip(q);
+				}
+			}
+			if (take) {
+				if (!scrNameAllowed(f->mod, f->fn, nm, g)) {
+					scrFail("%s%s is not in VARS", g ? "$$" : "$", nm);
+				}
+				char *val = eq + 1;
+				scrVal_t vv;
+				if (*val == '"') {
+					char *d = val, *sp = val + 1;
+					while (*sp && *sp != '"') {
+						if (*sp == '\\' && sp[1]) {
+							sp++;
+							*d++ = (*sp == 'n') ? '\n' : (*sp == 'r') ? '\r' : *sp;
+						} else {
+							*d++ = *sp;
+						}
+						sp++;
+					}
+					if (*sp != '"') {
+						scrFail("%s line %d: missing closing quote", fname, ln);
+					}
+					vv = scrText(val, d - val);
+				} else {
+					double dn;
+					if (!scrParseNum(val, strlen(val), &dn)) {
+						scrFail("%s line %d: bad number", fname, ln);
+					}
+					vv = scrNum(dn);
+				}
+				scrSetVar(scrFindVar(g, nm, true), vv);
+			}
+		}
+		if (!e) {
+			break;
+		}
+		line = e + 1;
+	}
+	if (!all && found < want) {
+		/* name the first one missing */
+		for (const char *q = list; *q;) {
+			const char *st = q;
+			targetSyntax(&q);
+			char tn[SCR_NAME_MAX + 4];
+			snprintf(tn, sizeof(tn), "%.*s", (int)(q - st), st);
+			bool seen = false;
+			for (char *l2 = buf; l2 < buf + got; l2 += strlen(l2) + 1) {
+				if (strcasecmp(l2, tn) == 0) {
+					seen = true;
+				}
+			}
+			if (!seen) {
+				scrFail("%s not in %s", tn, fname);
+			}
+			q = scrSkip(q);
+		}
+	}
+	f->pc++;
+}
+
 /* Run one statement. Advances / sets pc. */
 static void execStmt(scrFrame_t *f, scrStmt_t *s)
 {
@@ -812,6 +1186,7 @@ static void execStmt(scrFrame_t *f, scrStmt_t *s)
 
 	switch (s->kind) {
 	case K_STACK:
+	case K_FILES:
 	case K_CONST:
 	case K_LABEL:
 		f->pc++;
@@ -840,8 +1215,22 @@ static void execStmt(scrFrame_t *f, scrStmt_t *s)
 
 	case K_CMD: {
 		cmdCtx_t c = { 0 };
+		bool     fstat = scrWordIs(s->text, "FSTAT");	/* reply goes to $.ret */
+		if (fstat) {
+			c.capture = true;
+			c.cap     = 64;
+			c.buf     = scrArena(c.cap + 1);
+			c.buf[0]  = '\0';
+		}
 		if (!runCmd(s->text, &c)) {
 			scrFail("%s", scr.err);
+		}
+		if (fstat) {
+			int l = c.n;
+			while (l > 0 && (c.buf[l - 1] == '\n' || c.buf[l - 1] == '\r')) {
+				l--;
+			}
+			scrSetVar(&scr.ret, scrText(c.buf, l));
 		}
 		f->pc++;
 		break;
@@ -1331,6 +1720,18 @@ static void execStmt(scrFrame_t *f, scrStmt_t *s)
 		break;
 	}
 
+	case K_FWRITE:
+	case K_FREAD:
+	case K_FTELL:
+	case K_FSEEK:
+	case K_FCLOSE:
+		stFile(f, s);
+		break;
+
+	case K_VARSIO:
+		stVarsIo(f, s);
+		break;
+
 	case K_CONSOLE: {
 		int l = 0;
 		while (s->text[l] && s->text[l] != ' ' && s->text[l] != '\t') {
@@ -1540,6 +1941,9 @@ static void cleanup(void)
 	scr.nGlobals = 0;
 	scrFreeVar(&scr.ret);
 	scrFreeVar(&scr.event);
+	scrHostFree(scr.files);
+	scr.files  = NULL;
+	scr.nFiles = 0;
 	scrUnloadAll();
 	scr.active = false;
 	scr.cur    = NULL;
@@ -1567,6 +1971,12 @@ static void resetRun(const char *name)
 	scr.locSrc = -1;
 	scr.locLine = 0;
 	scr.loaded = 0;
+	scr.nFiles = 0;
+	scr.files  = NULL;
+	scr.filesMax = scrHostFilesDefault();
+	if (scr.filesMax < 1 || scr.filesMax > SCR_FILES_MAX) {
+		scr.filesMax = SCR_FILES_DEF;
+	}
 	s_stopped = false;
 	snprintf(scr.name, sizeof(scr.name), "%s", name);
 }
@@ -1588,6 +1998,10 @@ scrResult_t scrRun(const char *name, const char *args, const char *fn, bool load
 		return SCR_RES_ERROR;
 	}
 	scrMod_t *m = scrLoadModule(name);
+	scr.files = scrHostAlloc(scr.filesMax * sizeof(scr.files[0]));	/* .FILES n or run.files */
+	if (!scr.files) {
+		scrFail("out of memory");
+	}
 	if (fn) {
 		int fi = scrFindFn(m, fn, strlen(fn));
 		if (fi < 0) {

@@ -1,0 +1,4 @@
+> six open: 1
+> seventh: too many files open (max 6): FCLOSE one
+<<SCRIPT t_nfiles END>>
+[result END]

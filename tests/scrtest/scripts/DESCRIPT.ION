@@ -14,6 +14,20 @@ t_example.s the spec example (demo + shapes)
 t_expr.out expected output of t_expr.s
 t_expr.s expressions, numbers, text, functions, formats
 t_flow.out expected output of t_flow.s
+t_files.s data files FWRITE FREAD FTELL FSEEK FCLOSE FLOG FSTAT, VARS SAVE / LOAD
+t_files.out expected output of t_files.s
+t_fvar.s FSTAT / FDELETE on name.var (VARS SAVE file)
+t_fvar.out expected output of t_fvar.s
+t_inputstop.s INPUT takes "stop" as text
+t_inputstop.out expected output of t_inputstop.s
+t_nfiles.s .FILES 6 raises the data file limit
+t_nfiles.out expected output of t_nfiles.s
+t_nfiles2.s .FILES 2 lowers it
+t_nfiles2.out expected output of t_nfiles2.s
+t_lerr_files.s load error: .FILES not at the top
+t_lerr_files.out expected output of t_lerr_files.s
+t_lerr_files2.s load error: .FILES 17
+t_lerr_files2.out expected output of t_lerr_files2.s
 t_flow.s IF, LOOP forms, BREAK/NEXT, SWITCH, GOTO
 t_func.out expected output of t_func.s
 t_func.s functions, CALL file.fn, RETURN, recursion, .STACK

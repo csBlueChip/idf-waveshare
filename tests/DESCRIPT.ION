@@ -2,7 +2,7 @@
 selftest.txt basic board self-test
 test_sleep.txt IMU SLEEP modes
 test_serial.txt UART / USB consoles and log routing
-test_stepb1.txt Step B1: events, PRINT/DEBUG/APPEND/LOGCAT, LOG, WAIT, UI NEXT, NV, heartbeat
+test_stepb1.txt Step B1: events, PRINT/DEBUG/FLOG/FCAT, LOG, WAIT, UI NEXT, NV, heartbeat
 test_scripts.txt scripts on the board (uses the scripts in sd/)
 scrtest PC tests of the script interpreter
 DESCRIPT.ION file descriptions for this folder

@@ -47,6 +47,8 @@
  *                                             (step.*: unused, IMU STEP not implemented)
  *   imu.orient.hold 500         0..5000 ms    (orientation must hold this long)
  *   imu.orient.flat 30          5..80 deg     (tilt from horizontal still FLAT)
+ *   run.files  4                1..16         data files with a position per script
+ *                                             (default when the script has no .FILES)
  *   sys.autorun 0               0|1           run system scripts (onBoot ...);
  *                                             not used yet (scripting)
  *   sys.aron   0 255 0          r g b 0..255  (LED flash at start-up, autorun 1)
@@ -61,10 +63,12 @@
  *   NV SET key r g b      same, for colour keys (disk.*, sys.aron, sys.aroff)
  *   NV GET [key]          show one or all (key=value)
  *   NV RESET [key]        back to default (all if no key; sys.bootcnt is kept)
- *   NV EXPORT name        write key=value lines to SD:/sys/name.nvram
+ *   NV EXPORT name        write key=value lines to SD:/sys/name.nvram (secret keys,
+ *                         rad.pwd, as "!key=value": FCAT shows "!key=[redacted]")
  *   NV IMPORT name        set the keys found in SD:/sys/name.nvram; all lines are
  *                         checked first, nothing is written if any is bad;
- *                         read-only keys are skipped ("warning: ... ignored")
+ *                         read-only keys are skipped ("warning: ... ignored");
+ *                         a leading '!' on a line is ignored
  *
  * In commands "\#" in a value stands for '#'.
  */

@@ -1,9 +1,10 @@
 # default.nvram - every NV setting at its default value
 # NV IMPORT default   restores them (sys.bootcnt is firmware-owned, not here)
-# Format: key=value, one per line; '#' starts a comment.
+# Format: key=value, one per line; '#' starts a comment;
+# !key=value is a secret: FCAT default.nvram shows !key=[redacted].
 
 rad.ssid=wavedemo
-rad.pwd=waveP@55word
+!rad.pwd=waveP@55word
 rad.ble=ESP32-S3-Demo
 rad.ip=192.168.4.1
 rad.mask=/24
@@ -37,6 +38,7 @@ imu.step.thr=200
 imu.step.min=10
 imu.orient.hold=500
 imu.orient.flat=30
+run.files=4
 sys.autorun=0
 sys.aron=0 255 0
 sys.aroff=255 0 0

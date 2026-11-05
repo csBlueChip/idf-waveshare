@@ -13,7 +13,8 @@ PRINT value kept: $q
 DEBUG debug $x
 ECHO 1 x=$x value=$q
 ECHO 1 "q=$q"
-APPEND log $x and \$
+FLOG log $x and \$
+FCAT log
 LED WHITE
 LED 1 WHITE MAXN
 IF $x > MAXN ; PRINT const in expr ok ; END

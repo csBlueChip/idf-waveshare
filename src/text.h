@@ -47,7 +47,7 @@
 esp_err_t textInit(void);
 
 /*
- * Text argument rules shared by ECHO, PRINT, DEBUG and APPEND.
+ * Text argument rules shared by ECHO, PRINT, DEBUG, FLOG and FWRITE.
  * textUnquote(): if the first non-space character is " or ', the text is the
  * quoted string up to the matching quote (\" or \' inside = that quote; only
  * blanks may follow the closing quote). A leading \" or \' = not quoted, starts
@@ -57,6 +57,6 @@ esp_err_t textInit(void);
  */
 const char *textUnquote(const char *in, char *out, size_t n);
 
-/* Escapes for PRINT / DEBUG / APPEND: \n new line, \\ \# \$ literal,
+/* Escapes for PRINT / DEBUG / FLOG: \n new line, \\ \# \$ literal,
  * \1..\9 dropped, any other \x kept as is. out may be the same buffer as in. */
 void textUnescape(const char *in, char *out, size_t n);

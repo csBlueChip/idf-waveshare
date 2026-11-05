@@ -19,6 +19,9 @@ static const struct {
 	{ "QUIET", K_QUIET },	{ "TRACE", K_TRACE },	{ "PRINT", K_PRINT },	{ "DEBUG", K_DEBUG },
 	{ "RNG", K_RNG },	{ "TIMER", K_TIMER },	{ "WAIT", K_WAIT },	{ "INPUT", K_INPUT },
 	{ "BPT!", K_BPT },	{ "ACC", K_ACC },	{ "GYR", K_GYR },	{ ".STACK", K_STACK },
+	{ ".FILES", K_FILES },
+	{ "FWRITE", K_FWRITE },	{ "FREAD", K_FREAD },	{ "FTELL", K_FTELL },	{ "FSEEK", K_FSEEK },
+	{ "FCLOSE", K_FCLOSE },
 	{ ".CONST", K_CONST },
 	{ "RUN", K_CONSOLE },	{ "STOP", K_CONSOLE },	{ "CONT", K_CONSOLE },	{ "LOAD", K_CONSOLE },
 	{ "STEP", K_CONSOLE },	{ "BPT", K_CONSOLE },	{ "LIST", K_CONSOLE },	{ "STACK", K_CONSOLE },
@@ -29,7 +32,8 @@ static const struct {
 static const char *const s_reserved[] = {
 	"LET", "GET", "VARS", "DEL", "INS", "IF", "ELIF", "ELSE", "END", "LOOP", "TO", "STEP",
 	"WHILE", "TIMES", "FOREVER", "BREAK", "NEXT", "SWITCH", "GOTO", "EXIT", "FN", "RETURN",
-	"CALL", "INSERT", "ON", "OFF", "ONERROR", "QUIET", "TRACE", "PRINT", "DEBUG", "APPEND",
+	"CALL", "INSERT", "ON", "OFF", "ONERROR", "QUIET", "TRACE", "PRINT", "DEBUG", "FWRITE",
+	"FREAD", "FTELL", "FSEEK", "FCLOSE", "SAVE",
 	"RNG", "TIMER", "EVENT", "NOW", "INPUT", "RUN", "STOP", "PAUSE", "CONT", "LOAD", "BPT",
 	"LIST", "STACK", "LOG", "EVENTS", "AND", "OR", "INT", "ROUND", "ABS", "MIN", "MAX",
 	"SQRT", "SIN", "COS", "ATAN2", "LEN", "UPPER", "LOWER", "MID", "FIND", "RND", NULL,
@@ -259,6 +263,12 @@ static int kindOf(const char *t)
 			return K_INCR;
 		}
 	}
+	if (scrWordIs(t, "VARS")) {
+		const char *a = scrSkip(t + 4);
+		if (scrWordIs(a, "SAVE") || scrWordIs(a, "LOAD")) {
+			return K_VARSIO;			/* VARS SAVE / LOAD: a statement, not a declaration */
+		}
+	}
 	for (size_t i = 0; i < sizeof(s_kw) / sizeof(s_kw[0]); i++) {
 		if (scrWordIs(t, s_kw[i].w)) {
 			return s_kw[i].k;
@@ -306,6 +316,24 @@ static char *addName(char *list, const char *name, int len)
 	memcpy(n + old + 1, name, len);
 	n[old + 1 + len] = '\0';
 	return n;
+}
+
+static bool hasName(const char *list, const char *name, int len);
+
+/* name may be set in body fn (-1 = main) of m: no VARS there, or listed */
+bool scrNameAllowed(scrMod_t *m, int fn, const char *name, bool global)
+{
+	bool        has  = fn >= 0 ? m->fns[fn].hasVars : m->mainHasVars;
+	const char *list = fn >= 0 ? m->fns[fn].vars : m->mainVars;
+	if (!has) {
+		return true;
+	}
+	if (global) {
+		char tmp[SCR_NAME_MAX + 2];
+		snprintf(tmp, sizeof(tmp), "$%s", name);
+		return hasName(list, tmp, strlen(tmp));
+	}
+	return strcasecmp(name, "arg") == 0 || hasName(list, name, strlen(name));
 }
 
 static bool hasName(const char *list, const char *name, int len)
@@ -484,7 +512,7 @@ static void structure(scrMod_t *m)
 	struct { int open, last; bool seenElse; } stk[SCR_BLOCK_MAX];
 	int  sp    = 0;
 	int  curFn = -1;
-	bool other = false;		/* a statement other than .STACK/.CONST seen */
+	bool other = false;		/* a statement other than .STACK/.FILES/.CONST seen */
 	bool bodyStarted = false;	/* VARS allowed only at the start of a body */
 
 	for (int i = 0; i < nIn; i++) {
@@ -515,16 +543,22 @@ static void structure(scrMod_t *m)
 			s->blk  = sp ? stk[sp - 1].open : -1;
 			int src = s->src, line = s->line;
 
-			if (k == K_STACK || k == K_CONST) {
+			if (k == K_STACK || k == K_FILES || k == K_CONST) {
 				if (other) {
-					loadFail(src, line, "%s must be at the top of the script", k == K_STACK ? ".STACK" : ".CONST");
+					loadFail(src, line, "%s must be at the top of the script",
+					         k == K_STACK ? ".STACK" : k == K_FILES ? ".FILES" : ".CONST");
 				}
-				if (k == K_STACK) {
+				if (k == K_STACK || k == K_FILES) {
 					double d;
-					if (!scrParseNum(s->arg, strlen(s->arg), &d) || d < 1 || d > SCR_STACK_MAX || d != (int)d) {
-						loadFail(src, line, ".STACK must be 1..32%s", NULL);
+					int    max = (k == K_STACK) ? SCR_STACK_MAX : SCR_FILES_MAX;
+					if (!scrParseNum(s->arg, strlen(s->arg), &d) || d < 1 || d > max || d != (int)d) {
+						loadFail(src, line, k == K_STACK ? ".STACK must be 1..32%s" : ".FILES must be 1..16%s", NULL);
 					}
-					scr.stackMax = (int)d;
+					if (k == K_STACK) {
+						scr.stackMax = (int)d;
+					} else {
+						scr.filesMax = (int)d;
+					}
 				} else {
 					constLine(s);
 				}

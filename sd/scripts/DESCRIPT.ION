@@ -6,5 +6,6 @@ ask.s INPUT and a TIMER
 rec.s IMU REC for STOP NOW
 hang.s endless loop: copy over SD:/sys/onBoot.s to test the BOOT escape
 dbg.s BPT! with no client: copy over SD:/sys/onBoot.s (USB console)
-data APPEND / LOGCAT files
+persist.s remembers a name in persist.var (RUN persist forget = FDELETE it)
+data data files: FLOG / FWRITE (.txt), VARS SAVE (.var)
 DESCRIPT.ION file descriptions for this folder

@@ -1,0 +1,31 @@
+This entire project is an exercise in learning how to Claude effectively.
+Apropos nothing, I chose Opus 5.5/Medium - and never felt the need to change.
+
+At this stage, I've barely looked at the code except to see that it is 
+not "horrific".
+
+The favicon is Claude's work - other imagery was generated with GPT ...Although
+I plan to try Gemini while it's still bundled with my phone contract!
+
+If I start to trust it, I might risk using Claude Code - but horror stories abound.
+
+
+Some take-aways:
+
+Here's the prompt that created modular code for me:
+let's write a resource demo ...keep all functions modular and grouped - eg all
+ble functions will be such as bleInit(), bleSend(), etc. ...do not run ahead -
+let me lead ...we will take this one step at a time ...only generate code when
+I say "go"
+
+Here's my user prompt:
+# Never patronise my question with crap like "ohhh, that's a good question"
+# ALWAYS be succinct. Provide short, concise answers which highlight the
+  poignant points ...if I want more information or clarification I will ask for it.
+# If I ask a "yes/no" question, keep your answer under ~20 words.
+# If you do not know the answer to a question, say "I don't know, the following
+  is a guess..."
+# If I ask for a code review, only list potential issues - do not tell me about
+  where it is "good" code unless I explicitly ask.
+# Never produce code or artifacts until I explicitly approve the scope.
+

@@ -1,0 +1,5 @@
+> stat: 1 13:rw
+> after delete: 0 no such file
+> load: 0 persist.var: no such file
+<<SCRIPT t_fvar END>>
+[result END]

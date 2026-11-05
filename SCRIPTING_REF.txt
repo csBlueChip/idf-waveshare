@@ -1,4 +1,4 @@
-WAVEDEMO SCRIPT - QUICK REFERENCE        (full rules: scripting.txt)
+WAVEDEMO SCRIPT - QUICK REFERENCE        (full rules: SCRIPTING.txt)
 ====================================
 
 FILES     SD:/scripts/name.s     name: letters digits _ (max 31)   sys/x = system
@@ -26,8 +26,13 @@ EXPR      ( )  ! - ~  * / %  + -  << >>  &  ^  |
 FUNCTIONS INT ROUND ABS MIN MAX SQRT SIN COS ATAN2 (degrees) LEN UPPER
           LOWER MID(t,s,n) FIND(t,p) RND(a,b)
 
-OUTPUT    ECHO n text  PRINT text  DEBUG text  APPEND file text
-          LOGCAT [file [>DEBUG]]
+OUTPUT    ECHO n text  PRINT text  DEBUG text  FLOG file text
+FILES     SD:/scripts/data/file.txt, positions from 1 (end = size + 1)
+          FLOG FCAT file [start,count] [>DEBUG]  FDIR [txt|var|nvram|*]
+          FSTAT file ($.ret)  (FCAT/FSTAT/FDELETE: name, name.var, name.nvram)
+          FDELETE file  FWRITE file text  FREAD $v file n|EOL  FTELL $v file
+          FSEEK file START|END [n]|SET n|OFFS n  FCLOSE file
+          VARS SAVE name [$v ...] (no list = globals)  VARS LOAD name [$v ...|ALL]
           QUIET 0|1|2|3 (def 2)  TRACE 0|1           escapes \n \\ \# \$ \1..\9
 
 CONTROL   IF e / ELIF e / ELSE / END
@@ -38,10 +43,12 @@ CONTROL   IF e / ELIF e / ELSE / END
 
 FUNCTIONS FN name [$a ...] / RETURN [e] / END
           CALL name args    CALL file.name args    INSERT file.s
-SETTINGS  .STACK n    .CONST NAME value...      (top of script)
+SETTINGS  .STACK n    .FILES n (def NV run.files)    .CONST NAME value...
+          (top of script)
 
 EVENTS    ON BTN|IMU|UI|TIMER fn    ON src OFF    WAIT EVENT [ms]
-          WAIT ms   INPUT $v [ms]   TIMER n ms (n 1..4, 0 = off)
+          WAIT ms   INPUT $v [ms] (meanwhile !!STOP [NOW] / !!PAUSE)
+          TIMER n ms (n 1..4, 0 = off)
           BTN n SHORT|DOUBLE|DOWN|UP|REPEAT   IMU TAP|2TAP|3TAP|MOTION|STILL|
           SIGMO|STEP n (n/a)|ORIENT 0..3|FLAT|WAKE   UI CONNECT|DISCONNECT|LINK UP|
           LINK DOWN   TIMER n [cnt]
