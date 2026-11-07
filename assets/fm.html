@@ -826,7 +826,8 @@
 	}
 	/* DESCRIPT.ION: name (or ".") then the description */
 	function hlIon(line) {
-		var m = /^(\S+)(.*)$/.exec(line);
+		if (line.charAt(0) === "*") return span("cm", line);	/* record of a deleted entry */
+		var m = /^("[^"]*")(.*)$/.exec(line) || /^(\S+)(.*)$/.exec(line);	/* "quoted name" or name */
 		return m ? span("in", m[1]) + span("it", m[2]) : esc(line);
 	}
 	$("vsrc").onclick = function () { vsrc = !vsrc; render(); };

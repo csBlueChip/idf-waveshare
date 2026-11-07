@@ -287,6 +287,18 @@ conversation context. Keep it current, like the README.
             take), writes it back with /fm/put over=1. Delete -> star;
             rename -> rename; move -> take + set in the target folder.
             ionParse handles "quoted names"; '*' lines are not used.
+            Viewer (hlIon): a "quoted name" is one name; '*' lines are
+            shown whole in the comment colour.
+    sdseed  IDEA (not done): put SD card files in place at flash time.
+            Flashing only writes the ESP32 flash, never the card. Plan: a
+            "seed" data partition in the unused ~7.8 MB, its image built
+            from sd/ (CMake, e.g. a FAT or LittleFS image) and flashed by
+            the same idf.py flash; at boot the firmware copies any file
+            missing from the card (never overwrites; a command to force a
+            copy). Needs a partition table change, the image build step
+            and the copy code. Other ways today: USB drive mode (FILES /
+            MSC screen), a card reader, or a Makefile target that uploads
+            sd/ with curl to /fm/put while FILES WEB is on.
     msc     UI_MSC: a Wait-screen-only interface (no start / stop work);
             rotation ... UART -> MSC -> WEB; NV ui.boot MSC; UI MSC. BOOT
             long press on it -> UI_EV_MSC -> usbDiskBegin() (= FILES).
