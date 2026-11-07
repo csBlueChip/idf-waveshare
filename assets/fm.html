@@ -27,6 +27,19 @@
 	#tree div.n { padding: 3px 6px; white-space: nowrap; cursor: pointer; }
 	#tree div.n:hover { background: #222; }
 	#tree div.n.cur { background: #234; color: #fff; }
+	#tree div.n.tsel { outline: 1px dashed #8cf; outline-offset: -1px; }	/* keyboard position in the tree */
+	#tree, #list { box-sizing: border-box; border: 1px solid transparent; }	/* the frame: contents can't cover a border */
+	#tree { border-right-color: #333; }
+	#tree.act, #list.act { border-color: #8cf; }		/* pane with the keyboard (Tab) */
+	#help { position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+	        background: rgba(0, 0, 0, 0.6); z-index: 20; }
+	#help.on { display: flex; }
+	#help div { max-width: 92vw; max-height: 90vh; overflow: auto; padding: 12px 16px; background: #1a1a1a;
+	            border: 1px solid #444; border-radius: 6px; }
+	#help table { width: auto; }
+	#help td { border: 0; padding: 2px 10px 2px 0; white-space: normal; }
+	#help td.k { color: #8cf; white-space: nowrap; min-width: 9em; }
+	#help h3 { margin: 10px 0 4px; font-size: inherit; color: #888; font-weight: normal; }
 	#tree span.t { display: inline-block; width: 1.4em; color: #888; }
 	#list { flex: 1; overflow: auto; }
 	table { width: 100%; border-collapse: collapse; }
@@ -88,7 +101,7 @@
 	#vbody .note { padding: 6px 8px; color: #f96; border-bottom: 1px solid #333; }
 	@media (max-width: 640px) {
 		#main { flex-direction: column; }
-		#tree { width: auto; max-width: none; max-height: 30vh; border-right: 0; border-bottom: 1px solid #333; }
+		#tree { width: auto; max-width: none; max-height: 30vh; border-right-color: transparent; border-bottom-color: #333; }
 		th.date, td.date { display: none; }
 
 	}
@@ -96,17 +109,18 @@
 </head>
 <body>
 <div id="bar">
-	<button id="up" data-i="up" title="Up: parent folder">Up</button>
-	<button id="refresh" data-i="refresh" title="Refresh">Refresh</button>
-	<button id="mkdir" data-i="mkdir" title="New folder">New folder</button>
-	<button id="up_btn" data-i="upload" title="Upload files to this folder (or drop them on the list)">Upload</button>
+	<button id="up" data-i="up" title="Up: parent folder (Backspace)">Up</button>
+	<button id="refresh" data-i="refresh" title="Refresh (F5)">Refresh</button>
+	<button id="mkdir" data-i="mkdir" title="New folder (+)">New folder</button>
+	<button id="up_btn" data-i="upload" title="Upload files to this folder, or drop them on the list (Ctrl+U)">Upload</button>
 	<input id="pick" type="file" multiple style="display:none">
-	<button id="dl" data-i="download" title="Download" disabled>Download</button>
-	<button id="view" data-i="view" title="View" disabled>View</button>
-	<button id="ren" data-i="rename" title="Rename / move" disabled>Rename</button>
-	<button id="del" data-i="delete" title="Delete" disabled>Delete</button>
+	<button id="dl" data-i="download" title="Download (Ctrl+Enter)" disabled>Download</button>
+	<button id="view" data-i="view" title="View (Enter)" disabled>View</button>
+	<button id="ren" data-i="rename" title="Rename / move (F2)" disabled>Rename</button>
+	<button id="info" data-i="info" title="Description in DESCRIPT.ION - the selected entry, or this folder (I)">Info</button>
+	<button id="del" data-i="delete" title="Delete (Del)" disabled>Delete</button>
 	<span class="gap"></span>
-	<button id="exit" data-i="exit" class="exit" title="Exit the SD manager">Exit</button>
+	<button id="exit" data-i="exit" class="exit" title="Exit the SD manager (Ctrl+X)">Exit</button>
 </div>
 <div id="path"></div>
 <div id="main">
@@ -120,17 +134,44 @@
 	<div id="vbar">
 		<span id="vname"></span>
 		<span id="vinfo"></span>
-		<button id="vlines" data-i="lines" class="tog on" title="Line numbers">Lines</button>
-		<button id="vwrap" data-i="wrap" class="tog" title="Wrap long lines">Wrap</button>
+		<button id="vlines" data-i="lines" class="tog on" title="Line numbers (L)">Lines</button>
+		<button id="vwrap" data-i="wrap" class="tog" title="Wrap long lines (W)">Wrap</button>
 		<button id="vsrc" data-i="source" class="tog" title="Show the HTML source">Source</button>
 		<button id="vjs" class="js" title="Run the page's scripts (they could use this manager)">JS off</button>
-		<button id="vdl" data-i="download" title="Download">Download</button>
+		<button id="vdl" data-i="download" title="Download (Ctrl+Enter)">Download</button>
 		<button id="vclose" data-i="close" class="exit" title="Close (Esc)">Close</button>
 	</div>
 	<div id="vbody"></div>
 </div>
 <div id="prog"></div>
 <div id="status"></div>
+<div id="help"><div>
+	<b>Keys</b> <span style="color:#888">(? or Esc closes)</span>
+	<h3>Files</h3>
+	<table>
+		<tr><td class="k">Up / Down</td><td>move one row (list) or one folder (tree)</td></tr>
+		<tr><td class="k">Tab</td><td>switch between the tree and the list</td></tr>
+		<tr><td class="k">Left / Right</td><td>tree: fold / unfold the folder</td></tr>
+		<tr><td class="k">Enter</td><td>open a folder; View a viewable file, else Download</td></tr>
+		<tr><td class="k">Ctrl+Enter</td><td>Download</td></tr>
+		<tr><td class="k">Backspace</td><td>parent folder</td></tr>
+		<tr><td class="k">F5</td><td>Refresh</td></tr>
+		<tr><td class="k">+</td><td>New folder</td></tr>
+		<tr><td class="k">Ctrl+U</td><td>Upload</td></tr>
+		<tr><td class="k">F2</td><td>Rename / move</td></tr>
+		<tr><td class="k">I</td><td>Info: edit the DESCRIPT.ION description</td></tr>
+		<tr><td class="k">Del</td><td>Delete</td></tr>
+		<tr><td class="k">Ctrl+X</td><td>Exit the SD manager</td></tr>
+		<tr><td class="k">?</td><td>this list</td></tr>
+	</table>
+	<h3>Viewer</h3>
+	<table>
+		<tr><td class="k">L</td><td>line numbers on / off</td></tr>
+		<tr><td class="k">W</td><td>wrap on / off</td></tr>
+		<tr><td class="k">Ctrl+Enter</td><td>Download</td></tr>
+		<tr><td class="k">Esc</td><td>close</td></tr>
+	</table>
+</div></div>
 <script>
 (function () {
 	var cwd = "/";			/* folder shown on the right */
@@ -153,6 +194,7 @@
 		download: SD + "M11.5 9H1M3.5 6.5L1 9l2.5 2.5",	/* arrow out of the card, to the left */
 		view:     "M1 8s2.5-4.5 7-4.5S15 8 15 8s-2.5 4.5-7 4.5S1 8 1 8zM8 6a2 2 0 1 0 0 4a2 2 0 1 0 0-4",
 		rename:   "M11 2.5l2.5 2.5L6 12.5H3.5V10zM9.5 4l2.5 2.5",
+		info:     "M8 1.5a6.5 6.5 0 1 0 0 13a6.5 6.5 0 1 0 0-13M8 7.25v4M8 4.75v.1",	/* i in a circle */
 		"delete": "M2.5 4.5h11M6 4.5V2.5h4v2M4 4.5l.8 9h6.4l.8-9M6.5 7v4M9.5 7v4",
 		exit:     "M7 2.5h6.5v11H7M10 8H1.5M4.5 5l-3 3 3 3",	/* back: arrow left out of a box */
 		lines:    "M6 4h8M6 8h8M6 12h8M2.5 3v2M2 7.5h1.5L2 9.5h1.5M2 11.5h1.5v2H2",
@@ -264,6 +306,7 @@
 			if (!ok) { status(text, true); return; }
 			var j;
 			try { j = JSON.parse(text); } catch (e) { status("bad reply from the device", true); return; }
+			if (act !== "tree") tsel = j.p;		/* the tree position follows the list */
 			cwd = j.p;
 			sel = null;
 			record(cwd, j);
@@ -314,6 +357,70 @@
 		}
 	}
 	var fetching = {};
+	/* one DESCRIPT.ION line -> {name, desc} or null; a name with spaces is in quotes */
+	function ionParse(l) {
+		var m = /^"([^"]*)"\s*(.*)$/.exec(l) || /^(\S+)\s*(.*)$/.exec(l);
+		return m ? { name: m[1], desc: m[2] } : null;
+	}
+	function ionName(n) { return /\s/.test(n) ? '"' + n + '"' : n; }
+
+	/* Change one entry of dir/DESCRIPT.ION: read it raw (/fm/get), edit the line,
+	 * write it back (/fm/put). Other lines, their order, CRLF / LF and non-ASCII
+	 * bytes are kept. op: {set: desc} ("" removes), {star: true} (prefix '*'),
+	 * {rename: newName}, {take: true} (remove; cb gets the description).
+	 * cb(err, oldDesc) - err null when done (or nothing to do). */
+	function ionEdit(dir, name, op, cb) {
+		var url = join(dir, "DESCRIPT.ION");
+		var x = new XMLHttpRequest();
+		x.open("GET", "/fm/get?p=" + q(url));
+		x.responseType = "arraybuffer";
+		x.onload = function () {
+			var text = "";
+			if (x.status === 200) {
+				var b = new Uint8Array(x.response);
+				for (var i = 0; i < b.length; i += 8192) text += String.fromCharCode.apply(null, b.subarray(i, i + 8192));
+			} else if (x.status !== 409) { cb("cannot read DESCRIPT.ION"); return; }
+			var eol = text.indexOf("\r\n") >= 0 ? "\r\n" : "\n";
+			var lines = text === "" ? [] : text.split(/\r?\n/);
+			if (lines.length && lines[lines.length - 1] === "") lines.pop();
+			var at = -1, old = "";
+			lines.forEach(function (l, i) {
+				var e = ionParse(l);
+				if (at < 0 && e && e.name.toLowerCase() === name.toLowerCase()) { at = i; old = e.desc; }
+			});
+			var changed = true;
+			if ("set" in op) {
+				var line = ionName(name) + " " + op.set;
+				if (op.set === "") { if (at >= 0) lines.splice(at, 1); else changed = false; }
+				else if (at >= 0) lines[at] = line;
+				else if (name === ".") lines.unshift(line);	/* the folder line goes first */
+				else lines.push(line);
+			} else if (at < 0) {
+				changed = false;			/* star / rename / take: no entry */
+			} else if (op.star) {
+				lines[at] = "*" + lines[at];
+			} else if ("rename" in op) {
+				lines[at] = ionName(op.rename) + (old ? " " + old : "");
+			} else if (op.take) {
+				lines.splice(at, 1);
+			}
+			if (!changed) { cb(null, old); return; }
+			var out = lines.join(eol) + (lines.length ? eol : "");
+			var bytes = new Uint8Array(out.length);
+			for (var j = 0; j < out.length; j++) bytes[j] = out.charCodeAt(j) & 0xFF;
+			var w = new XMLHttpRequest();
+			w.open("POST", "/fm/put?p=" + q(url) + "&over=1");
+			w.onload = function () {
+				delete descs[dir];
+				ionIn[dir] = lines.length > 0 || x.status === 200;
+				cb(w.status === 200 ? null : "DESCRIPT.ION: " + w.responseText, old);
+			};
+			w.onerror = function () { cb("DESCRIPT.ION: no connection"); };
+			w.send(new Blob([bytes]));
+		};
+		x.onerror = function () { cb("no connection to the device"); };
+		x.send();
+	}
 	/* load dir's DESCRIPT.ION once (if it has one), then refresh the titles */
 	function needDescs(dir) {
 		if (descs[dir] || fetching[dir] || !ionIn[dir]) return;
@@ -323,8 +430,8 @@
 			var map = {};
 			if (text !== null) {
 				text.split(/\r?\n/).forEach(function (l) {
-					var m = /^(\S+)\s+(.*)$/.exec(l);
-					if (m) map[m[1].toLowerCase()] = m[2];
+					var e = ionParse(l);
+					if (e && e.name.charAt(0) !== "*") map[e.name.toLowerCase()] = e.desc;	/* '*' = deleted */
 				});
 			}
 			descs[dir] = map;
@@ -369,14 +476,11 @@
 			d.className = "date";
 			d.textContent = it.up ? "" : date(it.t);
 			tr.appendChild(n); tr.appendChild(s); tr.appendChild(d);
+			tr.it = it;
 			tr.onclick = function () {
+				pane("list");
 				if (it.up) { load(parent(cwd)); return; }
-				var old = document.querySelector("tr.sel");
-				if (old) old.classList.remove("sel");
-				tr.classList.add("sel");
-				sel = it;
-				buttons();
-				showInfo(descOf(cwd, it.name));
+				pick(tr);
 			};
 			tr.ondblclick = function () {
 				if (it.up) return;
@@ -384,6 +488,16 @@
 			};
 			tb.appendChild(tr);
 		});
+	}
+	/* select a list row (keyboard or mouse); ".." selectable from the keyboard */
+	function pick(tr) {
+		var old = document.querySelector("tr.sel");
+		if (old) old.classList.remove("sel");
+		tr.classList.add("sel");
+		tr.scrollIntoView({ block: "nearest" });
+		sel = tr.it.up ? null : tr.it;
+		buttons();
+		showInfo(tr.it.up ? folderDesc(parent(cwd)) : descOf(cwd, tr.it.name));
 	}
 	function crumbs() {
 		var el = $("path");
@@ -422,7 +536,7 @@
 	}
 	function node(el, path, label, depth) {
 		var d = document.createElement("div");
-		d.className = "n" + (path === cwd ? " cur" : "");
+		d.className = "n" + (path === cwd ? " cur" : "") + (path === tsel ? " tsel" : "");
 		var at = attrs[path] || 0;
 		if (at & 4) d.classList.add("sys");		/* FAT SYSTEM */
 		if (at & 2) d.classList.add("hid");		/* FAT HIDDEN (wins) */
@@ -437,18 +551,9 @@
 		d.appendChild(document.createTextNode(label));
 		t.onclick = function (e) {
 			e.stopPropagation();
-			if (open[path]) { open[path] = false; tree(); return; }
-			open[path] = true;
-			if (subs[path]) { tree(); return; }
-			req("GET", "/fm/list?p=" + q(path), function (ok, text) {	/* sub-folders only */
-				if (!ok) { status(text, true); return; }
-				try { record(path, JSON.parse(text)); }
-				catch (e2) { status("bad reply from the device", true); return; }
-				tree();
-				needDescs(path);
-			});
+			fold(path, !open[path]);
 		};
-		d.onclick = function () { load(path); };
+		d.onclick = function () { tsel = path; pane("tree"); load(path); };
 		el.appendChild(d);
 		if (open[path] && subs[path]) {
 			subs[path].forEach(function (name) { node(el, join(path, name), name, depth + 1); });
@@ -463,6 +568,18 @@
 				needDescs(path);
 			});
 		}
+	}
+	/* fold (false) / unfold (true) a tree folder; unknown sub-folders are fetched */
+	function fold(path, want) {
+		open[path] = want;
+		if (!want || subs[path]) { tree(); return; }
+		req("GET", "/fm/list?p=" + q(path), function (ok, text) {
+			if (!ok) { status(text, true); return; }
+			try { record(path, JSON.parse(text)); }
+			catch (e2) { status("bad reply from the device", true); return; }
+			tree();
+			needDescs(path);
+		});
 	}
 
 	/* ---------- actions ---------- */
@@ -714,9 +831,89 @@
 	}
 	$("vsrc").onclick = function () { vsrc = !vsrc; render(); };
 	$("vjs").onclick = function () { vjs = !vjs; render(); };
+	/* ---------- keyboard ---------- */
+	var act = "list";		/* pane with the keyboard: "list" or "tree" */
+	var tsel = "/";			/* keyboard position in the tree */
+	function pane(which) {
+		act = which;
+		$("list").classList.toggle("act", act === "list");
+		$("tree").classList.toggle("act", act === "tree");
+		if (act === "tree") tree();
+	}
+	function treeMove(step) {
+		var ns = Array.prototype.slice.call(document.querySelectorAll("#tree div.n"));
+		var i = ns.map(function (n) { return n.getAttribute("data-p"); }).indexOf(tsel);
+		i = i < 0 ? 0 : Math.max(0, Math.min(ns.length - 1, i + step));
+		tsel = ns[i].getAttribute("data-p");
+		tree();
+		var d = document.querySelector("#tree div.n.tsel");
+		if (d) { d.scrollIntoView({ block: "nearest" }); d.title && showInfo(d.title); }
+	}
+	function listMove(step) {
+		var rs = Array.prototype.slice.call(document.querySelectorAll("#rows tr"));
+		if (!rs.length) return;
+		var i = rs.indexOf(document.querySelector("#rows tr.sel"));
+		i = i < 0 ? (step > 0 ? 0 : rs.length - 1) : Math.max(0, Math.min(rs.length - 1, i + step));
+		pick(rs[i]);
+	}
+	function enter() {
+		var tr = document.querySelector("#rows tr.sel");
+		if (!tr) return;
+		if (tr.it.up) load(parent(cwd));
+		else if (tr.it.dir) load(join(cwd, tr.it.name));
+		else if (kindOf(tr.it.name)) view();
+		else download();
+	}
+	function help(on) { $("help").classList.toggle("on", on); }
 	document.addEventListener("keydown", function (e) {
-		if (e.key === "Escape" && $("viewer").classList.contains("on")) closeView();
+		var t = e.target, k = e.key, ctrl = e.ctrlKey || e.metaKey;
+		if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
+		var done = true;
+		if ($("help").classList.contains("on")) {			/* key list open */
+			if (k === "Escape" || k === "?") help(false); else done = false;
+		} else if (k === "?") {
+			help(true);
+		} else if ($("viewer").classList.contains("on")) {		/* viewer open */
+			if (k === "Escape") closeView();
+			else if (k === "Enter" && ctrl) download();
+			else if (!ctrl && (k === "l" || k === "L") && $("vlines").style.display !== "none") $("vlines").onclick();
+			else if (!ctrl && (k === "w" || k === "W") && $("vwrap").style.display !== "none") $("vwrap").onclick();
+			else done = false;
+		} else if (k === "Tab") {
+			pane(act === "list" ? "tree" : "list");
+			if (act === "tree") { treeMove(0); }
+		} else if (k === "ArrowDown" || k === "ArrowUp") {
+			if (act === "tree") treeMove(k === "ArrowDown" ? 1 : -1); else listMove(k === "ArrowDown" ? 1 : -1);
+		} else if (act === "tree" && (k === "ArrowLeft" || k === "ArrowRight")) {
+			if (k === "ArrowRight") fold(tsel, true);
+			else if (open[tsel] && subs[tsel] && subs[tsel].length) fold(tsel, false);
+			else if (tsel !== "/") { tsel = parent(tsel); tree(); }	/* already folded: to the parent */
+		} else if (k === "Enter" && ctrl) {
+			download();
+		} else if (k === "Enter") {
+			if (act === "tree") load(tsel); else enter();
+		} else if (k === "Backspace") {
+			if (cwd !== "/") load(parent(cwd));
+		} else if (k === "F5") {
+			$("refresh").onclick();
+		} else if (k === "+" && !ctrl) {
+			$("mkdir").onclick();
+		} else if (ctrl && (k === "u" || k === "U")) {
+			if (!$("up_btn").disabled) $("up_btn").onclick();
+		} else if (!ctrl && (k === "i" || k === "I")) {
+			$("info").onclick();
+		} else if (k === "F2") {
+			if (sel) $("ren").onclick();
+		} else if (k === "Delete") {
+			if (sel) $("del").onclick();
+		} else if (ctrl && (k === "x" || k === "X")) {
+			$("exit").onclick();
+		} else {
+			done = false;
+		}
+		if (done) e.preventDefault();
 	});
+	$("help").onclick = function (e) { if (e.target === this) help(false); };
 	$("mkdir").onclick = function () {
 		var name = prompt("New folder name:", "");
 		if (!name) return;
@@ -730,18 +927,50 @@
 		var to = prompt("New name (a path starting with / moves it):", sel.name);
 		if (!to || to === sel.name) return;
 		var dest = to.charAt(0) === "/" ? to : join(cwd, to);
-		req("POST", "/fm/ren?p=" + q(join(cwd, sel.name)) + "&to=" + q(dest), function (ok, text) {
+		var from = sel.name, fromDir = cwd;
+		req("POST", "/fm/ren?p=" + q(join(cwd, from)) + "&to=" + q(dest), function (ok, text) {
 			if (!ok) { status(text, true); return; }
 			subs = {};			/* a move may change other folders */
-			load(cwd);
+			var toDir = parent(dest), toName = dest.substring(dest.lastIndexOf("/") + 1);
+			function done(err) { load(cwd); if (err) setTimeout(function () { status(err, true); }, 400); }
+			if (toDir === fromDir) {		/* same folder: rename the entry */
+				ionEdit(fromDir, from, { rename: toName }, done);
+			} else {				/* moved: the entry moves with it */
+				ionEdit(fromDir, from, { take: true }, function (err, d) {
+					if (err || !d) { done(err); return; }
+					ionEdit(toDir, toName, { set: d }, done);
+				});
+			}
 		});
 	};
 	$("del").onclick = function () {
 		if (!sel) return;
 		if (!confirm("Delete " + join(cwd, sel.name) + (sel.dir ? "/ (must be empty)" : "") + " ?")) return;
-		req("POST", "/fm/del?p=" + q(join(cwd, sel.name)), function (ok, text) {
+		var name = sel.name;
+		req("POST", "/fm/del?p=" + q(join(cwd, name)), function (ok, text) {
 			if (!ok) { status(text, true); return; }
-			changed(cwd);
+			ionEdit(cwd, name, { star: true }, function (err) {	/* keep a record: "*name desc" */
+				changed(cwd);
+				if (err) setTimeout(function () { status(err, true); }, 400);
+			});
+		});
+	};
+	$("info").onclick = function () {
+		var name = sel ? sel.name : ".";
+		var cur = sel ? descOf(cwd, sel.name) : descOf(cwd, ".");
+		var d = prompt("Description of " + (sel ? join(cwd, name) : cwd + " (this folder)") +
+		               " in DESCRIPT.ION (empty removes it):", cur);
+		if (d === null) return;
+		d = d.replace(/[\r\n]+/g, " ").trim();
+		if (d === cur) return;
+		ionEdit(cwd, name, { set: d }, function (err) {
+			if (err) { status(err, true); return; }
+			var keep = name;
+			load(cwd);
+			setTimeout(function () {		/* re-select the entry */
+				var tr = document.querySelector('#rows tr[data-n="' + keep.toLowerCase().replace(/"/g, '\\"') + '"]');
+				if (tr && keep !== ".") pick(tr);
+			}, 600);
 		});
 	};
 	/* ---------- upload ---------- */
@@ -815,6 +1044,11 @@
 		req("POST", "/fm/exit", function () { location.href = "/"; });
 	};
 
+	(function () {			/* the device has no clock: give it the browser's local time */
+		var t = Math.floor(Date.now() / 1000) - new Date().getTimezoneOffset() * 60;
+		try { fetch("/time?t=" + t, { method: "POST" }).catch(function () {}); } catch (e) { }
+	})();
+	pane("list");
 	fitAll();
 	loadSyntax();
 	load("/");

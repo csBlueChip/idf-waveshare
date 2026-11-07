@@ -18,7 +18,8 @@
  *   rad.pwr    8.5              2..20 dBm, rounded to 0.25
  *   rad.nogw   0                1 = DHCP offers no gateway (router)
  *   rad.maxcli 1                1..4 Wi-Fi clients at a time
- *   ui.boot    BLE              BLE|TELNET|WEB|UART|USB
+ *   ui.boot    BLE              BLE|TELNET|WEB|UART|USB|MSC (MSC: hold BOOT
+ *                               on its Wait screen for USB disk mode)
  *   ui.baud    115200           9600|19200|38400|57600|115200|230400|460800|921600
  *                               (UART UI speed; read when the UART UI starts)
  *   ui.echo    1                1 = serial UIs echo typed characters

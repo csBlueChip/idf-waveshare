@@ -101,8 +101,10 @@ Interface
   UI WEB                        reply SSID/PWD/URL, switch to web console
   UI UART                       reply BAUD/PINS, switch to the UART console
   UI USB                        switch to the USB serial console
+  UI MSC                        MSC Wait screen: no console; hold BOOT
+                                to start USB disk mode (as FILES)
   UI NEXT                       switch to the next interface: WEB ->
-                                TELNET -> BLE -> USB -> UART -> WEB
+                                TELNET -> BLE -> USB -> UART -> MSC -> WEB
                                 (as BOOT double press; ui.boot unchanged)
     Events (to the client):
     <<UI CONNECT>>              first message of a new session
@@ -342,6 +344,18 @@ SD card manager (web UI only)
   the selected row or the folder opened (the description in its own
   colour, status.desc in syntax.cfg). FAT HIDDEN entries are grey,
   SYSTEM dark blue, in the list and the tree.
+  Info (i in a circle, key I): add / edit / remove (empty) the
+  DESCRIPT.ION description of the selected entry, or the folder's "."
+  line with nothing selected. Delete keeps a record: the entry's line
+  gets a '*' in front (ignored for descriptions). Rename updates the
+  entry; a move takes it to the new folder's DESCRIPT.ION. Names with
+  spaces are written in quotes; other lines, CRLF / LF and non-ASCII
+  bytes are kept (read with /fm/get, written with /fm/put).
+  Keys (? shows them): Up/Down move (list or tree), Tab switches tree /
+  list, Left/Right fold / unfold (tree), Enter open / View / Download,
+  Ctrl+Enter Download, Backspace parent, F5 Refresh, + New folder,
+  Ctrl+U Upload, F2 Rename, I Info, Del Delete, Ctrl+X Exit; viewer: L lines,
+  W wrap, Ctrl+Enter Download, Esc close.
   FILES SYNEXPORT               write the built-in viewer colours to
                                 SD:/sys/syntax_builtin.cfg (with
                                 comments listing every highlighted word
@@ -385,7 +399,7 @@ Scripts (SD:/scripts/name.s; language: SCRIPTING.txt, section 9 here)
   rad.pwr    8.5             Wi-Fi TX power 2..20 dBm (0.25 steps)
   rad.nogw   0               1 = DHCP offers no gateway (engineering)
   rad.maxcli 1               Wi-Fi clients at a time 1..4
-  ui.boot    BLE             interface at boot: BLE|TELNET|WEB|UART|USB
+  ui.boot    BLE             interface at boot: BLE|TELNET|WEB|UART|USB|MSC
   ui.baud    115200          UART UI speed: 9600|19200|38400|57600|115200|
                              230400|460800|921600 (read when UART UI starts)
   ui.echo    1               1 = serial UIs echo what you type
@@ -499,7 +513,7 @@ Create /images/ and /www/ yourself (missing = none).
 
   Fades are internal: SCR TR / TRP settings are not changed.
 
-  Details (font 1, orange on black):
+  Details (font 1, orange on black; the interface after "UI  : " in white):
 
     WEB / TELNET              BLE
     UI  : WEB:80              UI  : BLE
@@ -513,13 +527,18 @@ Create /images/ and /www/ yourself (missing = none).
     Baud: <ui.baud>
     Pins: TX43 RX44
 
+    MSC
+    UI  : MSC - Flash Drive
+    BOOT: hold to start       (white after the labels)
+
   - "Link Active" (white): a device has joined the Wi-Fi and has an IP;
     back to "Waiting..." when the last one leaves.
 
   - BOOT (GP0) on any Wait screen:
-      long press (btn.long)  show the Wi-Fi password until released
+      long press (btn.long)  show the Wi-Fi password until released;
+                             MSC: start USB disk mode (as FILES)
       double press           next interface: WEB -> TELNET -> BLE -> USB
-                             -> UART -> WEB
+                             -> UART -> MSC -> WEB
                              (second press within btn.dbl of the first
                              release; this session only, ui.boot unchanged)
   - Lines too long for the screen end in '~'.

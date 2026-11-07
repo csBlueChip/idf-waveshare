@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include "esp_log.h"
 #include "esp_http_server.h"
 #include "esp_timer.h"
@@ -68,6 +69,7 @@ static esp_err_t webGetPage(httpd_req_t *req);
 static esp_err_t webGet(httpd_req_t *req);
 static bool      webSendFile(httpd_req_t *req);
 static esp_err_t webGetCfg(httpd_req_t *req);
+static esp_err_t webTime(httpd_req_t *req);
 static esp_err_t webWs(httpd_req_t *req);
 static esp_err_t webWsOpen(httpd_req_t *req);
 static esp_err_t webRedirect(httpd_req_t *req, httpd_err_code_t err);
@@ -117,7 +119,7 @@ esp_err_t webStart(webRxCb_t rxCb, webConnCb_t connCb)
 	cfg.close_fn         = webOnClose;
 	cfg.open_fn          = webOnOpen;
 	cfg.uri_match_fn     = httpd_uri_match_wildcard;	/* catch-all handler below; exact URIs match first */
-	cfg.max_uri_handlers = 3 + FM_URI_COUNT + 2;		/* ours + the SD manager's + spare */
+	cfg.max_uri_handlers = 4 + FM_URI_COUNT + 2;		/* ours + the SD manager's + spare */
 	err = httpd_start(&s_server, &cfg);
 	if (err != ESP_OK) {
 		dnsStop();
@@ -127,15 +129,16 @@ esp_err_t webStart(webRxCb_t rxCb, webConnCb_t connCb)
 
 	const httpd_uri_t uris[] = {
 		{ .uri = "/cfg", .method = HTTP_GET, .handler = webGetCfg },
+		{ .uri = "/time", .method = HTTP_POST, .handler = webTime },
 		{ .uri = "/ws",  .method = HTTP_GET, .handler = webWs, .is_websocket = true,
 		  .ws_post_handshake_cb = webWsOpen },
 		{ .uri = "/*",   .method = HTTP_GET, .handler = webGet },	/* last: everything else */
 	};
-	for (size_t i = 0; i < 2; i++) {
+	for (size_t i = 0; i < 3; i++) {
 		httpd_register_uri_handler(s_server, &uris[i]);
 	}
 	fmRegister(s_server);					/* /fm ... before the catch-all */
-	httpd_register_uri_handler(s_server, &uris[2]);
+	httpd_register_uri_handler(s_server, &uris[3]);
 	httpd_register_err_handler(s_server, HTTPD_404_NOT_FOUND, webRedirect);
 
 	ESP_LOGI(TAG, "portal at %s", s_home);
@@ -292,6 +295,30 @@ static esp_err_t webGetCfg(httpd_req_t *req)
 	esp_err_t err = httpd_resp_send(req, json, HTTPD_RESP_USE_STRLEN);
 	webDbgGet(req, host, "cfg", t0);
 	return err;
+}
+
+/* POST /time?t=<seconds>: set the clock from the browser's LOCAL time (the
+ * device has no time zone, so FAT dates then match the PC's). Sent by the
+ * console page on connect and by the SD manager page when it opens. */
+static esp_err_t webTime(httpd_req_t *req)
+{
+	char q[48], v[24];
+	char *end;
+	if (httpd_req_get_url_query_str(req, q, sizeof(q)) != ESP_OK ||
+	    httpd_query_key_value(q, "t", v, sizeof(v)) != ESP_OK) {
+		httpd_resp_set_status(req, "400 Bad Request");
+		return httpd_resp_sendstr(req, "missing t");
+	}
+	long long t = strtoll(v, &end, 10);
+	if (*end || t < 1577836800LL || t > 4102444800LL) {	/* 2020 .. 2100 */
+		httpd_resp_set_status(req, "400 Bad Request");
+		return httpd_resp_sendstr(req, "bad time");
+	}
+	struct timeval tv = { .tv_sec = (time_t)t, .tv_usec = 0 };
+	settimeofday(&tv, NULL);
+	WEB_DBG("clock set from the browser: %lld", t);
+	httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+	return httpd_resp_sendstr(req, "OK");
 }
 
 /* Anything unknown (incl. OS connectivity checks) -> the console page. */

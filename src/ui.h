@@ -8,7 +8,9 @@
 
 /*
  * User interface manager. Exactly one interface is active at a time;
- * the device boots on the one in NV ui.boot (default BLE).
+ * the device boots on the one in NV ui.boot (default BLE; MSC = the MSC
+ * Wait screen).
+ * The browser pages send their local time (POST /time), setting the clock.
  *
  *   BLE      Nordic UART Service (ble_serial)
  *   TELNET   Wi-Fi access point (wifi_ap) + telnet on port 23 (telnet)
@@ -35,7 +37,8 @@
  *   UI WEB      send SSID/PWD/URL (from NV), then switch to the web console
  *   UI UART     send BAUD (from NV), then switch to the UART console
  *   UI USB      switch to the USB serial console
- *   UI NEXT     switch to the next one (WEB -> TELNET -> BLE -> USB -> UART -> WEB)
+ *   UI MSC      MSC Wait screen (no console): BOOT held starts USB disk mode
+ *   UI NEXT     switch to the next one (WEB -> TELNET -> BLE -> USB -> UART -> MSC -> WEB)
  *   EVENTS [src 0|1]  which <<src ...>> events the client receives, src =
  *               BTN IMU UI SCRIPT ALL (this boot only; all on at boot)
  *
@@ -44,8 +47,8 @@
  * (none left; the telnet/web session is dropped, so only scripts see it).
  *
  * BOOT on the Wait screen: long press (NV btn.long) shows the Wi-Fi password
- * until released; double press (second press within NV btn.dbl) switches to
- * the next interface, WEB -> TELNET -> BLE -> USB -> UART -> WEB (this
+ * until released (MSC screen: starts USB disk mode, as FILES); double press (second press within NV btn.dbl) switches to
+ * the next interface, WEB -> TELNET -> BLE -> USB -> UART -> MSC -> WEB (this
  * session only).
  */
 
@@ -59,6 +62,7 @@ typedef enum {
 	UI_WEB,
 	UI_UART,
 	UI_USB,
+	UI_MSC,		/* Wait screen only: hold BOOT to start USB disk mode (FILES) */
 } uiIf_t;
 
 /* Init the BLE stack (not advertising), boot square; register UI, EVENTS. No

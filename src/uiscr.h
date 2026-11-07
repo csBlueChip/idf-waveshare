@@ -12,7 +12,8 @@
  *   connect     SCR AUTO 0 ; ROT 0 ; CLS 0 0 0 ; fade 1000 ; splash ; fade 1000 ; SCR AUTO 1
  *   disconnect  SCR AUTO 1 ; CLS 0 0 0 ; fade 1000 ; wait   (also on a UI switch)
  *
- * Details screen ("onStart"), font 1, ink 220 110 20 on black, 10 px side margins:
+ * Details screen ("onStart"), font 1, ink 220 110 20 on black, 10 px side margins;
+ * the interface (after "UI  : ") in white:
  *   WEB/TELNET:  UI  : WEB:80 | UI  : TELNET:23
  *                SSID: <rad.ssid>
  *                Pwd : (hold BOOT)      password shown while BOOT (GP0) is held
@@ -20,6 +21,8 @@
  *                WiFi: Waiting... | Link Active (white: a station has an IP)
  *   BLE:         UI  : BLE
  *                Name: <rad.ble>
+ *   MSC:         UI  : MSC - Flash Drive
+ *                BOOT: hold to start    (BOOT held: USB disk mode, as FILES)
  *   Lines too long for the screen end in '~'.
  *
  * Splash: SD:/sys/splash.png at 0,0 ("sys/splash.png" printed on the top line if missing).

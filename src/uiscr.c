@@ -41,6 +41,7 @@ static void uiTelnetOnStart(void);
 static void uiWebOnStart(void);
 static void uiUartOnStart(void);
 static void uiUsbOnStart(void);
+static void uiMscOnStart(void);
 
 /* ================= Public API ================= */
 
@@ -53,6 +54,7 @@ void uiScrStart(uiIf_t ifc)
 	case UI_WEB:    onStart = uiWebOnStart; break;
 	case UI_UART:   onStart = uiUartOnStart; break;
 	case UI_USB:    onStart = uiUsbOnStart; break;
+	case UI_MSC:    onStart = uiMscOnStart; break;
 	default:        return;
 	}
 
@@ -177,7 +179,7 @@ static void uiScrFade(int ms)
 
 static void uiBleOnStart(void)
 {
-	uiScrLine(0, "UI  : BLE", "", UISCR_INK);
+	uiScrLine(0, "UI  : ", "BLE", UISCR_LINK_INK);
 	uiScrLine(1, "Name: ", nvGet("rad.ble"), UISCR_INK);
 }
 
@@ -194,7 +196,7 @@ static void uiWebOnStart(void)
 static void uiUartOnStart(void)
 {
 	char text[24];
-	uiScrLine(0, "UI  : UART", "", UISCR_INK);
+	uiScrLine(0, "UI  : ", "UART", UISCR_LINK_INK);
 	uiScrLine(1, "Baud: ", nvGet("ui.baud"), UISCR_INK);
 	snprintf(text, sizeof(text), "TX%d RX%d", SER_UART_TX_GPIO, SER_UART_RX_GPIO);
 	uiScrLine(2, "Pins: ", text, UISCR_INK);
@@ -202,7 +204,13 @@ static void uiUartOnStart(void)
 
 static void uiUsbOnStart(void)
 {
-	uiScrLine(0, "UI  : USB", "", UISCR_INK);
+	uiScrLine(0, "UI  : ", "USB", UISCR_LINK_INK);
+}
+
+static void uiMscOnStart(void)
+{
+	uiScrLine(0, "UI  : ", "MSC - Flash Drive", UISCR_LINK_INK);
+	uiScrLine(1, "BOOT: ", "hold to start", UISCR_LINK_INK);
 }
 
 /* ================= Internals ================= */
@@ -210,8 +218,8 @@ static void uiUsbOnStart(void)
 static void uiScrWifi(const char *name, int port)
 {
 	char text[48];
-	snprintf(text, sizeof(text), "UI  : %s:%d", name, port);
-	uiScrLine(0, text, "", UISCR_INK);
+	snprintf(text, sizeof(text), "%s:%d", name, port);
+	uiScrLine(0, "UI  : ", text, UISCR_LINK_INK);	/* the interface in white */
 	uiScrLine(1, "SSID: ", nvGet("rad.ssid"), UISCR_INK);
 	uiScrLine(UISCR_ROW_PWD, "Pwd : ", UISCR_HIDDEN, UISCR_INK);
 	snprintf(text, sizeof(text), "%s %s", nvGet("rad.ip"), nvGet("rad.mask"));

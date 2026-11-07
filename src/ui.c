@@ -25,6 +25,7 @@
 #include "log.h"
 #include "script.h"
 #include "fm.h"
+#include "usbdisk.h"
 
 static const char *TAG = "ui";
 
@@ -50,6 +51,7 @@ enum {
 	UI_EV_LINK,		/* Wi-Fi link up/down (station with IP / none left) */
 	UI_EV_CALL,		/* uiRunMain(): data = function + argument */
 	UI_EV_FMSTOP,		/* BOOT short press on the SD manager screen */
+	UI_EV_MSC,		/* BOOT held on the MSC Wait screen: start disk mode */
 };
 
 typedef struct {
@@ -491,6 +493,7 @@ static const char *uiName(uiIf_t ifc)
 	case UI_WEB:    return "WEB";
 	case UI_UART:   return "UART";
 	case UI_USB:    return "USB";
+	case UI_MSC:    return "MSC";
 	default:        return "NONE";
 	}
 }
@@ -601,6 +604,11 @@ static void uiEvent(uint8_t kind)
 	case UI_EV_FMSTOP:
 		fmStop();
 		break;
+	case UI_EV_MSC:
+		if (s_active == UI_MSC && usbDiskBegin() != NULL) {
+			ESP_LOGW(TAG, "disk mode could not start");
+		}
+		break;
 	case UI_EV_BUTTON:
 		uiScrPassword(s_pwdShown);
 		break;
@@ -709,15 +717,21 @@ static void uiBootPoll(void *arg)
 		s_bootLong  = false;
 		s_bootPress = now;
 	} else if (down && !s_bootLong && now - s_bootPress >= s_bootLongMs) {
-		s_bootLong = true;			/* long press: show */
-		s_pwdShown = true;
-		uiPost(UI_EV_BUTTON);
+		s_bootLong = true;			/* long press: show (MSC: start disk mode) */
+		if (s_active == UI_MSC) {
+			uiPost(UI_EV_MSC);
+		} else {
+			s_pwdShown = true;
+			uiPost(UI_EV_BUTTON);
+		}
 	} else if (!down && s_bootDown) {		/* release */
 		s_bootDown = false;
 		if (s_bootLong) {
-			s_pwdShown    = false;		/* hide; never part of a double */
-			s_bootRelease = 0;
-			uiPost(UI_EV_BUTTON);
+			s_bootRelease = 0;		/* never part of a double */
+			if (s_active != UI_MSC) {
+				s_pwdShown = false;	/* hide */
+				uiPost(UI_EV_BUTTON);
+			}
 		} else if (s_bootRelease && s_bootPress - s_bootRelease <= s_bootDblMs) {
 			s_bootRelease = 0;
 			uiPost(UI_EV_NEXT);
@@ -742,7 +756,7 @@ static void uiNextIf(void)
 	}
 }
 
-/* WEB -> TELNET -> BLE -> USB -> UART -> WEB (BOOT double press, UI NEXT). */
+/* WEB -> TELNET -> BLE -> USB -> UART -> MSC -> WEB (BOOT double press, UI NEXT). */
 static uiIf_t uiIfNext(uiIf_t ifc)
 {
 	switch (ifc) {
@@ -750,7 +764,8 @@ static uiIf_t uiIfNext(uiIf_t ifc)
 	case UI_TELNET: return UI_BLE;
 	case UI_BLE:    return UI_USB;
 	case UI_USB:    return UI_UART;
-	case UI_UART:   return UI_WEB;
+	case UI_UART:   return UI_MSC;
+	case UI_MSC:    return UI_WEB;
 	default:        return UI_NONE;
 	}
 }
@@ -770,6 +785,9 @@ static uiIf_t uiBootIf(void)
 	}
 	if (strcmp(b, "USB") == 0) {
 		return UI_USB;
+	}
+	if (strcmp(b, "MSC") == 0) {
+		return UI_MSC;
 	}
 	return UI_BLE;
 }
@@ -822,13 +840,15 @@ static const char *uiCmd(int argc, char *argv[], cmdReply_t reply)
 		target = UI_UART;
 	} else if (strcasecmp(argv[0], "USB") == 0) {
 		target = UI_USB;
+	} else if (strcasecmp(argv[0], "MSC") == 0) {
+		target = UI_MSC;			/* Wait screen only; hold BOOT for disk mode */
 	} else if (strcasecmp(argv[0], "NEXT") == 0) {
 		target = uiIfNext(s_active);
 		if (target == UI_NONE) {
 			return "no active interface";
 		}
 	} else {
-		return "usage: UI [BLE|TELNET|WEB|UART|USB|NEXT]";
+		return "usage: UI [BLE|TELNET|WEB|UART|USB|MSC|NEXT]";
 	}
 
 	if (target == s_active) {

@@ -26,7 +26,14 @@ To do
      rename / move, new folder; View (images, text, HTML + JS toggle);
      FAT HIDDEN / SYSTEM colours; DESCRIPT.ION tooltips + status line;
      .nvram view redacted; FILES FMEXPORT / SYNEXPORT (command list);
-     sys/fm.html and sys/syntax.cfg overrides (and a bad syntax.cfg).
+     sys/fm.html and sys/syntax.cfg overrides (and a bad syntax.cfg);
+     keyboard shortcuts (?); active-pane frame; Info (DESCRIPT.ION edit,
+     '*' on delete, rename / move keeps the entry).
+ 14. Board test - MSC: rotation ... UART -> MSC -> WEB, ui.boot MSC, UI
+     MSC; "BOOT: hold to start" starts disk mode; interface name in white
+     on every Wait screen.
+ 15. Board test - clock: after the web console connects (or the SD
+     manager opens) new files get today's date, not 1980-01-01.
 
 On hold
  10. Further RAM saving (now 97 KB free on Wi-Fi): stack trims, Wi-Fi /
@@ -58,3 +65,5 @@ Done
   - Fades as constants (200 / 200 / 800 ms); double click: no pause.
   - SD card manager (FILES WEB): browse, download, upload, view,
     highlighting, configurable colours, icons.
+  - SD manager keyboard shortcuts; MSC Wait-screen mode; clock set from
+    the browser (POST /time).

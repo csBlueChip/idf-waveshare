@@ -275,6 +275,25 @@ conversation context. Keep it current, like the README.
             line. Status: "n folder(s) n file(s)" with proper plurals,
             " | <desc>" of the selected row / opened folder. Tree rows get
             titles and hid/sys colours.
+    fmkeys  Page keyboard: pane "list"/"tree" (Tab, highlighted border),
+            tsel = tree position (dashed outline); Up/Down, Left/Right
+            (fold / to parent), Enter, Ctrl+Enter, Backspace, F5, +,
+            Ctrl+U, F2, Del, Ctrl+X, ? (pop-up); viewer L W Ctrl+Enter
+            Esc. Not used: Ctrl+N / Ctrl+W (Chrome never passes them).
+            Active pane frame = a border (an outline / inset shadow was
+            covered by the sticky header and highlighted rows).
+    fminfo  Page-only: ionEdit(dir, name, op) reads DESCRIPT.ION raw
+            (/fm/get, binary string), edits one line (set / star / rename /
+            take), writes it back with /fm/put over=1. Delete -> star;
+            rename -> rename; move -> take + set in the target folder.
+            ionParse handles "quoted names"; '*' lines are not used.
+    msc     UI_MSC: a Wait-screen-only interface (no start / stop work);
+            rotation ... UART -> MSC -> WEB; NV ui.boot MSC; UI MSC. BOOT
+            long press on it -> UI_EV_MSC -> usbDiskBegin() (= FILES).
+            Wait screens: "UI  : " orange, the interface white.
+    time    POST /time?t=<browser local seconds> (web.c) -> settimeofday;
+            index.html sends it on WebSocket open, fm.html on load. No TZ
+            on the device, so local time = FAT time; lost at power-off.
   Notes for Step A:
     - cmd.c strips '#' comments and is NOT quote-aware: '#' inside quotes
       needs \# at the console. The script loader has its own rules.

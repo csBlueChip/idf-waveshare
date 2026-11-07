@@ -250,6 +250,18 @@ static void usbDiskReboot(const char *why)
 
 /* ================= Commands ================= */
 
+const char *usbDiskBegin(void)
+{
+	if (s_active) {
+		return "already in disk mode";
+	}
+	if (usbDiskStart() != ESP_OK) {
+		return "disk mode failed";
+	}
+	cmdDisable();			/* nothing else may run alongside disk mode */
+	return NULL;
+}
+
 static const char *usbDiskCmd(int argc, char *argv[], cmdReply_t reply)
 {
 	if (argc == 1 && strcasecmp(argv[0], "FMEXPORT") == 0) {
@@ -290,15 +302,11 @@ static const char *usbDiskCmd(int argc, char *argv[], cmdReply_t reply)
 		}
 		return err;
 	}
-	if (s_active) {
-		return "already in disk mode";
+	const char *err = usbDiskBegin();
+	if (!err) {
+		reply("Disk Mode Enabled\n");
 	}
-	if (usbDiskStart() != ESP_OK) {
-		return "disk mode failed";
-	}
-	cmdDisable();			/* nothing else may run alongside disk mode */
-	reply("Disk Mode Enabled\n");
-	return NULL;
+	return err;
 }
 
 /* ================= LED activity =================

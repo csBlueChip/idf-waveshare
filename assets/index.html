@@ -100,6 +100,11 @@
 	 * network (~21 s on Windows) would hold up every later one. */
 	var RETRY_MS = 2000, PROBE_MS = 2000, OPEN_MS = 3000;
 	function retry() { setTimeout(connect, RETRY_MS); }
+	/* the browser's local time to the device (FAT dates then match the PC) */
+	function sendTime() {
+		var t = Math.floor(Date.now() / 1000) - new Date().getTimezoneOffset() * 60;
+		try { fetch("/time?t=" + t, { method: "POST" }).catch(function () {}); } catch (e) { }
+	}
 	function connect() {
 		var ctl   = window.AbortController ? new AbortController() : null;
 		var timer = setTimeout(function () { if (ctl) ctl.abort(); }, PROBE_MS);
@@ -140,6 +145,7 @@
 			retry();
 		}
 		sock.onopen = function () {
+			sendTime();				/* the device has no clock: give it ours */
 			opened = true;
 			clearTimeout(guard);
 			lastRx = Date.now();

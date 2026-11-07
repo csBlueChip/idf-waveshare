@@ -764,7 +764,7 @@ implementation:
   - New commands: RUN STOP PAUSE CONT LOAD STEP BPT VARS LIST STACK PRINT DEBUG
     RNG EVENTS LOG.
   - UI NEXT: switch to the next interface in the BOOT double-press order
-    (WEB -> TELNET -> BLE -> USB -> UART -> WEB).
+    (WEB -> TELNET -> BLE -> USB -> UART -> MSC -> WEB).
   - NV: sys.autorun; rad.ssid, rad.pwd, rad.ble refuse ':' and '|'.
   - WAIT ms (console and scripts), WAIT EVENT ms and INPUT ms use the
     high-resolution timer: 1 ms resolution (the 200 Hz tick is unchanged).

@@ -11,6 +11,8 @@
  * Web UI: HTTP on port 80 + captive-portal DNS.
  *   /cfg   {"hist":n} - command history length from NV web.hist
  *   /fm... SD card manager (FILES WEB) - see fm.h
+ *   POST /time?t=n  set the clock (n = the browser's local time in seconds;
+ *          sent by both pages, so files written later get real FAT dates)
  *   /ws    WebSocket: each text frame from the page is one command line;
  *          everything sent with webSend() is pushed back as text frames
  *   other  the file SD:/www/<path> if it exists ("/" = /www/index.html; no

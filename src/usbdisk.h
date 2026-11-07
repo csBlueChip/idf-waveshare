@@ -27,3 +27,7 @@ esp_err_t usbDiskInit(void);
 
 /* Enter disk mode from a separate task (returns immediately). */
 esp_err_t usbDiskStart(void);
+
+/* As the FILES command (disk mode + all further commands refused): NULL or
+ * the error. Used by the MSC Wait screen (BOOT held). */
+const char *usbDiskBegin(void);

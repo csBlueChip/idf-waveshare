@@ -301,8 +301,10 @@ static const char *nvChkUi(const char *in, int min, int max, char *out)
 		strcpy(out, "UART");
 	} else if (strcasecmp(in, "USB") == 0) {
 		strcpy(out, "USB");
+	} else if (strcasecmp(in, "MSC") == 0) {
+		strcpy(out, "MSC");
 	} else {
-		return "must be BLE|TELNET|WEB|UART|USB";
+		return "must be BLE|TELNET|WEB|UART|USB|MSC";
 	}
 	return NULL;
 }
