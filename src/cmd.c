@@ -18,6 +18,7 @@ static EXT_RAM_BSS_ATTR cmdEntry_t s_cmds[CMD_MAX_COMMANDS];
 static int        s_cmdCount;
 static volatile bool s_disabled;
 static cmdPostHook_t s_postHook;
+static volatile cmdGate_t s_gate;
 
 static const char *cmdHelp(int argc, char *argv[], cmdReply_t reply);
 
@@ -69,6 +70,21 @@ esp_err_t cmdRegisterRaw(const char *name, cmdRawHandler_t handler, const char *
 		.name = name, .raw = handler, .help = help ? help : name,
 	};
 	return ESP_OK;
+}
+
+int cmdCount(void)
+{
+	return s_cmdCount;
+}
+
+const char *cmdName(int i)
+{
+	return (i >= 0 && i < s_cmdCount) ? s_cmds[i].name : NULL;
+}
+
+void cmdSetGate(cmdGate_t gate)
+{
+	s_gate = gate;
 }
 
 esp_err_t cmdSetPostHook(cmdPostHook_t hook)
@@ -135,6 +151,14 @@ void cmdExecute(const char *line, cmdReply_t reply)
 
 	if (argc == 0) {
 		return;                              /* empty or comment-only line: silent */
+	}
+
+	cmdGate_t gate = s_gate;
+	const char *refused = gate ? gate(argc, argv) : NULL;
+	if (refused) {
+		snprintf(out, sizeof(out), "ERR %s\n", refused);
+		reply(out);
+		return;
 	}
 
 	for (int i = 0; i < s_cmdCount; i++) {

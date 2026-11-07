@@ -44,8 +44,18 @@ esp_err_t cmdRegisterRaw(const char *name, cmdRawHandler_t handler, const char *
 typedef void (*cmdPostHook_t)(void);
 esp_err_t cmdSetPostHook(cmdPostHook_t hook);
 
+/* Optional gate run before every command: return NULL to allow it, or the
+ * error text to refuse it ("ERR text"). E.g. the SD manager's exclusive mode. */
+typedef const char *(*cmdGate_t)(int argc, char *argv[]);
+void cmdSetGate(cmdGate_t gate);
+
 /* Reject all further commands ("ERR commands disabled") until reboot. */
 void cmdDisable(void);
+
+/* Registered commands: count and the name of entry i (0..count-1), in
+ * registration order. */
+int         cmdCount(void);
+const char *cmdName(int i);
 
 /* A command of that name is registered. */
 bool cmdExists(const char *name);

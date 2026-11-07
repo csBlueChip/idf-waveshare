@@ -413,6 +413,13 @@ implementation:
     FSEEK file END [n]              size + 1 - n (END = END 0 = end of file)
     FSEEK file SET n                position n
     FSEEK file OFFS n               current position + n (may be negative)
+    FSEEK file TAG text             from the start of the file, the first
+                                    line equal to text (PRINT text rules;
+                                    trailing spaces, tabs, CR ignored;
+                                    case-sensitive); the position goes to
+                                    the start of the next line. Not found:
+                                    ERR "no tag text", position unchanged
+                                      FSEEK quiz TAG Q=$n
     FCLOSE file                     forget the position
 
   Positions count from 1, as everything in this language: byte #1 is the

@@ -9,6 +9,7 @@ src="$here/../../src"
 out=${TMPDIR:-/tmp}/scrtest
 gcc -std=gnu11 -Wall -Wextra -Werror -Wno-unused-parameter -g -O1 -I"$src" \
 	"$here/host.c" "$src/scr_load.c" "$src/scr_eval.c" "$src/scr_exec.c" -lm -o "$out"
+cd "$here"			# paths in .opt files are relative to tests/scrtest
 pass=0
 fail=0
 for f in "$here"/scripts/t_*.s; do

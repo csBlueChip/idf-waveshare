@@ -863,6 +863,65 @@ static long fileSize(const char *fname, bool *ro, bool mustExist)
 	return n;
 }
 
+/* FSEEK file TAG text: from the start of the file, the first line equal to
+ * text (PRINT text rules; trailing spaces, tabs and CR ignored on both
+ * sides, case-sensitive). Returns the position of the line after it. */
+static long seekTag(const char *fname, const char *arg)
+{
+	const char *t   = scrUnquote(arg);
+	const char *sub = scrSubst(t, SUB_TEXT, 0);
+	char       *tag = scrArenaStr(sub, strlen(sub));
+	scrUnescape(tag);
+	int tl = strlen(tag);
+	while (tl > 0 && (tag[tl - 1] == ' ' || tag[tl - 1] == '\t' || tag[tl - 1] == '\r')) {
+		tag[--tl] = '\0';
+	}
+	if (tl == 0) {
+		scrFail("usage: FSEEK file TAG text");
+	}
+
+	enum { BLK = 1024 };
+	char       *blk  = scrArena(BLK);
+	char       *lb   = scrArena(tl + 1);	/* first tl + 1 chars of the line */
+	long        off  = 0;			/* file offset of blk[0] */
+	int         len  = 0;			/* chars of the current line so far */
+	int         trim = 0;			/* its length without trailing blanks */
+	const char *err  = NULL;
+
+	for (;;) {
+		int got = scrHostFileRead(fname, off, blk, BLK, &err);
+		if (got < 0) {
+			scrFail("%s: %s", fname, err ? err : "read failed");
+		}
+		for (int i = 0; i <= got; i++) {
+			bool end = (i == got);
+			if (end && got == BLK) {
+				break;				/* more to read */
+			}
+			char c = end ? '\n' : blk[i];
+			if (c == '\n') {
+				if (trim == tl && memcmp(lb, tag, tl) == 0) {
+					return off + i + 2;	/* 1-based: the byte after '\n' */
+				}
+				if (end) {
+					scrFail("no tag %s", tag);
+				}
+				len  = 0;
+				trim = 0;
+				continue;
+			}
+			if (len <= tl) {
+				lb[len] = c;
+			}
+			len++;
+			if (c != ' ' && c != '\t' && c != '\r') {
+				trim = len;
+			}
+		}
+		off += got;
+	}
+}
+
 static void stFile(scrFrame_t *f, scrStmt_t *s)
 {
 	const char *p = s->arg;
@@ -917,8 +976,10 @@ static void stFile(scrFrame_t *f, scrStmt_t *s)
 				scrFail("FSEEK %s n: n must be a whole number", set ? "SET" : "OFFS");
 			}
 			np = set ? (long)d : *pos + (long)d;
+		} else if (scrWordIs(p, "TAG")) {
+			np = seekTag(fname, scrSkip(p + 3));
 		} else {
-			scrFail("usage: FSEEK file START | END [n] | SET n | OFFS n");
+			scrFail("usage: FSEEK file START | END [n] | SET n | OFFS n | TAG text");
 		}
 		*pos = np < 1 ? 1 : np > size + 1 ? size + 1 : np;
 		break;

@@ -1,0 +1,11 @@
+> tag 2: Q=second
+> input 1: yes (1)
+> input 2: no (1)
+> input 3: '' (0)
+> rnd: 709
+<<SCRIPT t_opts END>>
+[result END]
+[t_opts.var]
+$$ans="yes no"
+[end]
+[none.txt: no such file]

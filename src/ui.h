@@ -100,3 +100,6 @@ uiIf_t uiActive(void);
  * disconnects before it runs. */
 typedef void (*uiMainFn_t)(int arg);
 bool uiRunMain(uiMainFn_t fn, int arg);
+
+/* SD manager (fm.c) turned off: back to the Wait screen if no client. Any task. */
+void uiFmChanged(void);

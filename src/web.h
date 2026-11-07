@@ -10,6 +10,7 @@
 /*
  * Web UI: HTTP on port 80 + captive-portal DNS.
  *   /cfg   {"hist":n} - command history length from NV web.hist
+ *   /fm... SD card manager (FILES WEB) - see fm.h
  *   /ws    WebSocket: each text frame from the page is one command line;
  *          everything sent with webSend() is pushed back as text frames
  *   other  the file SD:/www/<path> if it exists ("/" = /www/index.html; no
@@ -17,6 +18,8 @@
  *          otherwise "/" is the built-in console page (assets/index.html)
  *          and anything else a 302 redirect to http://<rad.ip>/ (makes
  *          phones open the portal)
+ * A text frame containing "<<GOTO /path>>" makes the console page open
+ * that path (FILES WEB sends "<<GOTO /fm>>").
  * One client: a new WebSocket connection replaces the previous one; the old
  * page is closed with code 4000 ("replaced") and does not reconnect.
  * Heartbeat: the frame "<<PING>>" is answered "<<PONG>>" by the server task

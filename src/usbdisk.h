@@ -5,7 +5,8 @@
 /*
  * USB disk mode: expose the SD card to a PC as a USB mass-storage drive.
  *
- * Command registered by usbDiskInit():
+ * Command registered by usbDiskInit() (FILES WEB [STOP|EXIT] / FILES FMEXPORT: SD
+ * manager, see fm.h):
  *   FILES   reply "Disk Mode Enabled", shut down the active user interface,
  *           show the drive image (SD:/sys/usbdrive.png if present and usable,
  *           else the built-in assets/usbdrive.png), LED off, backlight 30 %, then hand the

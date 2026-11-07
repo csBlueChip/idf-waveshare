@@ -7,17 +7,37 @@ To do
   2. Script board test: sections G, H, I (system scripts now in SD:/sys/:
      onBoot.s onWait.s onConnect.s).
   3. OTA firmware update.
+  4. Board test - scripts: run.files / .FILES n; FSEEK TAG; boast.s (all
+     modes, time-outs, boast.var); persist.s; !!stop / !!pause during
+     INPUT (stop / pause as text).
+  5. Board test - files: FCAT / FSTAT / FDELETE with name.var and
+     name.nvram; FDIR txt|var|nvram|*; FCAT of a .nvram shows
+     !key=[redacted]; NV EXPORT / IMPORT with '!' lines.
+  6. Board test - log volume: /sys/debug.cfg at boot; LOG DEBUG [device
+     [n [SAVE]]], LOG DEBUG SAVE, LOG DEBUG ALL n [SAVE]; tag groups
+     (paste any line that lands in the wrong device).
+  7. Board test - boot order: sdInit before the LCD (screen comes up
+     after the card mount; no card: delay?).
+  8. Board test - UI switch: fades 200 / 200 / splash 800 ms; double
+     click switches without the 300 ms pause.
+  9. Board test - SD manager: FILES WEB / FILES WEB [STOP|EXIT] (also
+     re-open), gate (other commands refused), screen, BOOT exit; browse,
+     download, upload (speed, broken upload leaves no .upl), delete,
+     rename / move, new folder; View (images, text, HTML + JS toggle);
+     FAT HIDDEN / SYSTEM colours; DESCRIPT.ION tooltips + status line;
+     .nvram view redacted; FILES FMEXPORT / SYNEXPORT (command list);
+     sys/fm.html and sys/syntax.cfg overrides (and a bad syntax.cfg).
 
 On hold
-  4. Further RAM saving (now 97 KB free on Wi-Fi): stack trims, Wi-Fi /
+ 10. Further RAM saving (now 97 KB free on Wi-Fi): stack trims, Wi-Fi /
      lwIP / FreeRTOS code to flash, fewer Wi-Fi RX buffers, BLE release.
      Details in NOTES.txt ("RAM measured").
-  5. tests/test_serial.txt - waiting for the UART to be wired up.
+ 11. tests/test_serial.txt - waiting for the UART to be wired up.
 
 Parked (code kept, switched off)
-  6. IMU pedometer: the chip never counted steps (IMU_STEP_ENABLE 0 in
+ 12. IMU pedometer: the chip never counted steps (IMU_STEP_ENABLE 0 in
      imu.c; IMU STEP replies "not implemented").
-  7. Chip significant-motion engine: its timing could not be restarted;
+ 13. Chip significant-motion engine: its timing could not be restarted;
      SIGMO is timed in firmware instead (IMU_SIGMO_CHIP 0 in imu.c).
 
 Done
@@ -28,3 +48,13 @@ Done
   - QUIET 0..3, default 2 (no command OKs / replies, no events to the
     client; ERRs shown).
   - demo.s / spec example: BTN 1 1 0 1 (double press works).
+  - Script data files: NV run.files (1..16) and .FILES n; FSEEK TAG.
+  - Data file names: FCAT / FSTAT / FDELETE take name.var / name.nvram;
+    FDIR [txt|var|nvram|*]; '!' secret lines in .nvram (FCAT redacts).
+  - INPUT: only !!STOP / !!PAUSE are commands while it waits.
+  - Demo scripts persist.s and boast.s (+ data/boast.txt).
+  - PC script tester: README.txt, -file / -input / -seed / -dump.
+  - Log volume per device (/sys/debug.cfg, LOG DEBUG ...).
+  - Fades as constants (200 / 200 / 800 ms); double click: no pause.
+  - SD card manager (FILES WEB): browse, download, upload, view,
+    highlighting, configurable colours, icons.

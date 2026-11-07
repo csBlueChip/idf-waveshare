@@ -160,7 +160,10 @@
 		sock.onmessage = function (e) {
 			lastRx = Date.now();
 			pingAt = 0;				/* anything proves the link is alive */
-			if (e.data !== PONG) add(e.data);
+			if (e.data === PONG) return;
+			add(e.data);
+			var go = /<<GOTO (\/[^>\s]*)>>/.exec(e.data);	/* e.g. FILES WEB: open the SD manager */
+			if (go) setTimeout(function () { location.href = go[1]; }, 300);
 		};
 		sock.onclose = function (e) {
 			closed(e.code, e.code === 4001 ? " - device rebooting" : "");

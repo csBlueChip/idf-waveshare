@@ -31,7 +31,7 @@ FILES     SD:/scripts/data/file.txt, positions from 1 (end = size + 1)
           FLOG FCAT file [start,count] [>DEBUG]  FDIR [txt|var|nvram|*]
           FSTAT file ($.ret)  (FCAT/FSTAT/FDELETE: name, name.var, name.nvram)
           FDELETE file  FWRITE file text  FREAD $v file n|EOL  FTELL $v file
-          FSEEK file START|END [n]|SET n|OFFS n  FCLOSE file
+          FSEEK file START|END [n]|SET n|OFFS n|TAG text  FCLOSE file
           VARS SAVE name [$v ...] (no list = globals)  VARS LOAD name [$v ...|ALL]
           QUIET 0|1|2|3 (def 2)  TRACE 0|1           escapes \n \\ \# \$ \1..\9
 

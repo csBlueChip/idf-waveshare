@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <strings.h>
 #include <sys/stat.h>
 #include "esp_heap_caps.h"
 #include "esp_log.h"
@@ -21,6 +22,7 @@
 #include "nv.h"
 #include "sd.h"
 #include "ui.h"
+#include "fm.h"
 
 static const char *TAG = "usbdisk";
 
@@ -62,7 +64,8 @@ esp_err_t usbDiskInit(void)
 	if (!s_events) {
 		return ESP_ERR_NO_MEM;
 	}
-	return cmdRegister("FILES", 0, 0, usbDiskCmd, "FILES  USB disk mode");
+	return cmdRegister("FILES", 0, 2, usbDiskCmd,
+	                   "FILES [WEB [STOP|EXIT] | FMEXPORT | SYNEXPORT]  USB disk / web SD manager / export page, colours");
 }
 
 esp_err_t usbDiskStart(void)
@@ -249,6 +252,44 @@ static void usbDiskReboot(const char *why)
 
 static const char *usbDiskCmd(int argc, char *argv[], cmdReply_t reply)
 {
+	if (argc == 1 && strcasecmp(argv[0], "FMEXPORT") == 0) {
+		size_t      n;
+		const char *err = fmExport(&n);
+		if (!err) {
+			char text[48];
+			snprintf(text, sizeof(text), "sys/fm_builtin.html (%u bytes)\n", (unsigned)n);
+			reply(text);
+		}
+		return err;
+	}
+	if (argc == 1 && strcasecmp(argv[0], "SYNEXPORT") == 0) {
+		size_t      n;
+		const char *err = fmSynExport(&n);
+		if (!err) {
+			char text[48];
+			snprintf(text, sizeof(text), "sys/syntax_builtin.cfg (%u bytes)\n", (unsigned)n);
+			reply(text);
+		}
+		return err;
+	}
+	if (argc >= 1) {				/* FILES WEB [STOP|EXIT]: SD manager (fm.c) */
+		if (strcasecmp(argv[0], "WEB") != 0 ||
+		    (argc == 2 && strcasecmp(argv[1], "STOP") != 0 && strcasecmp(argv[1], "EXIT") != 0)) {
+			return "usage: FILES [WEB [STOP|EXIT] | FMEXPORT | SYNEXPORT]";
+		}
+		if (argc == 2) {
+			if (!fmActive()) {
+				return "SD manager not active";
+			}
+			fmStop();
+			return NULL;
+		}
+		const char *err = fmStart();
+		if (!err) {
+			reply("<<GOTO /fm>>\n");	/* the console page opens (or re-opens) the manager */
+		}
+		return err;
+	}
 	if (s_active) {
 		return "already in disk mode";
 	}

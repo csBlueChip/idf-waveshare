@@ -16,8 +16,9 @@
 
 #define UISCR_FONT		1
 #define UISCR_MARGIN		10	/* both sides: keeps clear of the boot square */
-#define UISCR_FADE_MS		1000	/* connect / disconnect */
-#define UISCR_WAIT_FADE_MS	500	/* details screen */
+#define UISCR_FADE_OUT_MS	200	/* to black: UI switch, disconnect, before the splash */
+#define UISCR_FADE_IN_MS	200	/* Wait details */
+#define UISCR_SPLASH_FADE_MS	800	/* connect splash */
 #define UISCR_LINK_INK		lcdRgb(255, 255, 255)
 #define UISCR_ROW_LINK		4
 #define UISCR_INK		lcdRgb(220, 110, 20)
@@ -55,7 +56,7 @@ void uiScrStart(uiIf_t ifc)
 	default:        return;
 	}
 
-	/* Wait: ROT 1|3 ; SCR AUTO 0 ; SCR TR FADE 500 ; <details> ; SCR UPD ;
+	/* Wait: ROT 1|3 ; SCR AUTO 0 ; SCR TR FADE 200 ; <details> ; SCR UPD ;
 	 * IMU ORIENT L AUTO (details turn 180 deg with the device) */
 	uint8_t rot = lcdGetRotation();
 	if ((rot & 1) == 0) {
@@ -65,8 +66,26 @@ void uiScrStart(uiIf_t ifc)
 	onStart();
 	s_ifc   = ifc;
 	s_shown = true;
-	uiScrFade(UISCR_WAIT_FADE_MS);
+	uiScrFade(UISCR_FADE_IN_MS);
 	imuOrientSet(IMU_OR_L, true);
+}
+
+void uiScrFm(const char *url)
+{
+	/* fade to black ; ROT 1|3 ; SCR AUTO 0 ; SD manager lines ; fade in */
+	s_shown = false;				/* not a Wait screen: no BOOT gestures */
+	lcdSetAutoUpdate(true);
+	lcdCls(0, 0, 0);
+	uiScrFade(UISCR_FADE_OUT_MS);
+	uint8_t rot = lcdGetRotation();
+	if ((rot & 1) == 0) {
+		lcdSetRotation(rot + 1);		/* landscape, as the Wait screen */
+	}
+	lcdSetAutoUpdate(false);
+	uiScrLine(0, "SD CARD MANAGER", "", UISCR_INK);
+	uiScrLine(1, "URL : ", url, UISCR_INK);
+	uiScrLine(2, "BOOT: press to exit", "", UISCR_INK);
+	uiScrFade(UISCR_FADE_IN_MS);
 }
 
 void uiScrBoot(void)
@@ -81,24 +100,24 @@ void uiScrBoot(void)
 
 void uiScrDisconnect(uiIf_t ifc)
 {
-	/* SCR AUTO 1 ; SCR TR FADE 1000 ; CLS 0 0 0 ; then Wait */
+	/* SCR AUTO 1 ; SCR TR FADE 200 ; CLS 0 0 0 ; then Wait */
 	s_shown = false;
 	lcdSetAutoUpdate(true);
 	lcdCls(0, 0, 0);
-	uiScrFade(UISCR_FADE_MS);
+	uiScrFade(UISCR_FADE_OUT_MS);
 	uiScrStart(ifc);
 }
 
 void uiScrConnect(void)
 {
-	/* IMU ORIENT NONE (view flip off) ; SCR AUTO 0 ; ROT 0 ; SCR TR FADE 1000 ;
-	 * CLS 0 0 0 ; SCR UPD ; IMG splash ; SCR TR FADE 1000 ; SCR UPD ; SCR AUTO 1 */
+	/* IMU ORIENT NONE (view flip off) ; SCR AUTO 0 ; ROT 0 ; SCR TR FADE 200 ;
+	 * CLS 0 0 0 ; SCR UPD ; IMG splash ; SCR TR FADE 800 ; SCR UPD ; SCR AUTO 1 */
 	s_shown = false;
 	imuOrientSet(IMU_OR_OFF, false);
 	lcdSetAutoUpdate(false);
 	lcdSetRotation(0);
 	lcdCls(0, 0, 0);
-	uiScrFade(UISCR_FADE_MS);
+	uiScrFade(UISCR_FADE_OUT_MS);
 
 	bool ok = false;
 	sdLock();
@@ -109,7 +128,7 @@ void uiScrConnect(void)
 	if (!ok) {
 		lcdDrawText(fontGet(1), 2, 6, UISCR_SPLASH_NAME, UISCR_INK, UISCR_PAPER);	/* 168 px: just fits */
 	}
-	uiScrFade(UISCR_FADE_MS);
+	uiScrFade(UISCR_SPLASH_FADE_MS);
 	lcdSetAutoUpdate(true);
 }
 

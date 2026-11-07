@@ -1,0 +1,10 @@
+> B=2 at 39: P=two
+> B=1: P=one
+> B=10: P=ten
+> after last: 59 (size 58:rw)
+> I=2 then: #begin
+> B=3: 0 no tag B=3, pos 1
+> empty: usage: FSEEK file TAG text
+> nofile: nofile.txt: no such file
+<<SCRIPT t_ftag END>>
+[result END]

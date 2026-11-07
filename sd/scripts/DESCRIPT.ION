@@ -7,5 +7,6 @@ rec.s IMU REC for STOP NOW
 hang.s endless loop: copy over SD:/sys/onBoot.s to test the BOOT escape
 dbg.s BPT! with no client: copy over SD:/sys/onBoot.s (USB console)
 persist.s remembers a name in persist.var (RUN persist forget = FDELETE it)
+boast.s boast and retort duel: RUN boast a|b|c|d|forget (duels in data/boast.txt)
 data data files: FLOG / FWRITE (.txt), VARS SAVE (.var)
 DESCRIPT.ION file descriptions for this folder

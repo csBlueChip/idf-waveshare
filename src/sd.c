@@ -7,6 +7,7 @@
 #include "esp_log.h"
 #include "esp_check.h"
 #include "esp_vfs_fat.h"
+#include "diskio_sdmmc.h"
 #include "sdmmc_cmd.h"
 #include "driver/sdmmc_host.h"
 #include "freertos/FreeRTOS.h"
@@ -34,6 +35,21 @@ esp_err_t sdInit(void)
 		ESP_LOGW(TAG, "no card - will retry on use");
 	}
 	return ESP_OK;
+}
+
+bool sdFatDrive(char drv[4])
+{
+	if (!s_card) {
+		return false;
+	}
+	BYTE pdrv = ff_diskio_get_pdrv_card(s_card);
+	if (pdrv == 0xFF) {
+		return false;
+	}
+	drv[0] = (char)('0' + pdrv);
+	drv[1] = ':';
+	drv[2] = '\0';
+	return true;
 }
 
 void sdLock(void)

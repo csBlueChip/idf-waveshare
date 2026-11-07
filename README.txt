@@ -80,6 +80,13 @@ Data files (text files SD:/scripts/data/file.txt; file = letters, digits,
 
   LOG                           show where logs go (section 7)
   LOG UART|USB|BOTH|AUTO        set it (this boot only; default AUTO)
+  LOG DEBUG [device]            log volume of every device / one
+  LOG DEBUG device n [SAVE]     set it 0..4 (this boot; SAVE: also in
+                                /sys/debug.cfg) - section 7
+  LOG DEBUG SAVE                show the old /sys/debug.cfg, then write
+                                all current settings to it
+  LOG DEBUG ALL n [SAVE]        every device to n (SAVE: as LOG DEBUG
+                                SAVE); LOG DEBUG ALL lists them
   EVENTS                        show which events the client receives:
                                 BTN 1 IMU 1 UI 1 SCRIPT 1
   EVENTS src 0|1                src = BTN IMU UI SCRIPT ALL; 0 = the client
@@ -291,6 +298,60 @@ USB disk
                                 172x320 and 512 KB), else the built-in
                                 image
 
+SD card manager (web UI only)
+
+  FILES WEB                     from the web console: the page opens
+                                http://<rad.ip>/fm (built-in page, or
+                                SD:/sys/fm.html if present):
+                                folder tree left, files right (name,
+                                size, date); Download, View, Upload,
+                                Delete (file, or empty folder), Rename
+                                (a path starting with / moves it), New
+                                folder, Exit. Refused if a script runs
+                                or no card. The screen shows "SD CARD
+                                MANAGER" and the URL. Already on: the
+                                page is just re-opened.
+  FILES WEB STOP|EXIT           leave it (any interface). While it lasts
+                                every command but FILES WEB [STOP|EXIT]
+                                (all interfaces) is
+                                refused: "ERR SD manager active"; no
+                                onWait / onConnect scripts. Also left by
+                                the page's Exit button, a BOOT short
+                                press, or REBOOT. No time-out.
+  FILES FMEXPORT                write the built-in page to
+                                SD:/sys/fm_builtin.html (replaced). To
+                                customise: edit it, save as sys/fm.html;
+                                delete fm.html to go back to the built-in.
+  Upload: the Upload button (several files) or drop files on the list;
+  progress bar; a file is written as name.upl and renamed when complete
+  (a broken upload leaves nothing); replacing a file asks first.
+  Read-only (ro) files cannot be deleted, renamed or replaced.
+  View (or double-click): images PNG ICO JPG JPEG GIF BMP WEBP SVG;
+  text TXT CSV S ION VAR CFG NVRAM C H SH CSS (line numbers - Lines
+  toggle -, Wrap toggle, tab width 4; first 256 KB; non-ASCII shown as
+  '?'; .s, DESCRIPT.ION and key=value files .var .cfg .nvram are
+  syntax-coloured; .nvram "!" lines show !key=[redacted], as FCAT -
+  Download gives the real file); HTML HTM HTML (rendered with
+  scripts off - "JS off" red / "JS ON" bold green toggle - and a Source
+  toggle; relative links and images do not load). Other files:
+  double-click downloads. Buttons show icons and words (icons only when
+  a toolbar would wrap; hover for the name). Descriptions from
+  DESCRIPT.ION: hovering a list row, a tree folder or the path bar shows
+  it (a folder: its entry in the parent's DESCRIPT.ION, else its own "."
+  line); the status line reads "1 folder, 9 files | <description>" for
+  the selected row or the folder opened (the description in its own
+  colour, status.desc in syntax.cfg). FAT HIDDEN entries are grey,
+  SYSTEM dark blue, in the list and the tree.
+  FILES SYNEXPORT               write the built-in viewer colours to
+                                SD:/sys/syntax_builtin.cfg (with
+                                comments listing every highlighted word
+                                and all registered commands); edit, save
+                                as sys/syntax.cfg (key=#rrggbb lines; a
+                                key left out keeps its colour; a bad
+                                line: the page says which, and uses the
+                                built-in colours). Read when the page
+                                opens and on Refresh.
+
 Scripts (SD:/scripts/name.s; language: SCRIPTING.txt, section 9 here)
 
   RUN                           list the scripts
@@ -390,7 +451,12 @@ at its next use.
                         !key=value = secret: FCAT shows [redacted]),
                         splash.png (shown when a client connects) and
                         usbdrive.png (FILES screen; built-in if missing),
+                        fm.html (optional: replaces the built-in SD card
+                        manager page; FILES FMEXPORT writes fm_builtin.html),
+                        syntax.cfg (optional: viewer colours; FILES
+                        SYNEXPORT writes syntax_builtin.cfg),
                         default.nvram (all NV defaults: NV IMPORT default),
+                        debug.cfg (log volume per device, section 7),
                         system scripts onBoot.s onWait.s onConnect.s
                         (NV sys.autorun 1; by hand RUN sys/onBoot)
   /www/                 web files served in WEB mode (http://<rad.ip>/path
@@ -416,14 +482,17 @@ Create /images/ and /www/ yourself (missing = none).
 
   Boot        SCR AUTO 1, black, backlight scr.bl, boot square (a
               random-colour square on the bottom edge of the glass), Wait.
-  Wait        ROT 0/2 -> 1/3, SCR AUTO 0, details fade in (0.5 s),
+  Wait        ROT 0/2 -> 1/3, SCR AUTO 0, details fade in (0.2 s),
               IMU ORIENT L AUTO (details turn 180 deg with the device).
   Connect     IMU ORIENT NONE (view flip off), SCR AUTO 0, ROT 0, fade
-              to black (1 s), /sys/splash.png
-              fades in (1 s; "sys/splash.png" printed if missing),
+              to black (0.2 s), /sys/splash.png
+              fades in (0.8 s; "sys/splash.png" printed if missing),
               SCR AUTO 1.
-  Disconnect  SCR AUTO 1, fade to black (1 s), Wait.
+  Disconnect  SCR AUTO 1, fade to black (0.2 s), Wait.
   (also on UI switch)
+  Fade times: UISCR_FADE_OUT_MS, UISCR_FADE_IN_MS, UISCR_SPLASH_FADE_MS
+  in src/uiscr.c. The UI command waits 300 ms before switching (its
+  reply must reach the client); a BOOT double press switches at once.
 
   UART / USB have no connect signal: the first line received (even an
   empty one) is the connect; the session lasts until UI switch or REBOOT.
@@ -518,6 +587,17 @@ Create /images/ and /www/ yourself (missing = none).
   LOG UART / USB / BOTH fixes the port(s) instead, even the UI port (debug
   on still adds the other); LOG AUTO goes back. This boot only.
   When UART is not the UI it runs at 115200 for the logs.
+
+  Log volume per device, from /sys/debug.cfg at boot (no file: all 4):
+    0 off, 1 errors, 2 +warnings, 3 +info, 4 +"DBG ..." lines (full)
+    BLE  WIFI  WEB  SD  SCRIPT  IMU  SYS (= every other tag); the tags in
+    each group are listed in debug.cfg. dbgf() / DEBUG text always shows.
+    LOG DEBUG BLE 0 (this boot), LOG DEBUG BLE 0 SAVE (also in the file),
+    LOG DEBUG SAVE (old file shown on the UI and the monitor, then
+    replaced by the standard header and all current settings).
+    A device missing from the file stays at 4.
+    The card is mounted early (before the LCD, I2C and IMU start), so
+    only messages before that are not filtered.
 
   Not routed (always both ports, from the build-time console): ROM and
   bootloader messages, start-up messages before the log hook, crash
@@ -618,7 +698,9 @@ Create /images/ and /www/ yourself (missing = none).
                               ERR "over-read n" (n = bytes missing); EOL at
                               the end of the file: ERR "EOF"
       FTELL $v file           the position
-      FSEEK file START | END [n] | SET n | OFFS n
+      FSEEK file START | END [n] | SET n | OFFS n | TAG text
+                              (TAG: to the line after the first line
+                              equal to text; trailing blanks ignored)
       FCLOSE file             forget the position
     POSITIONS COUNT FROM 1: byte #1 is the first byte; an empty file has
     size 0 and the first byte written is #1; the end of the file is

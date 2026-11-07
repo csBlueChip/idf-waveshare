@@ -24,6 +24,7 @@
 #include "sd.h"
 #include "webpath.h"
 #include "nv.h"
+#include "fm.h"
 
 static const char *TAG = "web";
 
@@ -116,6 +117,7 @@ esp_err_t webStart(webRxCb_t rxCb, webConnCb_t connCb)
 	cfg.close_fn         = webOnClose;
 	cfg.open_fn          = webOnOpen;
 	cfg.uri_match_fn     = httpd_uri_match_wildcard;	/* catch-all handler below; exact URIs match first */
+	cfg.max_uri_handlers = 3 + FM_URI_COUNT + 2;		/* ours + the SD manager's + spare */
 	err = httpd_start(&s_server, &cfg);
 	if (err != ESP_OK) {
 		dnsStop();
@@ -129,9 +131,11 @@ esp_err_t webStart(webRxCb_t rxCb, webConnCb_t connCb)
 		  .ws_post_handshake_cb = webWsOpen },
 		{ .uri = "/*",   .method = HTTP_GET, .handler = webGet },	/* last: everything else */
 	};
-	for (size_t i = 0; i < sizeof(uris) / sizeof(uris[0]); i++) {
+	for (size_t i = 0; i < 2; i++) {
 		httpd_register_uri_handler(s_server, &uris[i]);
 	}
+	fmRegister(s_server);					/* /fm ... before the catch-all */
+	httpd_register_uri_handler(s_server, &uris[2]);
 	httpd_register_err_handler(s_server, HTTPD_404_NOT_FOUND, webRedirect);
 
 	ESP_LOGI(TAG, "portal at %s", s_home);

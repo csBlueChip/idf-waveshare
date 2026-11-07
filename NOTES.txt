@@ -207,6 +207,74 @@ conversation context. Keep it current, like the README.
             (scriptConsoleLine); any other line, "stop" included, is the
             text. Running outside INPUT: STOP and !!STOP both. Paused /
             idle: unchanged (plain commands only).
+    ftag    FSEEK file TAG text (core, seekTag): reads 1 KB blocks through
+            scrHostFileRead from the start; line equal to text after
+            trimming trailing blanks/CR -> position = next line; else ERR
+            "no tag text". PC test t_ftag.
+    scrtest tests/scrtest/README.txt; host options -file name=path,
+            -input a,b,c, -seed n, -dump name; run.sh runs from
+            tests/scrtest (.opt paths relative to it). PC test t_opts.
+    logvol  /sys/debug.cfg DEVICE=0..4 (BLE WIFI WEB SD SCRIPT IMU SYS);
+            no file = all 4; not in NV. Filter in logVprintf on the
+            formatted "L (t) tag: " line (level letter, tag groups with
+            prefix '*', "DBG " text = level 4). sdInit moved before
+            lcdInit (after the autorun flash), logLoadCfg() right after.
+            LOG DEBUG [device [n [SAVE]]]; SAVE rewrites that line only.
+            LOG DEBUG SAVE: old file to UI + dbgf, then s_cfgHead (same
+            text as sd/sys/debug.cfg) + all 7 lines. Missing device = 4.
+    fades   UISCR_FADE_OUT_MS 200 (to black: switch, disconnect, before
+            splash), UISCR_FADE_IN_MS 200 (Wait details), UISCR_SPLASH_FADE_MS
+            800. BOOT double press: no 300 ms delay (UI_SWITCH_NOW); UI
+            command keeps it (drain idea dropped: needs lwIP priv header).
+    fm      SD card manager (fm.c, page at /fm: built-in assets/fm.html,
+            or SD:/sys/fm.html if present; FILES FMEXPORT writes the
+            built-in to sys/fm_builtin.html): FILES
+            WEB (web UI + page connected; no script; card present)
+            -> reply "<<GOTO /fm>>" (index.html navigates). cmdSetGate():
+            only FILES WEB STOP passes. ui.c: UI_EV_START during the mode
+            -> uiScrFm (no onWait), CONNECT -> splash without onConnect,
+            BOOT release -> fmStop. Endpoints list/get/del/ren/mkdir/exit,
+            409 when off. max_uri_handlers 13.
+            Upload POST /fm/put?p=&over=1: body streamed in 4 KB chunks to
+            name.upl (sdLock per chunk), renamed when complete; failure /
+            mode off mid-way -> .upl deleted, connection closed (rest of
+            body unread). Page: Upload button, drop on list, progress bar,
+            confirm before replacing.
+    logall  LOG DEBUG ALL [n [SAVE]] (SAVE = LOG DEBUG SAVE).
+    fmview  GET /fm/view?p= (inline, type by extension, nosniff; else 400).
+            Page: View button / double-click -> overlay viewer (image fit,
+            text <pre> + Wrap, first 256 KB, non-ASCII '?'; HTML in a
+            sandboxed iframe, JS toggle (default off) adds allow-scripts,
+            Source toggle). FILES WEB when on re-sends <<GOTO /fm>>;
+            FILES WEB EXIT = STOP; gate passes FILES WEB [STOP|EXIT].
+    fmsyn   Text viewer: table rows (number cell with border-right, not
+            selectable; code cell), Lines + Wrap toggles. Highlighting
+            in the page: hlScript (.s: '#' comments, ';' statements, first
+            word keyword/.directive/:label/case label/command, FN/CALL
+            name, $vars, strings, numbers, AND OR, functions), hlVar,
+            hlIon. Colours: assets/syntax.cfg built in, SD:/sys/syntax.cfg
+            overrides (GET /fm/syntax[?builtin=1], X-Syntax-Source);
+            parsed in the page, bad line -> built-in + status message;
+            FILES SYNEXPORT. Tree: an open folder with no list is fetched
+            when drawn (rename / Refresh no longer empty the tree).
+            Icons: inline SVG paths, words hidden under 640 px; JS toggle
+            "JS off" red / "JS ON" bold green.
+    fmsyn2  /fm/list via FatFs (sdFatDrive -> "N:" from
+            ff_diskio_get_pdrv_card; f_opendir/f_readdir) for attr bits 1 ro
+            2 hidden 4 system; mtime from FAT date/time (UTC). /fm/view
+            .nvram redacted on the device (fmSendRedacted). Export appends
+            the registered commands (cmdCount/cmdName). Page: GET ... =
+            cmd, = CALL, option words per statement, $. -> s.sysvar,
+            brackets plain, hlKv for .var .cfg .nvram, tab-size 4, ION
+            tooltips, list.hidden / list.system colours, toolbar goes
+            icons-only when it would wrap (fit()). Word lists in the page
+            and in assets/syntax.cfg comments must match (checked).
+    fmdesc  Page keeps per folder: subs, attrs (sub-folder bits), ionIn
+            (has DESCRIPT.ION), descs (parsed, fetched once, cleared by
+            Refresh). Folder description = parent's entry, else its "."
+            line. Status: "n folder(s) n file(s)" with proper plurals,
+            " | <desc>" of the selected row / opened folder. Tree rows get
+            titles and hid/sys colours.
   Notes for Step A:
     - cmd.c strips '#' comments and is NOT quote-aware: '#' inside quotes
       needs \# at the console. The script loader has its own rules.

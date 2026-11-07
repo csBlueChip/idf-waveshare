@@ -1,0 +1,1 @@
+-file quiz.txt=scripts/t_opts.dat -input yes,no -seed 42 -dump t_opts.var -dump none.txt

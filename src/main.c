@@ -23,6 +23,7 @@
 #include "sys.h"
 #include "ser.h"
 #include "log.h"
+#include "fm.h"
 #include "script.h"
 
 static const char *TAG = "main";
@@ -76,6 +77,8 @@ void app_main(void)
 	ESP_ERROR_CHECK(sysInit());
 	ESP_ERROR_CHECK(ledInit());
 	mainAutorunFlash();				/* autorun state: sys.aron / sys.aroff */
+	ESP_ERROR_CHECK(sdInit());
+	logLoadCfg();					/* SD:/sys/debug.cfg: log volume per device */
 	ESP_ERROR_CHECK(lcdInit());
 	ESP_ERROR_CHECK(gfxInit());
 	ESP_ERROR_CHECK(textInit());
@@ -83,9 +86,9 @@ void app_main(void)
 	ESP_ERROR_CHECK(i2cInit());
 	ESP_ERROR_CHECK(imuInit());
 	ESP_ERROR_CHECK(batInit());
-	ESP_ERROR_CHECK(sdInit());
 	ESP_ERROR_CHECK(imgInit());
 	ESP_ERROR_CHECK(usbDiskInit());
+	ESP_ERROR_CHECK(fmInit());
 	ESP_ERROR_CHECK(uiInit());
 	ESP_ERROR_CHECK(btnInit());
 	ESP_ERROR_CHECK(scriptInit());

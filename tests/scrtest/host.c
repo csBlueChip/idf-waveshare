@@ -1,6 +1,13 @@
 /* PC test host for the script interpreter core (src/scr_*.c).
  *
- *   build: see run.sh     use: scrtest dir name [args]
+ *   build: see run.sh     use: scrtest dir name [args] [options] (README.txt)
+ *
+ * Options:
+ *   -load / -bpt file:n / -fn name / -go STEP,IN,OUT,CONT,STOP   debugger
+ *   -file name=path    load a disk file as data file name (e.g. boast.txt)
+ *   -input a,b,c       INPUT answers in order (then INPUT times out)
+ *   -seed n            random generator start (default 1)
+ *   -dump name         print data file name after the run
  *
  * Fake commands (everything else: prints "CMD: line", replies OK):
  *   FAIL reason        ERR reason
@@ -451,15 +458,43 @@ int scrHostPause(void)
 	return go;
 }
 
+/* -file name=path: the disk file becomes data file name (whole file in memory). */
+static bool loadFile(const char *spec)
+{
+	const char *eq = strchr(spec, '=');
+	char        name[48];
+	if (!eq || eq == spec || (size_t)(eq - spec) >= sizeof(name)) {
+		fprintf(stderr, "-file name=path: bad '%s'\n", spec);
+		return false;
+	}
+	snprintf(name, sizeof(name), "%.*s", (int)(eq - spec), spec);
+	FILE *f = fopen(eq + 1, "rb");
+	if (!f) {
+		fprintf(stderr, "-file: cannot read %s\n", eq + 1);
+		return false;
+	}
+	static char buf[64 * 1024];
+	size_t      n = fread(buf, 1, sizeof(buf), f);
+	fclose(f);
+	if (fileFind(name, true) < 0 || scrHostFileWrite(name, 0, buf, (int)n, true)) {
+		fprintf(stderr, "-file: cannot store %s\n", name);
+		return false;
+	}
+	return true;
+}
+
 int main(int argc, char **argv)
 {
 	if (argc < 3) {
-		fprintf(stderr, "use: scrtest dir name [args] [-load] [-bpt file:n] [-fn name] [-go STEP,IN,...]\n");
+		fprintf(stderr, "use: scrtest dir name [args] [-load] [-bpt file:n] [-fn name] [-go STEP,IN,...]\n"
+		                "       [-file name=path] [-input a,b,...] [-seed n] [-dump name]\n");
 		return 2;
 	}
 	s_dir = argv[1];
-	char args[256] = "";
-	bool load = false;
+	char        args[256] = "";
+	bool        load = false;
+	const char *dump[8];
+	int         nDump = 0;
 	for (int i = 3; i < argc; i++) {
 		if (!strcmp(argv[i], "-load")) {
 			load = true;
@@ -471,6 +506,23 @@ int main(int argc, char **argv)
 			}
 		} else if (!strcmp(argv[i], "-fn") && i + 1 < argc) {
 			i++;
+		} else if (!strcmp(argv[i], "-file") && i + 1 < argc) {
+			if (!loadFile(argv[++i])) {
+				return 2;
+			}
+		} else if (!strcmp(argv[i], "-input") && i + 1 < argc) {
+			char tmp[1024];
+			snprintf(tmp, sizeof(tmp), "%s", argv[++i]);
+			for (char *w = strtok(tmp, ","); w && s_nin < Q; w = strtok(NULL, ",")) {
+				snprintf(s_in[s_nin++], sizeof(s_in[0]), "%s", w);
+			}
+		} else if (!strcmp(argv[i], "-seed") && i + 1 < argc) {
+			s_rng = (uint32_t)strtoul(argv[++i], NULL, 10);
+		} else if (!strcmp(argv[i], "-dump") && i + 1 < argc) {
+			i++;
+			if (nDump < 8) {
+				dump[nDump++] = argv[i];
+			}
 		} else if (!strcmp(argv[i], "-go") && i + 1 < argc) {
 			char tmp[256], line[64];
 			snprintf(tmp, sizeof(tmp), "%s", argv[++i]);
@@ -492,5 +544,14 @@ int main(int argc, char **argv)
 	scrResult_t r = scrRun(argv[2], args, fn, load);
 	static const char *rn[] = { "END", "STOPPED", "ERROR", "NOFN" };
 	printf("[result %s]\n", rn[r]);
+	for (int i = 0; i < nDump; i++) {
+		int k = fileFind(dump[i], false);
+		if (k < 0) {
+			printf("[%s: no such file]\n", dump[i]);
+		} else {
+			printf("[%s]\n%.*s%s[end]\n", dump[i], (int)s_f[k].n, s_f[k].d ? s_f[k].d : "",
+			       s_f[k].n && s_f[k].d[s_f[k].n - 1] != '\n' ? "\n" : "");
+		}
+	}
 	return 0;
 }

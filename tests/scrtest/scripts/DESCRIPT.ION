@@ -18,6 +18,12 @@ t_files.s data files FWRITE FREAD FTELL FSEEK FCLOSE FLOG FSTAT, VARS SAVE / LOA
 t_files.out expected output of t_files.s
 t_fvar.s FSTAT / FDELETE on name.var (VARS SAVE file)
 t_fvar.out expected output of t_fvar.s
+t_ftag.s FSEEK TAG: line match, trailing blanks, errors
+t_ftag.out expected output of t_ftag.s
+t_opts.s scrtest options -file -input -seed -dump
+t_opts.opt extra arguments for t_opts.s
+t_opts.out expected output of t_opts.s
+t_opts.dat data file loaded by t_opts.opt (-file quiz.txt=...)
 t_inputstop.s INPUT takes "stop" as text
 t_inputstop.out expected output of t_inputstop.s
 t_nfiles.s .FILES 6 raises the data file limit

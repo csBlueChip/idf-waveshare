@@ -1,2 +1,3 @@
 . data files: name.txt (FLOG FWRITE FREAD FCAT ...), name.var (VARS SAVE / LOAD)
+boast.txt duels for boast.s: I=n, then B=n tagged P= C= R= groups (FSEEK TAG)
 DESCRIPT.ION file descriptions for this folder

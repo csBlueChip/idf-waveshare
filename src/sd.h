@@ -30,6 +30,10 @@ void sdUnlock(void);
  * unmounted card is mounted. Hold sdLock(). */
 esp_err_t sdEnsureMounted(void);
 
+/* FatFs drive of the mounted card ("0:" ...) for direct f_*() calls, e.g. to
+ * read FAT attributes. false if not mounted. Caller holds sdLock(). */
+bool sdFatDrive(char drv[4]);
+
 bool sdMounted(void);
 
 /* Card size and free space in bytes (mounts if needed). ESP_ERR_NOT_FOUND if no card. */

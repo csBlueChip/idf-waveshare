@@ -25,6 +25,10 @@
  * Splash: SD:/sys/splash.png at 0,0 ("sys/splash.png" printed on the top line if missing).
  */
 
+/* SD manager on (fm.c): fade to black, then "SD CARD MANAGER", the URL and
+ * "BOOT: press to exit" in landscape. Not a Wait screen. */
+void uiScrFm(const char *url);
+
 /* Boot sequence (before the first wait). */
 void uiScrBoot(void);
 

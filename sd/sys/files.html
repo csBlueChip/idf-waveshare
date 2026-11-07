@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>wavedemo - SD card</title>
+<!-- SD card manager page (FILES WEB). Served by the device from SD:/sys/files.html
+     at /fm; talks to /fm/list, /fm/get, /fm/del, /fm/ren, /fm/mkdir, /fm/exit. -->
+<style>
+	html, body { margin: 0; height: 100%; background: #111; color: #ddd; }
+	body { font: 14px/1.35 ui-monospace, Menlo, Consolas, "DejaVu Sans Mono", monospace;
+	       display: flex; flex-direction: column; }
+	button { padding: 6px 12px; font: inherit; color: #ddd; background: #333; border: 1px solid #444;
+	         border-radius: 4px; cursor: pointer; }
+	button:disabled { color: #666; cursor: default; }
+	button.exit { color: #000; background: #8cf; border-color: #8cf; }
+	#bar { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px; border-bottom: 1px solid #333; background: #1a1a1a; }
+	#bar .gap { flex: 1; }
+	#path { padding: 6px 8px; color: #8cf; border-bottom: 1px solid #333; word-break: break-all; }
+	#path a { color: #8cf; text-decoration: none; }
+	#path a:hover { text-decoration: underline; }
+	#main { flex: 1; display: flex; min-height: 0; }
+	#tree { width: 30%; min-width: 160px; max-width: 360px; overflow: auto; padding: 4px 0; border-right: 1px solid #333; }
+	#tree div.n { padding: 3px 6px; white-space: nowrap; cursor: pointer; }
+	#tree div.n:hover { background: #222; }
+	#tree div.n.cur { background: #234; color: #fff; }
+	#tree span.t { display: inline-block; width: 1.4em; color: #888; }
+	#list { flex: 1; overflow: auto; }
+	table { width: 100%; border-collapse: collapse; }
+	th { position: sticky; top: 0; background: #1a1a1a; text-align: left; font-weight: normal; color: #888;
+	     padding: 6px 8px; border-bottom: 1px solid #333; }
+	td { padding: 5px 8px; border-bottom: 1px solid #222; white-space: nowrap; }
+	td.name { white-space: normal; word-break: break-all; }
+	td.num, th.num { text-align: right; }
+	tr { cursor: pointer; }
+	tr:hover td { background: #1c1c1c; }
+	tr.sel td { background: #234; color: #fff; }
+	tr.dir td.name { color: #fc6; }
+	.ro { color: #f96; }
+	#status { padding: 6px 8px; border-top: 1px solid #333; background: #1a1a1a; color: #aaa; min-height: 1.35em; }
+	#status.err { color: #f66; }
+	@media (max-width: 640px) {
+		#main { flex-direction: column; }
+		#tree { width: auto; max-width: none; max-height: 30vh; border-right: 0; border-bottom: 1px solid #333; }
+		th.date, td.date { display: none; }
+	}
+</style>
+</head>
+<body>
+<div id="bar">
+	<button id="up" title="parent folder">Up</button>
+	<button id="refresh">Refresh</button>
+	<button id="mkdir">New folder</button>
+	<button id="dl" disabled>Download</button>
+	<button id="ren" disabled>Rename</button>
+	<button id="del" disabled>Delete</button>
+	<span class="gap"></span>
+	<button id="exit" class="exit">Exit</button>
+</div>
+<div id="path"></div>
+<div id="main">
+	<div id="tree"></div>
+	<div id="list"><table>
+		<thead><tr><th>Name</th><th class="num">Size</th><th class="date">Modified</th></tr></thead>
+		<tbody id="rows"></tbody>
+	</table></div>
+</div>
+<div id="status"></div>
+<script>
+(function () {
+	var cwd = "/";			/* folder shown on the right */
+	var sel = null;			/* selected entry: {name, dir, size, ro} */
+	var open = { "/": true };	/* expanded tree folders */
+	var subs = {};			/* folder -> its sub-folder names (from lists) */
+	var $ = function (id) { return document.getElementById(id); };
+
+	/* ---------- helpers ---------- */
+	function join(dir, name) { return (dir === "/" ? "" : dir) + "/" + name; }
+	function parent(p) { var i = p.lastIndexOf("/"); return i <= 0 ? "/" : p.substring(0, i); }
+	function q(p) { return encodeURIComponent(p); }
+	function status(text, err) { var s = $("status"); s.textContent = text || ""; s.className = err ? "err" : ""; }
+	function size(n) {
+		if (n < 1024) return n + " B";
+		if (n < 1048576) return (n / 1024).toFixed(1) + " KB";
+		return (n / 1048576).toFixed(1) + " MB";
+	}
+	function date(t) {
+		if (!t) return "";
+		var d = new Date(t * 1000), p = function (v) { return (v < 10 ? "0" : "") + v; };
+		return d.getUTCFullYear() + "-" + p(d.getUTCMonth() + 1) + "-" + p(d.getUTCDate()) + " " +
+		       p(d.getUTCHours()) + ":" + p(d.getUTCMinutes());
+	}
+	/* request: cb(ok, text) - a 409 "not active" means the mode ended */
+	function req(method, url, cb) {
+		var x = new XMLHttpRequest();
+		x.open(method, url);
+		x.onload = function () {
+			if (x.status === 409 && x.responseText === "SD manager not active") {
+				status("SD manager closed on the device - back to the console...", true);
+				setTimeout(function () { location.href = "/"; }, 1500);
+				return;
+			}
+			cb(x.status === 200, x.responseText);
+		};
+		x.onerror = function () { cb(false, "no connection to the device"); };
+		x.send();
+	}
+
+	/* ---------- list (right) ---------- */
+	function load(dir) {
+		status("loading " + dir + " ...");
+		req("GET", "/fm/list?p=" + q(dir), function (ok, text) {
+			if (!ok) { status(text, true); return; }
+			var j;
+			try { j = JSON.parse(text); } catch (e) { status("bad reply from the device", true); return; }
+			cwd = j.p;
+			sel = null;
+			subs[cwd] = j.d.map(function (d) { return d[0]; }).sort(cmp);
+			var p = cwd;
+			while (p !== "/") { open[p] = true; p = parent(p); }	/* the tree shows where we are */
+			open[cwd] = true;
+			rows(j);
+			crumbs();
+			tree();
+			buttons();
+			status(j.d.length + " folder(s), " + j.f.length + " file(s)");
+		});
+	}
+	function cmp(a, b) { a = a.toLowerCase(); b = b.toLowerCase(); return a < b ? -1 : a > b ? 1 : 0; }
+	function rows(j) {
+		var tb = $("rows");
+		tb.innerHTML = "";
+		var items = [];
+		j.d.forEach(function (d) { items.push({ name: d[0], dir: true, t: d[1] }); });
+		j.f.forEach(function (f) { items.push({ name: f[0], dir: false, size: f[1], t: f[2], ro: !!f[3] }); });
+		items.sort(function (a, b) { return a.dir !== b.dir ? (a.dir ? -1 : 1) : cmp(a.name, b.name); });
+		if (cwd !== "/") items.unshift({ name: "..", up: true, dir: true });
+		items.forEach(function (it) {
+			var tr = document.createElement("tr");
+			if (it.dir) tr.className = "dir";
+			var n = document.createElement("td");
+			n.className = "name";
+			n.textContent = it.name + (it.dir && !it.up ? "/" : "");
+			if (it.ro) { var r = document.createElement("span"); r.className = "ro"; r.textContent = " (ro)"; n.appendChild(r); }
+			var s = document.createElement("td");
+			s.className = "num";
+			s.textContent = it.dir ? "" : size(it.size);
+			var d = document.createElement("td");
+			d.className = "date";
+			d.textContent = it.up ? "" : date(it.t);
+			tr.appendChild(n); tr.appendChild(s); tr.appendChild(d);
+			tr.onclick = function () {
+				if (it.up) { load(parent(cwd)); return; }
+				var old = document.querySelector("tr.sel");
+				if (old) old.classList.remove("sel");
+				tr.classList.add("sel");
+				sel = it;
+				buttons();
+			};
+			tr.ondblclick = function () {
+				if (it.up) return;
+				if (it.dir) load(join(cwd, it.name)); else download();
+			};
+			tb.appendChild(tr);
+		});
+	}
+	function crumbs() {
+		var el = $("path");
+		el.innerHTML = "";
+		var parts = cwd === "/" ? [] : cwd.substring(1).split("/");
+		var a = document.createElement("a");
+		a.href = "#"; a.textContent = "SD:";
+		a.onclick = function () { load("/"); return false; };
+		el.appendChild(a);
+		var p = "";
+		parts.forEach(function (name) {
+			p += "/" + name;
+			var to = p;
+			el.appendChild(document.createTextNode("/"));
+			var l = document.createElement("a");
+			l.href = "#"; l.textContent = name;
+			l.onclick = function () { load(to); return false; };
+			el.appendChild(l);
+		});
+		el.appendChild(document.createTextNode("/"));
+	}
+	function buttons() {
+		$("up").disabled = cwd === "/";
+		$("dl").disabled = !sel || sel.dir;
+		$("ren").disabled = !sel;
+		$("del").disabled = !sel;
+	}
+
+	/* ---------- tree (left) ---------- */
+	function tree() {
+		var el = $("tree");
+		el.innerHTML = "";
+		node(el, "/", "SD:", 0);
+	}
+	function node(el, path, label, depth) {
+		var d = document.createElement("div");
+		d.className = "n" + (path === cwd ? " cur" : "");
+		d.style.paddingLeft = (6 + depth * 14) + "px";
+		var t = document.createElement("span");
+		t.className = "t";
+		var known = subs[path];
+		t.textContent = known && known.length === 0 ? "" : open[path] ? "-" : "+";
+		d.appendChild(t);
+		d.appendChild(document.createTextNode(label));
+		t.onclick = function (e) {
+			e.stopPropagation();
+			if (open[path]) { open[path] = false; tree(); return; }
+			open[path] = true;
+			if (subs[path]) { tree(); return; }
+			req("GET", "/fm/list?p=" + q(path), function (ok, text) {	/* sub-folders only */
+				if (!ok) { status(text, true); return; }
+				try { subs[path] = JSON.parse(text).d.map(function (x) { return x[0]; }).sort(cmp); }
+				catch (e2) { status("bad reply from the device", true); return; }
+				tree();
+			});
+		};
+		d.onclick = function () { load(path); };
+		el.appendChild(d);
+		if (open[path] && subs[path]) {
+			subs[path].forEach(function (name) { node(el, join(path, name), name, depth + 1); });
+		}
+	}
+
+	/* ---------- actions ---------- */
+	function download() {
+		if (!sel || sel.dir) return;
+		var a = document.createElement("a");
+		a.href = "/fm/get?p=" + q(join(cwd, sel.name));
+		a.download = sel.name;
+		document.body.appendChild(a);
+		a.click();
+		a.remove();
+	}
+	function changed(dir) { delete subs[dir]; load(cwd); }
+	$("up").onclick = function () { load(parent(cwd)); };
+	$("refresh").onclick = function () { subs = {}; load(cwd); };
+	$("dl").onclick = download;
+	$("mkdir").onclick = function () {
+		var name = prompt("New folder name:", "");
+		if (!name) return;
+		req("POST", "/fm/mkdir?p=" + q(join(cwd, name)), function (ok, text) {
+			if (!ok) { status(text, true); return; }
+			changed(cwd);
+		});
+	};
+	$("ren").onclick = function () {
+		if (!sel) return;
+		var to = prompt("New name (a path starting with / moves it):", sel.name);
+		if (!to || to === sel.name) return;
+		var dest = to.charAt(0) === "/" ? to : join(cwd, to);
+		req("POST", "/fm/ren?p=" + q(join(cwd, sel.name)) + "&to=" + q(dest), function (ok, text) {
+			if (!ok) { status(text, true); return; }
+			subs = {};			/* a move may change other folders */
+			load(cwd);
+		});
+	};
+	$("del").onclick = function () {
+		if (!sel) return;
+		if (!confirm("Delete " + join(cwd, sel.name) + (sel.dir ? "/ (must be empty)" : "") + " ?")) return;
+		req("POST", "/fm/del?p=" + q(join(cwd, sel.name)), function (ok, text) {
+			if (!ok) { status(text, true); return; }
+			changed(cwd);
+		});
+	};
+	$("exit").onclick = function () {
+		req("POST", "/fm/exit", function () { location.href = "/"; });
+	};
+
+	load("/");
+})();
+</script>
+</body>
+</html>

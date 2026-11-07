@@ -24,6 +24,7 @@
 #include "uiscr.h"
 #include "log.h"
 #include "script.h"
+#include "fm.h"
 
 static const char *TAG = "ui";
 
@@ -32,6 +33,7 @@ static const char *TAG = "ui";
 #define UI_SWITCH_DELAY_MS	300	/* let the reply reach the client before switching */
 #define UI_SWITCH_STACK		6144	/* Wi-Fi start-up needs a fair bit */
 #define UI_SWITCH_PRIO		5
+#define UI_SWITCH_NOW		0x100	/* uiSwitchTask arg flag: no reply to wait for */
 #define UI_FEED_WAIT_MS		100	/* telnet back-pressure re-check interval */
 #define UI_BOOT_GPIO		GPIO_NUM_0	/* BOOT button: shows the Wi-Fi password */
 #define UI_BOOT_POLL_US		50000
@@ -47,6 +49,7 @@ enum {
 	UI_EV_NEXT,		/* BOOT double press: next interface */
 	UI_EV_LINK,		/* Wi-Fi link up/down (station with IP / none left) */
 	UI_EV_CALL,		/* uiRunMain(): data = function + argument */
+	UI_EV_FMSTOP,		/* BOOT short press on the SD manager screen */
 };
 
 typedef struct {
@@ -118,6 +121,8 @@ static void        uiSwitchTask(void *arg);
 static void        uiPost(uint8_t kind);
 static void        uiEvent(uint8_t kind);
 static void        uiStartScreen(bool afterClient);
+static void        uiBootWatch(void);
+static void        uiFmScreen(void);
 static void        uiBootPoll(void *arg);
 static void        uiNextIf(void);
 static void        uiWifiLink(bool up);
@@ -358,6 +363,13 @@ uiIf_t uiActive(void)
 	return s_active;
 }
 
+void uiFmChanged(void)
+{
+	if (!s_client) {
+		uiPost(UI_EV_START);			/* SD manager off: back to the Wait screen */
+	}
+}
+
 bool uiRunMain(uiMainFn_t fn, int arg)
 {
 	uiChunk_t c    = { .session = s_session, .kind = UI_EV_CALL };
@@ -569,14 +581,25 @@ static void uiEvent(uint8_t kind)
 			scriptClientGone();		/* RUN script: wait (ON UI) or stop */
 		}
 		scriptWaitEnd();			/* UI switch during a Wait screen: onWait after */
-		uiStartScreen(true);			/* client gone / UI switch */
+		if (fmActive()) {
+			uiFmScreen();			/* SD manager: its screen, no onWait */
+		} else {
+			uiStartScreen(true);		/* client gone / UI switch */
+		}
 		break;
 	case UI_EV_CONNECT:
 		esp_timer_stop(s_bootPoll);
 		s_client = true;
 		uiSend("<<UI CONNECT>>\n");		/* the client's first message */
 		scriptWaitEnd();			/* onWait instead exits, after runs */
-		scriptConnect(uiName(s_active), uiScrConnect);	/* splash, or onConnect */
+		if (fmActive()) {
+			uiScrConnect();			/* SD manager: no onConnect script */
+		} else {
+			scriptConnect(uiName(s_active), uiScrConnect);	/* splash, or onConnect */
+		}
+		break;
+	case UI_EV_FMSTOP:
+		fmStop();
 		break;
 	case UI_EV_BUTTON:
 		uiScrPassword(s_pwdShown);
@@ -611,15 +634,31 @@ static void uiStartScreen(bool afterClient)
 		uiScrStart(s_active);
 	}
 	if (uiScrWaiting()) {
-		gpio_set_pull_mode(UI_BOOT_GPIO, GPIO_PULLUP_ONLY);
-		s_bootLongMs  = nvGetInt("btn.long");
-		s_bootDblMs   = nvGetInt("btn.dbl");
-		s_bootDown    = false;
-		s_bootLong    = false;
-		s_bootRelease = 0;
-		s_pwdShown    = false;
-		esp_timer_start_periodic(s_bootPoll, UI_BOOT_POLL_US);
+		uiBootWatch();
 	}
+}
+
+/* Start watching BOOT (Wait screen gestures, or the SD manager's exit). */
+static void uiBootWatch(void)
+{
+	gpio_set_pull_mode(UI_BOOT_GPIO, GPIO_PULLUP_ONLY);
+	s_bootLongMs  = nvGetInt("btn.long");
+	s_bootDblMs   = nvGetInt("btn.dbl");
+	s_bootDown    = false;
+	s_bootLong    = false;
+	s_bootRelease = 0;
+	s_pwdShown    = false;
+	esp_timer_start_periodic(s_bootPoll, UI_BOOT_POLL_US);
+}
+
+/* SD manager on, no client: its screen; BOOT short press leaves it. */
+static void uiFmScreen(void)
+{
+	char url[48];
+	esp_timer_stop(s_bootPoll);
+	snprintf(url, sizeof(url), "http://%s/fm", nvGet("rad.ip"));
+	uiScrFm(url);
+	uiBootWatch();
 }
 
 /* onWait argument: the details fields of the active interface. */
@@ -655,6 +694,16 @@ static void uiBootPoll(void *arg)
 	bool    down = (gpio_get_level(UI_BOOT_GPIO) == 0);
 	int64_t now  = esp_timer_get_time() / 1000;
 
+	if (fmActive()) {				/* SD manager screen: a press leaves it */
+		if (!down && s_bootDown) {
+			s_bootDown = false;
+			uiPost(UI_EV_FMSTOP);
+		} else if (down) {
+			s_bootDown = true;
+		}
+		return;
+	}
+
 	if (down && !s_bootDown) {			/* press */
 		s_bootDown  = true;
 		s_bootLong  = false;
@@ -687,8 +736,8 @@ static void uiNextIf(void)
 		return;
 	}
 	s_switching = true;
-	if (xTaskCreate(uiSwitchTask, "uiswitch", UI_SWITCH_STACK, (void *)(intptr_t)next,
-	                UI_SWITCH_PRIO, NULL) != pdPASS) {
+	if (xTaskCreate(uiSwitchTask, "uiswitch", UI_SWITCH_STACK, (void *)(intptr_t)(next | UI_SWITCH_NOW),
+	                UI_SWITCH_PRIO, NULL) != pdPASS) {	/* no client: no reply to wait for */
 		s_switching = false;
 	}
 }
@@ -740,10 +789,14 @@ static bool uiEvMuted(const char *text)
 	return false;
 }
 
+/* arg: interface, | UI_SWITCH_NOW to skip the reply delay (BOOT double press) */
 static void uiSwitchTask(void *arg)
 {
-	vTaskDelay(pdMS_TO_TICKS(UI_SWITCH_DELAY_MS));
-	uiSelect((uiIf_t)(intptr_t)arg);
+	int a = (int)(intptr_t)arg;
+	if (!(a & UI_SWITCH_NOW)) {
+		vTaskDelay(pdMS_TO_TICKS(UI_SWITCH_DELAY_MS));
+	}
+	uiSelect((uiIf_t)(a & ~UI_SWITCH_NOW));
 	s_switching = false;
 	vTaskDelete(NULL);
 }
