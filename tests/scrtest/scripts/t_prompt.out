@@ -1,0 +1,9 @@
+> name? 
+> got Tim
+> your age: 
+> got 42
+> no prompt: plain
+> too slow? 
+> timed out: [] 0
+<<SCRIPT t_prompt END>>
+[result END]

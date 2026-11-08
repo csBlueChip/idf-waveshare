@@ -377,6 +377,16 @@ void scrFreeVar(scrVar_t *v)
 	v->len = 0;
 }
 
+bool scrConstText(const char *name, int len)
+{
+	for (int i = 0; i < scr.nConst; i++) {
+		if ((int)strlen(scr.cname[i]) == len && strncasecmp(scr.cname[i], name, len) == 0) {
+			return scr.ctext[i];
+		}
+	}
+	return false;
+}
+
 bool scrConstFind(const char *name, int len, const char **val)
 {
 	for (int i = 0; i < scr.nConst; i++) {
@@ -909,7 +919,7 @@ static scrVal_t ePrimary(const char **pp)
 		} else if (scrConstFind(p, l, &cv)) {
 			double d;
 			int    cl = strlen(cv);
-			v = scrParseNum(cv, cl, &d) ? scrNum(d) : scrText(cv, cl);
+			v = (!scrConstText(p, l) && scrParseNum(cv, cl, &d)) ? scrNum(d) : scrText(cv, cl);
 			p += l;
 		} else {
 			scrFail("unknown name %.*s (text needs quotes)", l > 20 ? 20 : l, p);

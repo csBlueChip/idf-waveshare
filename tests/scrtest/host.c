@@ -1,10 +1,18 @@
 /* PC test host for the script interpreter core (src/scr_*.c).
  *
- *   build: see run.sh     use: scrtest dir name [args] [options] (README.txt)
+ *   build: make (or run.sh)     use: scrtest SD name [args] [options] (README.txt)
+ *
+ * SD is the card's root folder (e.g. ../../sd): name.s comes from SD/scripts
+ * (sys/name from SD/sys), data files are real files in SD/scripts/data.
+ * -test: the old layout for the test suite - SD is the folder holding the
+ * scripts, data files live in memory (nothing is written to disk).
  *
  * Options:
+ *   -test              test-suite layout (see above)
+ *   -i                 interactive: INPUT reads the keyboard (real time-outs),
+ *                      PRINT is plain, WAIT and time-outs take real time
  *   -load / -bpt file:n / -fn name / -go STEP,IN,OUT,CONT,STOP   debugger
- *   -file name=path    load a disk file as data file name (e.g. boast.txt)
+ *   -file name=path    (-test) load a disk file as data file name
  *   -input a,b,c       INPUT answers in order (then INPUT times out)
  *   -seed n            random generator start (default 1)
  *   -dump name         print data file name after the run
@@ -17,10 +25,10 @@
  *   XGO mode           queues a debugger answer (CONT STEP IN OUT STOP)
  *   XSTOP / XPAUSE     request STOP / PAUSE (seen between statements)
  *   XCLIENT 0|1        client connected (INPUT with none: -1)
- *   FLOG f text        appends "text\n" to data file f.txt (in memory)
- *   FSTAT f / FDELETE f / FCAT f   on the in-memory data files (f.var allowed)
+ *   FLOG f text        appends "text\n" to data file f.txt
+ *   FSTAT f / FDELETE f / FCAT f   on the data files (f.var allowed)
  *   XRO f              make f.txt read-only
- * Time is virtual: WAIT / time-outs advance it; timers tick on it.
+ * Time is virtual (not with -i): WAIT / time-outs advance it; timers tick on it.
  * On a pause it prints STACK and VARS, then takes the next XGO (default CONT).
  */
 
@@ -28,10 +36,33 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <time.h>
+#include <unistd.h>
+#include <errno.h>
+#include <sys/stat.h>
+#include <sys/select.h>
 #include "scr.h"
 #include "scr_host.h"
 
 static const char *s_dir;
+static bool        s_card = true;		/* SD layout, data files on disk (not -test) */
+static bool        s_live;			/* -i: keyboard INPUT, real time */
+static char        s_data[512];		/* SD/scripts/data */
+static int64_t     s_t0;			/* -i: real ms at start */
+
+/* -i: real milliseconds since the start (+1000, like the virtual clock) */
+static int64_t realMs(void)
+{
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	return (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000 - s_t0 + 1000;
+}
+
+/* card layout: path of data file fname */
+static void dataPath(const char *fname, char *out, size_t n)
+{
+	snprintf(out, n, "%s/%s", s_data, fname);
+}
 static int64_t     s_ms = 1000;
 static int         s_req;
 static bool        s_client = true;
@@ -74,6 +105,16 @@ static int fileFind(const char *fname, bool create)
 
 long scrHostFileSize(const char *fname, bool *ro, const char **err)
 {
+	if (s_card) {
+		char        path[600];
+		struct stat st;
+		dataPath(fname, path, sizeof(path));
+		if (stat(path, &st) != 0 || !S_ISREG(st.st_mode)) {
+			return -1;
+		}
+		*ro = access(path, W_OK) != 0;
+		return (long)st.st_size;
+	}
 	int i = fileFind(fname, false);
 	if (i < 0) {
 		return -1;
@@ -84,6 +125,18 @@ long scrHostFileSize(const char *fname, bool *ro, const char **err)
 
 int scrHostFileRead(const char *fname, long off, char *buf, int n, const char **err)
 {
+	if (s_card) {
+		char path[600];
+		dataPath(fname, path, sizeof(path));
+		FILE *f = fopen(path, "rb");
+		if (!f) {
+			*err = "no such file";
+			return -1;
+		}
+		int got = fseek(f, off, SEEK_SET) == 0 ? (int)fread(buf, 1, n, f) : 0;
+		fclose(f);
+		return got;
+	}
 	int i = fileFind(fname, false);
 	if (i < 0) {
 		*err = "no such file";
@@ -97,6 +150,29 @@ int scrHostFileRead(const char *fname, long off, char *buf, int n, const char **
 
 const char *scrHostFileWrite(const char *fname, long off, const char *data, int n, bool trunc)
 {
+	if (s_card) {
+		char path[600];
+		dataPath(fname, path, sizeof(path));
+		if (access(path, F_OK) == 0 && access(path, W_OK) != 0) {
+			return "read-only";
+		}
+		mkdir(s_data, 0775);
+		FILE *f = fopen(path, trunc ? "wb" : "r+b");
+		if (!f && !trunc) {
+			f = fopen(path, "w+b");			/* created if missing */
+		}
+		if (!f) {
+			return "write failed";
+		}
+		fseek(f, 0, SEEK_END);
+		long size = ftell(f);
+		for (; size < off; size++) {
+			fputc(' ', f);				/* gap filled with spaces, as in memory */
+		}
+		bool ok = fseek(f, off, SEEK_SET) == 0 && fwrite(data, 1, n, f) == (size_t)n;
+		ok = fclose(f) == 0 && ok;
+		return ok ? NULL : "write failed";
+	}
 	int i = fileFind(fname, true);
 	if (i < 0) {
 		return "too many files";
@@ -120,7 +196,11 @@ const char *scrHostFileWrite(const char *fname, long off, const char *data, int 
 char *scrHostRead(const char *name, size_t *len, const char **err)
 {
 	char path[512];
-	snprintf(path, sizeof(path), "%s/%s.s", s_dir, name);
+	if (s_card) {				/* as on the card: sys/x -> SD/sys/x.s, x -> SD/scripts/x.s */
+		snprintf(path, sizeof(path), strchr(name, '/') ? "%s/%s.s" : "%s/scripts/%s.s", s_dir, name);
+	} else {
+		snprintf(path, sizeof(path), "%s/%s.s", s_dir, name);
+	}
 	FILE *f = fopen(path, "rb");
 	if (!f) {
 		*err = "file not found";
@@ -153,6 +233,51 @@ static void post(const char *t)
 		s_dropped++;
 	}
 	snprintf(s_ev[s_nev++], sizeof(s_ev[0]), "%s", t);
+}
+
+/* FLOG / FSTAT / FDELETE / FCAT / XRO on the real data files (card layout) */
+static void cardCmd(const char *cmd, const char *fn, const char *text,
+                    void (*cb)(void *ctx, const char *text), void *ctx)
+{
+	char        path[600], buf[700];
+	struct stat st;
+	dataPath(fn, path, sizeof(path));
+	bool exists = stat(path, &st) == 0 && S_ISREG(st.st_mode);
+	if (!strcasecmp(cmd, "FLOG")) {
+		char t[600];
+		snprintf(t, sizeof(t), "%s\n", text);
+		const char *e = scrHostFileWrite(fn, exists ? (long)st.st_size : 0, t, strlen(t), false);
+		if (e) {
+			snprintf(buf, sizeof(buf), "ERR %s\n", e);
+			cb(ctx, buf);
+			return;
+		}
+	} else if (!exists) {
+		cb(ctx, "ERR no such file\n");
+		return;
+	} else if (!strcasecmp(cmd, "FSTAT")) {
+		snprintf(buf, sizeof(buf), "%ld:%s\n", (long)st.st_size, access(path, W_OK) ? "ro" : "rw");
+		cb(ctx, buf);
+	} else if (!strcasecmp(cmd, "FDELETE")) {
+		if (access(path, W_OK) != 0) {
+			cb(ctx, "ERR read-only\n");
+			return;
+		}
+		unlink(path);
+	} else if (!strcasecmp(cmd, "XRO")) {
+		chmod(path, 0444);
+	} else {
+		FILE *f = fopen(path, "rb");
+		printf("FCAT %s:\n", fn);
+		int c;
+		while (f && (c = fgetc(f)) != EOF) {
+			putchar(c);
+		}
+		if (f) {
+			fclose(f);
+		}
+	}
+	cb(ctx, "OK\n");
 }
 
 void scrHostCmd(const char *line, void (*cb)(void *ctx, const char *text), void *ctx)
@@ -194,6 +319,10 @@ void scrHostCmd(const char *line, void (*cb)(void *ctx, const char *text), void 
 		int  used = 0;
 		sscanf(line, "%15s %39s %n", cmd, nm, &used);
 		snprintf(fn, sizeof(fn), strchr(nm, '.') && strcasecmp(cmd, "FLOG") ? "%s" : "%s.txt", nm);
+		if (s_card) {
+			cardCmd(cmd, fn, used ? line + used : "", cb, ctx);
+			return;
+		}
 		int i = fileFind(fn, !strcasecmp(cmd, "FLOG"));
 		if (i < 0) {
 			cb(ctx, "ERR no such file\n");
@@ -241,7 +370,16 @@ bool scrHostIsCommand(const char *name)
 	return false;
 }
 
-void scrHostPrint(const char *text)		{ printf("> %s", text); }
+void scrHostPrint(const char *text)
+{
+	size_t n = strlen(text);
+	if (s_live) {
+		printf("%s", text);			/* as sent: an INPUT prompt has no line end */
+	} else {
+		printf("> %s%s", text, n && text[n - 1] == '\n' ? "" : "\n");	/* one line each */
+	}
+	fflush(stdout);
+}
 void scrHostDebug(const char *text)		{ printf("DEBUG: %s\n", text); }
 void scrHostNotify(const char *text)		{ printf("%s", text); }
 
@@ -303,7 +441,7 @@ uint32_t scrPrng(uint32_t *st)
 	return *st = x;
 }
 
-int64_t scrHostMs(void)				{ return s_ms; }
+int64_t scrHostMs(void)				{ return s_live ? (s_ms = realMs()) : s_ms; }
 int     scrHostFilesDefault(void)		{ return 4; }	/* NV run.files */
 
 int scrHostCheck(void)
@@ -346,8 +484,25 @@ static void timersTo(int64_t t)
 	}
 }
 
+/* -i: wait ms of real time (or until an event of mask, if mask) */
+static void liveWait(int ms)
+{
+	struct timespec ts = { ms / 1000, (long)(ms % 1000) * 1000000L };
+	nanosleep(&ts, NULL);
+	s_ms = realMs();
+	timersTo(s_ms);
+}
+
 bool scrHostSleep(int ms)
 {
+	if (s_live) {
+		int64_t end = realMs() + ms;
+		while (realMs() < end) {
+			int64_t left = end - realMs();
+			liveWait(left > 20 ? 20 : (int)left);
+		}
+		return true;
+	}
 	s_ms += ms;
 	timersTo(s_ms);
 	return true;
@@ -374,6 +529,22 @@ int scrHostEvent(int mask, char *out, size_t n, int ms)
 	}
 	if (ms == 0) {
 		return 0;
+	}
+	if (s_live) {					/* real time: poll */
+		int64_t end = ms < 0 ? -1 : realMs() + ms;
+		for (;;) {
+			liveWait(20);
+			if (take(mask, out, n)) {
+				return 1;
+			}
+			if (end >= 0 && realMs() >= end) {
+				return 0;
+			}
+			if (end < 0 && !s_tim[1].ms && !s_tim[2].ms && !s_tim[3].ms && !s_tim[4].ms) {
+				printf("[host: WAIT EVENT forever with nothing to come - stopping]\n");
+				return -1;
+			}
+		}
 	}
 	/* jump to the next timer tick within the wait */
 	int64_t end = ms < 0 ? s_ms + 3600000 : s_ms + ms;
@@ -427,6 +598,25 @@ int scrHostInput(char *out, size_t n, int ms)
 	if (!s_client) {
 		post("UI DISCONNECT");
 		return -1;
+	}
+	if (s_live) {					/* the keyboard, with a real time-out */
+		fflush(stdout);
+		fd_set rd;
+		FD_ZERO(&rd);
+		FD_SET(0, &rd);
+		struct timeval tv = { ms / 1000, (ms % 1000) * 1000 };
+		int r = select(1, &rd, NULL, NULL, ms < 0 ? NULL : &tv);
+		s_ms = realMs();
+		if (r == 0) {
+			return 0;				/* time-out */
+		}
+		if (r < 0 || !fgets(out, (int)n, stdin)) {
+			s_client = false;			/* Ctrl+D: as no client */
+			post("UI DISCONNECT");
+			return -1;
+		}
+		out[strcspn(out, "\r\n")] = '\0';
+		return 1;
 	}
 	if (s_nin) {
 		snprintf(out, n, "%s", s_in[0]);
@@ -486,17 +676,42 @@ static bool loadFile(const char *spec)
 int main(int argc, char **argv)
 {
 	if (argc < 3) {
-		fprintf(stderr, "use: scrtest dir name [args] [-load] [-bpt file:n] [-fn name] [-go STEP,IN,...]\n"
-		                "       [-file name=path] [-input a,b,...] [-seed n] [-dump name]\n");
+		fprintf(stderr, "use: scrtest SD name [args] [-i] [-test] [-load] [-bpt file:n] [-fn name]\n"
+		                "       [-go STEP,IN,...] [-file name=path] [-input a,b,...] [-seed n] [-dump name]\n"
+		                "  SD = the card's root folder (scripts/, sys/, scripts/data/), e.g. ../../sd\n");
 		return 2;
 	}
 	s_dir = argv[1];
+	for (int i = 3; i < argc; i++) {			/* layout first: -file needs it */
+		if (!strcmp(argv[i], "-test")) {
+			s_card = false;
+		} else if (!strcmp(argv[i], "-i")) {
+			s_live = true;
+		}
+	}
+	snprintf(s_data, sizeof(s_data), "%s/scripts/data", s_dir);
+	if (s_card) {
+		char        sc[600];
+		struct stat st;
+		snprintf(sc, sizeof(sc), "%s/scripts", s_dir);
+		if (stat(sc, &st) != 0 || !S_ISDIR(st.st_mode)) {
+			fprintf(stderr, "%s: no scripts folder - give the card's root (e.g. ../../sd), or -test\n", s_dir);
+			return 2;
+		}
+	}
+	if (s_live) {
+		s_t0 = 0;
+		s_t0 = realMs() - 1000;
+		s_ms = 1000;
+	}
 	char        args[256] = "";
 	bool        load = false;
 	const char *dump[8];
 	int         nDump = 0;
 	for (int i = 3; i < argc; i++) {
-		if (!strcmp(argv[i], "-load")) {
+		if (!strcmp(argv[i], "-test") || !strcmp(argv[i], "-i")) {
+			/* done above */
+		} else if (!strcmp(argv[i], "-load")) {
 			load = true;
 		} else if (!strcmp(argv[i], "-bpt") && i + 1 < argc) {
 			char *a[1] = { argv[++i] };
@@ -507,6 +722,10 @@ int main(int argc, char **argv)
 		} else if (!strcmp(argv[i], "-fn") && i + 1 < argc) {
 			i++;
 		} else if (!strcmp(argv[i], "-file") && i + 1 < argc) {
+			if (s_card) {
+				fprintf(stderr, "-file is for -test (with SD the data files are real files)\n");
+				return 2;
+			}
 			if (!loadFile(argv[++i])) {
 				return 2;
 			}
@@ -545,6 +764,23 @@ int main(int argc, char **argv)
 	static const char *rn[] = { "END", "STOPPED", "ERROR", "NOFN" };
 	printf("[result %s]\n", rn[r]);
 	for (int i = 0; i < nDump; i++) {
+		if (s_card) {
+			char path[600];
+			dataPath(dump[i], path, sizeof(path));
+			FILE *f = fopen(path, "rb");
+			if (!f) {
+				printf("[%s: no such file]\n", dump[i]);
+				continue;
+			}
+			printf("[%s]\n", dump[i]);
+			int c, last = '\n';
+			while ((c = fgetc(f)) != EOF) {
+				putchar(last = c);
+			}
+			fclose(f);
+			printf("%s[end]\n", last == '\n' ? "" : "\n");
+			continue;
+		}
 		int k = fileFind(dump[i], false);
 		if (k < 0) {
 			printf("[%s: no such file]\n", dump[i]);

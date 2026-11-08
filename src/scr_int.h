@@ -120,6 +120,7 @@ typedef struct {
 	int       nMod;
 	char      cname[SCR_CONSTS][SCR_NAME_MAX + 1];
 	char     *cval[SCR_CONSTS];
+	bool      ctext[SCR_CONSTS];		/* value was one quoted string: text, quotes removed */
 	int       nConst;
 	int       stackMax;
 
@@ -214,6 +215,7 @@ const char *scrUnquote(const char *in);		/* arena; fails on bad quotes */
 void  scrUnescape(char *s);			/* \n \\ \# \$ ; \1..\9 dropped */
 scrVal_t scrReadVarRef(const char **pp);	/* $x $$x $.x ${..} [n] at *pp */
 bool  scrConstFind(const char *name, int len, const char **val);
+bool  scrConstText(const char *name, int len);	/* a quoted (text) constant */
 void  scrRngSeed(uint32_t seed);
 double scrRnd16(void);
 

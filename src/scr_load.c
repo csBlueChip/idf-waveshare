@@ -465,12 +465,22 @@ static void constLine(scrStmt_t *s)
 	if (scr.nConst >= SCR_CONSTS) {
 		loadFail(s->src, s->line, "too many .CONST (max 32)%s", NULL);
 	}
-	/* value words, 0x / 0b numbers written in decimal */
+	/* value words, 0x / 0b numbers written in decimal; or one quoted string:
+	 * text, kept exactly, without the quotes */
 	char  val[SCR_LINE_MAX + 1];
 	int   vn = 0;
+	bool  text = false;
 	p = scrSkip(p + l);
 	if (!*p) {
 		loadFail(s->src, s->line, "usage: .CONST NAME value%s", NULL);
+	}
+	if (*p == '"' || *p == '\'') {
+		const char *e = strchr(p + 1, *p);
+		if (e && !*scrSkip(e + 1)) {
+			vn = snprintf(val, sizeof(val), "%.*s", (int)(e - p - 1), p + 1);
+			text = true;
+			p = "";
+		}
 	}
 	while (*p) {
 		int wl = 0;
@@ -497,6 +507,7 @@ static void constLine(scrStmt_t *s)
 	}
 	memcpy(v, val, vn + 1);
 	snprintf(scr.cname[scr.nConst], sizeof(scr.cname[0]), "%s", name);
+	scr.ctext[scr.nConst] = text;
 	scr.cval[scr.nConst++] = v;
 }
 

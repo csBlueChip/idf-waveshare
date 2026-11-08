@@ -400,7 +400,9 @@ implementation:
     name.nvram (SD:/sys; FCAT shows a '!' line as !key=[redacted]):
       FDELETE persist.var
 
-  Scripts only (each file has a position):
+  Scripts only (each file has a position). The file may be given as a
+  name, a constant or a variable ($f $$f ${f}); the value must be a
+  valid file name:  LET $f = "boast" ; FREAD $l $f EOL
     FWRITE file text                write text at the position (PRINT text
                                     rules; no new line added), overwriting
                                     or growing the file; created if missing
@@ -549,6 +551,13 @@ implementation:
       (commands do not read 0x..). The command name itself is never
       replaced.
     - In expressions a constant is used by its bare name.
+    - A value that is one quoted string is text, without the quotes:
+        .CONST FN_BOAST "boast"     FSEEK FN_BOAST START
+        .CONST ID "007"             LET $i = ID   -> 007 (kept exactly)
+        .CONST MSG "hello there"    ECHO 1 MSG    -> ECHO 1 "hello there"
+      (in a command line text with spaces goes in quotes, so it stays one
+      argument).
+    - Constants also work as data file names (section 7a).
     - Names follow the variable rule, are case-insensitive, and must not
       equal a reserved word, a function or a console command (load
       error). Pick names that cannot be a command argument (e.g. not P,
@@ -608,8 +617,10 @@ implementation:
                          Timer events go to the script only (not to the
                          client); all timers stop when the script ends.
 
-  INPUT $v [ms]
-    waits for the next console line from the client and puts it in $v
+  INPUT ["prompt"] $v [ms]
+    sends the prompt (if given; quoted, PRINT text rules - $vars and
+    escapes - but NO line end, so the answer follows it on the same line),
+    then waits for the next console line from the client and puts it in $v
     (it is not run as a command). Time-out: $v = "" and $.ok = 0.
     While INPUT waits only !!STOP, !!STOP NOW and !!PAUSE (any case)
     are commands; any other line is the input text (so "stop" is a
@@ -617,7 +628,7 @@ implementation:
     Events stay queued; handlers run after INPUT returns.
     No client connected: INPUT returns at once with $.ok = 0 and a
     UI DISCONNECT event is queued.
-      PRINT "name?" ; INPUT $name 30000
+      INPUT "name? " $name 30000
 
   Event list (after the renames in section 14)
     BTN n SHORT | DOUBLE | DOWN | UP | REPEAT        n = 1..10

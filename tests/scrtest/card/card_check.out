@@ -1,0 +1,17 @@
+> boast.txt B=3: P=No blade can touch me!
+> card.var: 42
+> cardlog: 23:rw
+> scratch deleted: 0
+CMD: LINE 15 10 8 14 255 255 255
+CMD: LINE 8 14 7 6 255 255 255
+CMD: LINE 7 6 15 10 255 255 255
+<<SCRIPT card_check END>>
+[result END]
+[card.var]
+$$n=42
+[end]
+[files in scripts/data]
+DESCRIPT.ION
+boast.txt
+card.var
+cardlog.txt

@@ -10,5 +10,7 @@ sdkconfig.old
 # archives
 *.zip
 
-# PC script tests: output of failed runs
+# PC script tests: output of failed runs, the built tester
 tests/scrtest/scripts/*.got
+tests/scrtest/card/*.got
+tests/scrtest/scrtest

@@ -20,6 +20,10 @@ t_fvar.s FSTAT / FDELETE on name.var (VARS SAVE file)
 t_fvar.out expected output of t_fvar.s
 t_ftag.s FSEEK TAG: line match, trailing blanks, errors
 t_ftag.out expected output of t_ftag.s
+t_cfile.s file names from constants / variables; quoted (text) constants
+t_cfile.out expected output of t_cfile.s
+t_prompt.s INPUT "prompt" $v [ms] (no line end), $var in the prompt, no prompt, time-out
+t_prompt.out expected output of t_prompt.s
 t_opts.s scrtest options -file -input -seed -dump
 t_opts.opt extra arguments for t_opts.s
 t_opts.out expected output of t_opts.s

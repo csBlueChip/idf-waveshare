@@ -1,0 +1,10 @@
+> constant: second
+> expression: [boast]
+> variable: B=1
+> plain constant + global: 2
+> text constant kept exactly: 007
+CMD: ECHO 1 "hello there"
+> command line: 30:rw
+> bad name: file: letters, digits, '_' only (no extension)
+<<SCRIPT t_cfile END>>
+[result END]

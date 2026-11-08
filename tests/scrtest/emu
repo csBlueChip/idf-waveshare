@@ -1,0 +1,2 @@
+make
+./scrtest ../../sd/scripts/ $* -seed $RANDOM

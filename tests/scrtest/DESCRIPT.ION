@@ -1,6 +1,8 @@
 . PC tests of the script interpreter (not part of the firmware)
-README.txt how to test and debug scripts on a PC (scrtest use, options, fake device)
-host.c PC host: fake commands, events, virtual time
+README.txt how to test, play and debug scripts on a PC (scrtest use, options, fake device)
+Makefile make: build ./scrtest here
+card card-layout test (card_check.s, run in a temporary copy of sd/)
+host.c PC host: card layout (SD/scripts, SD/scripts/data) or -test, -i play, fake commands
 run.sh build and run all tests: sh run.sh [-update]
 scripts test scripts t_*.s, expected output t_*.out, options t_*.opt
 DESCRIPT.ION file descriptions for this folder

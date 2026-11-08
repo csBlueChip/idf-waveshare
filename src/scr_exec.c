@@ -298,12 +298,20 @@ static const char *constWords(const char *line)
 		}
 		const char *cv;
 		if (!firstWord && scrConstFind(p, l, &cv)) {
-			int cl = strlen(cv);
-			if (n + cl >= SCR_LINE_MAX * 4) {
+			int  cl = strlen(cv);
+			bool q  = scrConstText(p, l) && strpbrk(cv, " \t");	/* text with spaces: stays one argument */
+			if (n + cl + 2 >= SCR_LINE_MAX * 4) {
 				scrFail("line too long after substitution");
+			}
+			char qc = strchr(cv, '"') ? '\'' : '"';
+			if (q) {
+				o[n++] = qc;
 			}
 			memcpy(o + n, cv, cl);
 			n += cl;
+			if (q) {
+				o[n++] = qc;
+			}
 		} else {
 			if (n + l >= SCR_LINE_MAX * 4) {
 				scrFail("line too long after substitution");
@@ -807,16 +815,37 @@ static void pushHandler(const char *ev, int ret)
 /* ================= data files (FWRITE FREAD FTELL FSEEK FCLOSE, VARS SAVE / LOAD) ================= */
 
 /* file name word at *pp (letters, digits, '_', max 31; no extension) */
+/* file name argument: a name, a constant or a variable ($f $$f ${f}); the
+ * value must be letters, digits, '_' (no extension) */
 static void fileWord(const char **pp, char *name)
 {
 	const char *p = scrSkip(*pp);
+	const char *t;
 	int         l = 0;
-	while (p[l] && p[l] != ' ' && p[l] != '\t') {
-		char c = p[l];
-		if (!scrIsName(c, false)) {
+	if (*p == '$') {
+		scrVal_t v = scrReadVarRef(&p);
+		t = scrToText(v, &l);
+		if (*p && *p != ' ' && *p != '\t') {
 			scrFail("file: letters, digits, '_' only (no extension)");
 		}
-		l++;
+	} else {
+		const char *cv;
+		while (p[l] && p[l] != ' ' && p[l] != '\t') {
+			l++;
+		}
+		if (scrConstFind(p, l, &cv)) {
+			t = cv;
+			p += l;
+			l = strlen(cv);
+		} else {
+			t = p;
+			p += l;
+		}
+	}
+	for (int i = 0; i < l; i++) {
+		if (!scrIsName(t[i], false)) {
+			scrFail("file: letters, digits, '_' only (no extension)");
+		}
 	}
 	if (l == 0) {
 		scrFail("file name expected");
@@ -824,9 +853,9 @@ static void fileWord(const char **pp, char *name)
 	if (l > SCR_FNAME_MAX) {
 		scrFail("file: max %d characters", SCR_FNAME_MAX);
 	}
-	memcpy(name, p, l);
+	memcpy(name, t, l);
 	name[l] = '\0';
-	*pp = scrSkip(p + l);
+	*pp = scrSkip(p);
 }
 
 /* position slot of name.txt (opened at 1 on first use) */
@@ -1730,12 +1759,31 @@ static void execStmt(scrFrame_t *f, scrStmt_t *s)
 	}
 
 	case K_INPUT: {
-		const char *p = s->arg;
-		scrVar_t   *v = target(&p, true);
-		double      ms = -1;
+		const char *p      = s->arg;
+		const char *prompt = NULL;
+		if (*p == '"' || *p == '\'') {			/* INPUT "prompt" $v [ms] */
+			const char *e = p + 1;
+			while (*e && *e != *p) {
+				e += (*e == '\\' && e[1]) ? 2 : 1;
+			}
+			if (!*e) {
+				scrFail("INPUT: prompt without its closing quote");
+			}
+			const char *t = scrUnquote(scrArenaStr(p, (int)(e - p) + 1));
+			const char *sub = scrSubst(t, SUB_TEXT, 0);
+			char       *o   = scrArenaStr(sub, strlen(sub));
+			scrUnescape(o);
+			prompt = o;
+			p = scrSkip(e + 1);
+		}
+		scrVar_t *v  = target(&p, true);
+		double    ms = -1;
 		p = scrSkip(p);
 		if (*p && (!scrToNum(scrEvalAll(p), &ms) || ms < 0)) {
-			scrFail("usage: INPUT $v [ms]");
+			scrFail("usage: INPUT [\"prompt\"] $v [ms]");
+		}
+		if (prompt && *prompt) {
+			scrHostPrint(prompt);			/* no line end: the answer follows it */
 		}
 		int r = scrHostInput(buf, sizeof(buf), (int)ms);
 		f->pc++;

@@ -67,3 +67,5 @@ Done
     highlighting, configurable colours, icons.
   - SD manager keyboard shortcuts; MSC Wait-screen mode; clock set from
     the browser (POST /time).
+  - PC tester: card layout (scrtest ../../sd name), -i play at the
+    keyboard, tests/scrtest/Makefile.

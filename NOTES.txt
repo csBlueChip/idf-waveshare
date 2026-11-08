@@ -289,6 +289,29 @@ conversation context. Keep it current, like the README.
             ionParse handles "quoted names"; '*' lines are not used.
             Viewer (hlIon): a "quoted name" is one name; '*' lines are
             shown whole in the comment colour.
+    scrcard scrtest SD name: scripts from SD/scripts (sys/x from SD/sys),
+            data files real in SD/scripts/data (cardCmd for FLOG FSTAT
+            FDELETE FCAT XRO). -test = old layout + in-memory files (run.sh).
+            -i: keyboard INPUT via select() with real time-out, plain
+            PRINT, real-time WAIT / events / timers. tests/scrtest/Makefile
+            (user's, + .PHONY). run.sh also runs card/card_check.s in a
+            temporary copy of sd/.
+    const   .CONST NAME "text": one quoted string = text constant (ctext[],
+            quotes removed, kept exactly; expressions give text, command
+            lines insert it, quoted again if it has spaces). fileWord():
+            data file name may be a name, a constant or $var / $$var /
+            ${..} (value checked: letters digits _). Test t_cfile.
+    prompt  INPUT ["prompt"] $v [ms]: prompt quoted, PRINT text rules, sent
+            with scrHostPrint and no line end before waiting. scrtest:
+            -i prints it as is; otherwise "> prompt" on its own line.
+            Test t_prompt.
+    mcedit  tools/mcedit/wavescript.syntax (caseinsensitive; statements +
+            option words yellow, functions brightblue, $.x brightmagenta,
+            $x brightgreen, strings green, comments brown, commands cyan).
+            mc 4.8.30 reads ~/.local/share/mc/syntax/Syntax (replaces the
+            system one; includes fall back to the system folder). Checked
+            by running mcedit in a pty (pyte); word lists checked against
+            the page. Regenerate the command list when commands change.
     sdseed  IDEA (not done): put SD card files in place at flash time.
             Flashing only writes the ESP32 flash, never the card. Plan: a
             "seed" data partition in the unused ~7.8 MB, its image built

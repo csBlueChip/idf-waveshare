@@ -1,0 +1,4 @@
+. mcedit syntax colours for wavedemo script files (*.s)
+wavescript.syntax the syntax rules (copy to ~/.local/share/mc/syntax)
+README.txt how to install it
+DESCRIPT.ION file descriptions for this folder

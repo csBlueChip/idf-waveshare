@@ -1,0 +1,4 @@
+. card-layout test: run by run.sh in a temporary copy of sd/
+card_check.s reads boast.txt, writes card.var / cardlog.txt, deletes a file, CALLs shapes.s
+card_check.out expected output (with the list of files left in scripts/data)
+DESCRIPT.ION file descriptions for this folder

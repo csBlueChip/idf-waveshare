@@ -1,0 +1,190 @@
+# wavescript.syntax - mcedit (Midnight Commander) colours for wavedemo
+# script files (*.s). Words as in SCRIPTING.txt 3a and the SD manager viewer
+# (assets/syntax.cfg); the commands are the ones the firmware registers.
+# Install: see README.txt in this folder.
+#
+# Differences from the viewer (mcedit has no 'first word of a statement'):
+#   option words and command names are coloured wherever they appear;
+#   '\#' (a literal #) may still start a comment colour.
+
+caseinsensitive
+
+context default
+
+# statements
+    keyword whole LET yellow
+    keyword whole GET yellow
+    keyword whole VARS yellow
+    keyword whole DEL yellow
+    keyword whole INS yellow
+    keyword whole IF yellow
+    keyword whole ELIF yellow
+    keyword whole ELSE yellow
+    keyword whole END yellow
+    keyword whole LOOP yellow
+    keyword whole TO yellow
+    keyword whole STEP yellow
+    keyword whole WHILE yellow
+    keyword whole TIMES yellow
+    keyword whole FOREVER yellow
+    keyword whole BREAK yellow
+    keyword whole NEXT yellow
+    keyword whole SWITCH yellow
+    keyword whole GOTO yellow
+    keyword whole EXIT yellow
+    keyword whole FN yellow
+    keyword whole RETURN yellow
+    keyword whole CALL yellow
+    keyword whole INSERT yellow
+    keyword whole ON yellow
+    keyword whole OFF yellow
+    keyword whole ONERROR yellow
+    keyword whole QUIET yellow
+    keyword whole TRACE yellow
+    keyword whole PRINT yellow
+    keyword whole DEBUG yellow
+    keyword whole FWRITE yellow
+    keyword whole FREAD yellow
+    keyword whole FTELL yellow
+    keyword whole FSEEK yellow
+    keyword whole FCLOSE yellow
+    keyword whole RNG yellow
+    keyword whole TIMER yellow
+    keyword whole BPT! yellow
+    keyword whole WAIT yellow
+    keyword whole INPUT yellow
+
+# option words (FSEEK START END SET OFFS TAG, FREAD EOL, WAIT EVENT,
+# ONERROR STOP CONT GOTO, RNG TRNG PRNG, VARS SAVE LOAD ALL, STOP NOW)
+    keyword whole START yellow
+    keyword whole SET yellow
+    keyword whole OFFS yellow
+    keyword whole TAG yellow
+    keyword whole EOL yellow
+    keyword whole EVENT yellow
+    keyword whole STOP yellow
+    keyword whole CONT yellow
+    keyword whole TRNG yellow
+    keyword whole PRNG yellow
+    keyword whole SAVE yellow
+    keyword whole LOAD yellow
+    keyword whole ALL yellow
+    keyword whole NOW yellow
+
+# operators
+    keyword whole AND brightcyan
+    keyword whole OR brightcyan
+
+# built-in functions
+    keyword whole INT brightblue
+    keyword whole ROUND brightblue
+    keyword whole ABS brightblue
+    keyword whole MIN brightblue
+    keyword whole MAX brightblue
+    keyword whole SQRT brightblue
+    keyword whole SIN brightblue
+    keyword whole COS brightblue
+    keyword whole ATAN2 brightblue
+    keyword whole LEN brightblue
+    keyword whole UPPER brightblue
+    keyword whole LOWER brightblue
+    keyword whole MID brightblue
+    keyword whole FIND brightblue
+    keyword whole RND brightblue
+
+# directives (top of the script)
+    keyword linestart .STACK brightred
+    keyword linestart .CONST brightred
+    keyword linestart .FILES brightred
+
+# labels: :name at the start of a line
+    keyword linestart :\{abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_\}\[abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789\] brightred
+
+# variables: $.x system (first), $${x} ${x} $$x $x
+    keyword $.\{abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_\}\[abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789\] brightmagenta
+    keyword $.{\[abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789.\]} brightmagenta
+    keyword $${\[abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789.,/\]} brightgreen
+    keyword ${\[abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789.,/\]} brightgreen
+    keyword $$\{abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_\}\[abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789.\] brightgreen
+    keyword $\{abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_\}\[abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789\] brightgreen
+
+# numbers
+    keyword whole 0x\{0123456789abcdefABCDEF\}\[0123456789abcdefABCDEF\] brightcyan
+    keyword whole 0b\{01\}\[01\] brightcyan
+    keyword whole \{0123456789\}\[0123456789.eE\] brightcyan
+
+# commands registered by the firmware
+    keyword whole ACC cyan
+    keyword whole BAT cyan
+    keyword whole BL cyan
+    keyword whole BOX cyan
+    keyword whole BPT cyan
+    keyword whole BTN cyan
+    keyword whole CIRC cyan
+    keyword whole CLS cyan
+    keyword whole ECHO cyan
+    keyword whole EVENTS cyan
+    keyword whole FBOX cyan
+    keyword whole FCAT cyan
+    keyword whole FCIRC cyan
+    keyword whole FDELETE cyan
+    keyword whole FDIR cyan
+    keyword whole FILES cyan
+    keyword whole FLOG cyan
+    keyword whole FONT cyan
+    keyword whole FSTAT cyan
+    keyword whole FTRI cyan
+    keyword whole GYR cyan
+    keyword whole HELP cyan
+    keyword whole IMG cyan
+    keyword whole IMU cyan
+    keyword whole INFO cyan
+    keyword whole LED cyan
+    keyword whole LINE cyan
+    keyword whole LIST cyan
+    keyword whole LOG cyan
+    keyword whole MEM cyan
+    keyword whole NV cyan
+    keyword whole PAUSE cyan
+    keyword whole PLOT cyan
+    keyword whole RAD cyan
+    keyword whole REBOOT cyan
+    keyword whole ROT cyan
+    keyword whole RUN cyan
+    keyword whole SCR cyan
+    keyword whole STACK cyan
+    keyword whole TBOX cyan
+    keyword whole TCLS cyan
+    keyword whole TEMP cyan
+    keyword whole TINK cyan
+    keyword whole TRI cyan
+    keyword whole TSCRL cyan
+    keyword whole TYX cyan
+    keyword whole UI cyan
+
+# comments: '#' to the end of the line
+context # \n brown
+
+# strings, with escapes and substituted variables
+context " " green
+    keyword \\n brightgreen
+    keyword \\\\ brightgreen
+    keyword \\# brightgreen
+    keyword \\$ brightgreen
+    keyword \\" brightgreen
+    keyword \\\{123456789\} brightgreen
+    keyword $.\{abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_\}\[abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789\] brightmagenta
+    keyword $$\{abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_\}\[abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789.\] brightgreen
+    keyword $\{abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_\}\[abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789\] brightgreen
+
+context ' ' green
+    keyword \\n brightgreen
+    keyword \\\\ brightgreen
+    keyword \\# brightgreen
+    keyword \\$ brightgreen
+    keyword \\' brightgreen
+    keyword \\\{123456789\} brightgreen
+    keyword $.\{abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_\}\[abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789\] brightmagenta
+    keyword $$\{abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_\}\[abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789.\] brightgreen
+    keyword $\{abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_\}\[abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789\] brightgreen
+

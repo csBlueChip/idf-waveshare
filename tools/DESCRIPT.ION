@@ -1,3 +1,4 @@
 . helper scripts for developers
 mkfont.py generates src/font_*.c from a font file
+mcedit mcedit (Midnight Commander) syntax colours for script files
 DESCRIPT.ION file descriptions for this folder
