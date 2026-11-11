@@ -1,0 +1,68 @@
+I=9
+# I = Total number of boasts - must be the first line in the file!
+
+# B = boast ID 0..I   - search tag
+# P = Pirate boast    - rounds a,b,c
+# C = Captain boast   - round d
+# R = Winning retort  - all rounds
+
+# 0 : You need something to say the first time you play
+B=0
+P=
+C=
+R=Your mother was a Harpy, and your father smelled of stale ambrosia!
+#Your mother was a hamster, and your father smelt of elderberry!
+
+# Heracles
+B=1
+P=I fight like Heracles himself!
+C=I could strangle the Nemean lion bare-handed!
+R=Very good. Let's see you fight the Ocean!
+
+# Atlas
+B=2
+P=I have the strength of Atlas
+C=I know the movement of every star and planet!
+R=You're more like an errand boy scrumping apples!
+
+# Achilles
+B=3
+P=No blade forged can ever touch me!
+C=Even fire itself will only make me stronger!
+R=Achilles thought so too. Mind your heels!
+
+# Deadalus & Icarus
+B=4
+P=I could fashion wings to rival those of the gods!
+C=I could navigate the labyrinth of Minos with my eyes shut!
+R=Daedalus made the wings. Icarus made the mistake. Which one are you?
+
+# Narcissus
+B=5
+P=I am the most handsome man at sea!
+C=I could make Echo speak words of her own choosing!
+R=Narcissus stared at the water; sailors look to the stars!
+
+# Midas
+B=6
+P=Everything I touch turns to gold!
+C=Even the great Dionysus has been indebted to me!
+R=Enjoy your golden supper!
+
+# Hermes
+B=7
+P=I am swifter than Hermes himself!
+C=I know every secret passage between Olympus and the Underworld!
+R=You'd struggle to cross the harbour without falling over!
+
+# Prometheus
+B=8
+P=I could steal fire from Olympus and escape unscathed!
+C=I could fashion a man from clay /and/ breathe life into him!
+R=When I last saw Prometheus, he was chained to a rock!
+
+# Orpheus
+B=9
+P=Neither man nor beast can resist the sound of my lyre!
+C=I've seen the shores of the Black Sea and returned!
+R=Orpheus had the gods listening. You'd be lucky to get the crew's attention.
