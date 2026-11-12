@@ -14,6 +14,7 @@ rad.maxcli=1
 ui.boot=BLE
 ui.baud=115200
 ui.echo=1
+ui.name=
 scr.bl=100
 scr.pflip=0
 scr.lflip=0

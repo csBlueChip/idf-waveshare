@@ -312,6 +312,15 @@ conversation context. Keep it current, like the README.
             system one; includes fall back to the system folder). Checked
             by running mcedit in a pty (pyte); word lists checked against
             the page. Regenerate the command list when commands change.
+    uiname  Web page title: /cfg "name" = SD:/sys/uiname.txt first line
+            (ASCII, trimmed, max 32, spaces allowed) else NV ui.name (no
+            spaces, may be empty) else "wavedemo". index.html sets
+            document.title; fm.html "<name> - SD card".
+    npp     tools/notepadpp/wavescript_{dark,light}.xml: UDL 2.1, generated
+            from the mcedit word lists (Keywords1 statements, 2 options, 3
+            functions, 4 AND OR, 5 commands, 6 prefix $. , 7 prefix $, 8
+            prefix : .STACK .CONST .FILES); '!' not an operator (BPT!).
+            XML-checked only; word lists checked against the page.
     sdseed  IDEA (not done): put SD card files in place at flash time.
             Flashing only writes the ESP32 flash, never the card. Plan: a
             "seed" data partition in the unused ~7.8 MB, its image built

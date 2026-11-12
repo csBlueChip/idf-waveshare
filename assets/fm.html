@@ -1049,6 +1049,9 @@
 		var t = Math.floor(Date.now() / 1000) - new Date().getTimezoneOffset() * 60;
 		try { fetch("/time?t=" + t, { method: "POST" }).catch(function () {}); } catch (e) { }
 	})();
+	fetch("/cfg").then(function (r) { return r.json(); }).then(function (c) {
+		if (c.name) document.title = c.name + " - SD card";	/* plain text: no HTML */
+	}).catch(function () { });
 	pane("list");
 	fitAll();
 	loadSyntax();

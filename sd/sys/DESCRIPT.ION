@@ -4,4 +4,5 @@ onWait.s system script: FN before / instead / after around each Wait screen
 onConnect.s system script: FN before / instead / after around the connect splash
 default.nvram all NV settings at their defaults (NV IMPORT default)
 debug.cfg log volume per device 0..4 (LOG DEBUG device n SAVE)
+uiname.txt (optional, not shipped) web page title: its first line, max 32 chars
 DESCRIPT.ION file descriptions for this folder

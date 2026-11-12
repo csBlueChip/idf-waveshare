@@ -38,6 +38,8 @@ static const char *TAG = "web";
 #define WEB_CLOSE_WAIT_MS	200	/* restart: wait for the close frame to be sent */
 #define WEB_CLOSE_FLUSH_MS	50	/* restart: then let TCP put it on the air */
 #define WEB_PING		"<<PING>>"	/* page heartbeat, answered here */
+#define WEB_NAME_FILE		SD_MOUNT_POINT "/sys/uiname.txt"	/* page title (first line) */
+#define WEB_NAME_MAX		32
 #define WEB_PONG		"<<PONG>>\n"
 
 /* DEBUG: 1 = log every connection open/close and every GET with its timing */
@@ -288,8 +290,42 @@ static esp_err_t webGetCfg(httpd_req_t *req)
 	int64_t t0 = esp_timer_get_time();
 	char    host[48];
 	webDbgHost(req, host, sizeof(host));		/* before the reply: headers are gone after */
-	char json[32];
-	snprintf(json, sizeof(json), "{\"hist\":%d}", nvGetInt("web.hist"));
+	/* page title: SD:/sys/uiname.txt (first line), else NV ui.name, else "wavedemo" */
+	char name[WEB_NAME_MAX + 1] = "";
+	sdLock();
+	FILE *f = sdEnsureMounted() == ESP_OK ? fopen(WEB_NAME_FILE, "rb") : NULL;
+	if (f) {
+		char line[80];
+		if (fgets(line, sizeof(line), f)) {
+			int n = 0;
+			for (char *c = line; *c && *c != '\r' && *c != '\n' && n < WEB_NAME_MAX; c++) {
+				if (*c >= ' ' && *c <= '~' && (n || *c != ' ')) {	/* ASCII; leading blanks dropped */
+					name[n++] = *c;
+				}
+			}
+			while (n > 0 && name[n - 1] == ' ') {
+				n--;
+			}
+			name[n] = '\0';
+		}
+		fclose(f);
+	}
+	sdUnlock();
+	if (!name[0]) {
+		snprintf(name, sizeof(name), "%s", nvGet("ui.name"));
+	}
+	if (!name[0]) {
+		snprintf(name, sizeof(name), "wavedemo");
+	}
+	char json[24 + 2 * WEB_NAME_MAX + 8];			/* every name char may need a '\\' */
+	int  n = snprintf(json, sizeof(json), "{\"hist\":%d,\"name\":\"", nvGetInt("web.hist"));
+	for (const char *c = name; *c; c++) {
+		if (*c == '"' || *c == '\\') {
+			json[n++] = '\\';
+		}
+		json[n++] = *c;
+	}
+	snprintf(json + n, sizeof(json) - n, "\"}");
 	httpd_resp_set_type(req, "application/json");
 	httpd_resp_set_hdr(req, "Cache-Control", "no-store");
 	esp_err_t err = httpd_resp_send(req, json, HTTPD_RESP_USE_STRLEN);

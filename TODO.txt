@@ -34,6 +34,8 @@ To do
      on every Wait screen.
  15. Board test - clock: after the web console connects (or the SD
      manager opens) new files get today's date, not 1980-01-01.
+ 16. Board test - page title: default "wavedemo", NV ui.name, then
+     SD:/sys/uiname.txt (console page and "<name> - SD card").
 
 On hold
  10. Further RAM saving (now 97 KB free on Wi-Fi): stack trims, Wi-Fi /

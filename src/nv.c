@@ -62,6 +62,7 @@ static const nvKey_t s_keys[] = {
 	{ "ui.boot",          "BLE",           nvChkUi,    0,   0,     0 },
 	{ "ui.baud",          "115200",        nvChkBaud,  0,   0,     0 },
 	{ "ui.echo",          "1",             nvChkInt,   0,   1,     0 },
+	{ "ui.name",          "",              nvChkText,  0,   32,    0 },
 	{ "scr.bl",           "100",           nvChkInt,   0,   100,   0 },
 	{ "scr.pflip",        "0",             nvChkInt,   0,   1,     0 },
 	{ "scr.lflip",        "0",             nvChkInt,   0,   1,     0 },

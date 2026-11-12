@@ -23,6 +23,8 @@
  *   ui.baud    115200           9600|19200|38400|57600|115200|230400|460800|921600
  *                               (UART UI speed; read when the UART UI starts)
  *   ui.echo    1                1 = serial UIs echo typed characters
+ *   ui.name    (empty)          web page title, 0..32 chars, no spaces (empty: the
+ *                               default "wavedemo"; SD:/sys/uiname.txt wins)
  *   scr.bl     100              backlight 0..100 %
  *   scr.pflip  0                1 = portrait upside down (ROT 0 <-> 2)
  *   scr.lflip  0                1 = landscape upside down (ROT 1 <-> 3)

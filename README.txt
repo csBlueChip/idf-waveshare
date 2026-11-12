@@ -403,6 +403,9 @@ Scripts (SD:/scripts/name.s; language: SCRIPTING.txt, section 9 here)
   ui.baud    115200          UART UI speed: 9600|19200|38400|57600|115200|
                              230400|460800|921600 (read when UART UI starts)
   ui.echo    1               1 = serial UIs echo what you type
+  ui.name    (empty)         web page title, 0..32 chars, no spaces;
+                             empty: "wavedemo". SD:/sys/uiname.txt (first
+                             line, spaces allowed) wins over it
   scr.bl     100             backlight at boot, 0..100 %
   scr.pflip  0               1 = portrait upside down (ROT 0 <-> 2)
   scr.lflip  0               1 = landscape upside down (ROT 1 <-> 3)
