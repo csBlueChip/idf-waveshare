@@ -20,6 +20,11 @@
 
 .CONST FN_BOAST "boastbc"  # txt and var file
 
+# RUN boastbc <mode> [seed]
+# If a seed is provided, use the PRNG (not TRNG) and seed it as requested
+# ...the means the emulator can produce identical results
+IF $arg[0] >= 2 ; RNG PRNG $arg[2] ; END
+
 # --- parse CLI args ... ~lowercase ... no fallthrough
 # $$global $local variables
 # winN - advantage required to win
