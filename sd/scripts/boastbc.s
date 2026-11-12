@@ -31,7 +31,7 @@ IF $arg[0] >= 2 ; RNG PRNG $arg[2] ; END
 # prob - probability of pirate giving a bad retort {1:prob}
 # secs - seconds you get to retort [0->inf]
 # porc - Pirate or Captain
-SWITCH ~$arg
+SWITCH ~$arg[1]
 	a)  LET $$winN = 2 ; LET $$prob = 3 ; LET $$secs =  0 ; LET $$porc = "Pirate"
 	b)  LET $$winN = 3 ; LET $$prob = 3 ; LET $$secs =  0 ; LET $$porc = "Pirate"
 	c)  LET $$winN = 3 ; LET $$prob = 4 ; LET $$secs = 15 ; LET $$porc = "Pirate"
