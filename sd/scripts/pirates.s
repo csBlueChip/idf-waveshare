@@ -1,6 +1,7 @@
 #
 # Boasts and Retorts
 # ==================
+#
 # Homer's Iliad is full of of warriors trading speeches before single combat.
 # They boast of their ancestry and strength and mock the other man's.
 # E.G. Aeneas and Achilles do it at length before fighting in Book 20, and Aeneas even says they could trade insults all day.
@@ -8,7 +9,7 @@
 # Set with a side-order of swashbuckling metaphor, you will battle the pirates 4 (or more) times,
 # each battle more intense that the last.
 # Remember the boasts thrown out by the pirates, and pick the correct retort from those you have learned.
-# To learn the retorts, use the boasts you can remember, and learn the corrrect retort (probably).
+# To learn the retorts, use the boasts you can remember, and learn the correct retort (probably).
 # A good retort will win a point; a bad retort will give a point to the boaster.
 # The exact rules are different for each round, but the pattern is consistent.
 # In round #4 you will meet the Captain, he has different boasts,
@@ -18,7 +19,7 @@
 # However, if you stand your ground long enough, he will acknowledge your guile, and you will "win"
 #
 
-.CONST FN_BOAST "boastbc"  # txt and var file
+.CONST FN_BOAST "pirates"  # txt and var file
 
 # RUN boastbc <mode> [seed]
 # If a seed is provided, use the PRNG (not TRNG) and seed it as requested
@@ -35,7 +36,7 @@ SWITCH ~$arg[1]
 	a)  LET $$winN = 2 ; LET $$prob = 3 ; LET $$secs =  0 ; LET $$porc = "Pirate"
 	b)  LET $$winN = 3 ; LET $$prob = 3 ; LET $$secs =  0 ; LET $$porc = "Pirate"
 	c)  LET $$winN = 3 ; LET $$prob = 4 ; LET $$secs = 15 ; LET $$porc = "Pirate"
-	d)  LET $$winN = 5 ; LET $$prob = 0 ; LET $$secs = 15 ; LET $$porc = "Captain"
+	d)  LET $$winN = 5 ; LET $$prob = 0 ; LET $$secs = 20 ; LET $$porc = "Captain"
 	forget|reset)
 		LET $f = FN_BOAST
 		GET $r = FDELETE ${f}.var
@@ -53,7 +54,7 @@ IF MID($l, 1, 2) != "I="
 	PRINT "ERROR: ${fnboast}.txt - missing I=n"
 	EXIT
 END
-LET $$bCnt = MID($l, 3, LEN($l))
+LET $$bCnt = MID($l, 3, LEN($l))  # strip the "I="
 
 # --- Default State
 LET $$kP = ""    # known Pirate boasts
@@ -159,7 +160,7 @@ FN getText $n $f
 			RETURN MID($l, 3, LEN($l))     # return the text
 		END
 	END
-	RETURN "I've forgotten how to boast!"  # entry not found
+	RETURN "I'm utterly lost for words!"  # entry not found
 END
 
 ###############################################################################
@@ -242,8 +243,13 @@ FN gameBoasts
 	# --- Announce your retort
 	LET $r = $krx[$in]
 	LET $t = CALL getText $r R
-	PRINT '   You parry and retort:'
-	PRINT '   "$t"'
+
+	LET $i = RND(1,3)
+	IF   $i == 1   ; LET $i = "You parry and"
+	ELIF $i == 2   ; LET $i = "With an air of pride you"
+	ELSE           ; LET $i = "You laugh mockingly and"
+	END
+	PRINT '   $i retort "$t"'
 
 	# --- Decide the outcome
 	IF $r == $b
@@ -274,10 +280,22 @@ FN youBoast
 		PRINT "  $rCnt) $t"
 	END
 
-	# --- get player input
+	# --- get player's boast
+	LET $end = $.runtime + ($$secs * 1000)  # some rounds are timed
 	LOOP FOREVER
-		INPUT ">"$in
-		IF !$.ok ; PRINT "!! UI lost - exit" ; EXIT ; END  # sanity check
+		IF $$secs
+			LET $left = $end - $.runtime
+			IF $left <= 0 ; BREAK ; END
+			LET $secL = INT($left / 1000)
+			INPUT "($secL secs)>" $in $left
+		ELSE
+			INPUT ">" $in  # choose retort
+		END
+
+		IF !$.ok
+			IF $$secs AND $.runtime >= $end ; BREAK ; END  # Timer ran out
+			PRINT "!! UI lost - exit" ; EXIT
+		END
 
 		# did they enter a valid number?
 		IF $in > 0 AND $in <= $known[0] ; BREAK ; END
@@ -296,7 +314,7 @@ FN youBoast
 	LOOP $r TIMES ; LET $xx = RND(1, $$prob) ; END
 
 	IF $$prob AND (RND(1, $$prob) == 1)
-		LOOP WHILE $r == $b ; LET $r = RND(0, $$bCnt) ; END
+		LOOP WHILE $r == $b ; LET $r = RND(1, $$bCnt) ; END
 	END
 
 	LET $txt = CALL getText $r Retort
@@ -307,7 +325,7 @@ FN youBoast
 	ELIF !FIND(" $$kR ", " $r ") ; LET $$kR = $$kR $r
 	END
 
-	# --- Adjust the score
+	# --- Update the score
 	IF $r == $b
 		LET $$scPC += 1
 	ELSE
