@@ -130,7 +130,7 @@ LOOP FOREVER
 				LET $win = 1
 				PRINT "*** The Captain stutters, lost for words. The crew panic, dive in to the sea, and turn in to dolphins."
 				BREAK
-			ELIF $$scPC >= $scPl+2
+			ELIF $$scPC >= $$scPl+2
 				LET $win = 0
 				PRINT '!!! The captain scoffs at you: "You are not ready for what lies ahead. Enjoy your life on Keos."'
 				BREAK
