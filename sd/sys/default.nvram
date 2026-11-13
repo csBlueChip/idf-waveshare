@@ -3,18 +3,22 @@
 # Format: key=value, one per line; '#' starts a comment;
 # !key=value is a secret: FCAT default.nvram shows !key=[redacted].
 
-rad.ssid=wavedemo
-!rad.pwd=waveP@55word
-rad.ble=ESP32-S3-Demo
-rad.ip=192.168.4.1
-rad.mask=/24
-rad.pwr=8.5
-rad.nogw=0
-rad.maxcli=1
-ui.boot=BLE
-ui.baud=115200
-ui.echo=1
-ui.name=
+wifi.ssid=wavedemo
+!wifi.pwd=waveP@55word
+wifi.ip=192.168.4.1
+wifi.cidr=/24
+wifi.pwr=8.5
+wifi.gw=1
+wifi.maxconn=1
+ble.name=ESP32-S3-Demo
+ble.pwr=9
+sys.ui=BLE
+ser.baud=115200
+ser.echo=1
+web.name=
+web.port=80
+web.captive=1
+telnet.port=23
 scr.bl=100
 scr.pflip=0
 scr.lflip=0

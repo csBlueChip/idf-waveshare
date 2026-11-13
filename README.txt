@@ -7,12 +7,13 @@ Firmware 0.5.0, ESP-IDF v6.1. Command console over BLE, telnet or web.
 1. CONSOLE
 ----------
 
-Interfaces (one active at a time, boot choice in NV ui.boot):
+Interfaces (one active at a time, boot choice in NV sys.ui):
 
-  BLE      Nordic UART Service, device name from NV rad.ble
-  TELNET   Wi-Fi AP, telnet port 23
-  WEB      Wi-Fi AP, captive-portal web console at http://<rad.ip>/
-  UART     UART0 on the header (TX GPIO43, RX GPIO44), 8N1, NV ui.baud
+  BLE      Nordic UART Service, device name from NV ble.name
+  TELNET   Wi-Fi AP, telnet port NV telnet.port (23)
+  WEB      Wi-Fi AP, web console at http://<wifi.ip>/ (port NV web.port,
+           80; captive portal unless NV web.captive 0)
+  UART     UART0 on the header (TX GPIO43, RX GPIO44), 8N1, NV ser.baud
   USB      USB-C port (the chip's USB-Serial/JTAG)
 
 At start-up the LED flashes for 100 ms: sys.aron colour if sys.autorun is 1,
@@ -97,15 +98,17 @@ Interface
 
   UI                            show active interface
   UI BLE                        switch to BLE
-  UI TELNET                     reply SSID/PWD/IP/PORT, switch to telnet
-  UI WEB                        reply SSID/PWD/URL, switch to web console
+  UI TELNET                     reply SSID/PWD/IP/PORT (telnet.port), switch
+                                to telnet
+  UI WEB                        reply SSID/PWD/URL (with :port unless 80),
+                                switch to web console
   UI UART                       reply BAUD/PINS, switch to the UART console
   UI USB                        switch to the USB serial console
   UI MSC                        MSC Wait screen: no console; hold BOOT
                                 to start USB disk mode (as FILES)
   UI NEXT                       switch to the next interface: WEB ->
                                 TELNET -> BLE -> USB -> UART -> MSC -> WEB
-                                (as BOOT double press; ui.boot unchanged)
+                                (as BOOT double press; sys.ui unchanged)
     Events (to the client):
     <<UI CONNECT>>              first message of a new session
     <<UI DISCONNECT>>           session ended (no client left to see it;
@@ -114,7 +117,7 @@ Interface
     <<UI LINK DOWN>>            the last Wi-Fi device left (the session is
                                 dropped: for scripts)
     A client only sees LINK UP when another device joins, i.e. with
-    rad.maxcli > 1 (default 1).
+    wifi.maxconn > 1 (default 1).
 
 LED
 
@@ -272,22 +275,19 @@ Settings (stored in flash, used at the next boot)
 
   NV GET                        list all settings
   NV GET key                    show one setting
+                                (NV is privileged: GET shows secrets such
+                                as wifi.pwd in clear)
   NV SET key value              check and store
   NV SET key r g b              same, for colour keys (disk.*, sys.aron,
                                 sys.aroff)
   NV RESET                      all settings to defaults (except sys.bootcnt)
   NV RESET key                  one setting to default
-  NV EXPORT name                write /sys/name.nvram (rad.pwd is written
-                                as !rad.pwd=...: FCAT shows [redacted])
+  NV EXPORT name                write /sys/name.nvram (wifi.pwd is written
+                                as !wifi.pwd=...: FCAT shows [redacted])
   NV IMPORT name                load /sys/name.nvram (all lines checked,
                                 nothing stored if any is bad; sys.bootcnt
                                 is skipped: "warning: sys.bootcnt ignored";
                                 a leading '!' on a line is ignored)
-  RAD GET                       list radio settings
-  RAD GET key ...               show radio settings
-  RAD SET key value ...         store radio settings (all or none)
-
-  RAD keys: ssid pwd ble ip netmask pwr nogw maxcli (short names for rad.*).
   In values "\#" stands for '#'.
 
 USB disk
@@ -303,7 +303,7 @@ USB disk
 SD card manager (web UI only)
 
   FILES WEB                     from the web console: the page opens
-                                http://<rad.ip>/fm (built-in page, or
+                                http://<wifi.ip>/fm (built-in page, or
                                 SD:/sys/fm.html if present):
                                 folder tree left, files right (name,
                                 size, date); Download, View, Upload,
@@ -336,7 +336,8 @@ SD card manager (web UI only)
   Download gives the real file); HTML HTM HTML (rendered with
   scripts off - "JS off" red / "JS ON" bold green toggle - and a Source
   toggle; relative links and images do not load). Other files:
-  double-click downloads. Buttons show icons and words (icons only when
+  double-click downloads. A click selects a row; double-click opens a
+  folder, or ".." to go up. Buttons show icons and words (icons only when
   a toolbar would wrap; hover for the name). Descriptions from
   DESCRIPT.ION: hovering a list row, a tree folder or the path bar shows
   it (a folder: its entry in the parent's DESCRIPT.ION, else its own "."
@@ -389,23 +390,32 @@ Scripts (SD:/scripts/name.s; language: SCRIPTING.txt, section 9 here)
 3. NV VARIABLES
 ---------------
 
-  key        default         range / meaning
-  ---------  --------------  ------------------------------------------
-  rad.ssid   wavedemo        Wi-Fi SSID, 1..32 chars, no spaces, ':', '|'
-  rad.pwd    waveP@55word    Wi-Fi password, 8..63 chars, no spaces, ':', '|'
-  rad.ble    ESP32-S3-Demo   BLE device name, 1..29 chars, no spaces, ':', '|'
-  rad.ip     192.168.4.1     AP address, must be a host in rad.mask
-  rad.mask   /24             AP netmask /8../30
-  rad.pwr    8.5             Wi-Fi TX power 2..20 dBm (0.25 steps)
-  rad.nogw   0               1 = DHCP offers no gateway (engineering)
-  rad.maxcli 1               Wi-Fi clients at a time 1..4
-  ui.boot    BLE             interface at boot: BLE|TELNET|WEB|UART|USB|MSC
-  ui.baud    115200          UART UI speed: 9600|19200|38400|57600|115200|
-                             230400|460800|921600 (read when UART UI starts)
-  ui.echo    1               1 = serial UIs echo what you type
-  ui.name    (empty)         web page title, 0..32 chars, no spaces;
-                             empty: "wavedemo". SD:/sys/uiname.txt (first
-                             line, spaces allowed) wins over it
+  key          default         range / meaning
+  -----------  --------------  ------------------------------------------
+  wifi.ssid    wavedemo        Wi-Fi SSID, 1..32 chars, no spaces, ':', '|'
+  wifi.pwd     waveP@55word    Wi-Fi password, 8..63 chars, no spaces, ':', '|'
+  wifi.ip      192.168.4.1     AP address, must be a host in wifi.cidr
+  wifi.cidr    /24             AP netmask /8../30
+  wifi.pwr     8.5             Wi-Fi TX power 2..20 dBm (0.25 steps; not BLE)
+  wifi.gw      1               1 = DHCP offers a gateway (phones then open
+                               the captive portal); 0 = none (engineering)
+  wifi.maxconn 1               Wi-Fi clients at a time 1..4
+  ble.name     ESP32-S3-Demo   BLE device name, 1..29 chars, no spaces, ':', '|'
+  ble.pwr      9               BLE TX power -24..20 dBm, rounded to a step:
+                               -24 -21 -18 .. 15 18 20 (not Wi-Fi)
+  sys.ui       BLE             interface at boot: BLE|TELNET|WEB|UART|USB|MSC
+                               (RESET! cannot be a boot choice)
+  ser.baud     115200          UART UI speed: 9600|19200|38400|57600|115200|
+                               230400|460800|921600 (read when UART UI starts)
+  ser.echo     1               1 = serial UIs echo what you type
+  web.name     (empty)         web page title, 0..32 chars, no spaces;
+                               empty: "wavedemo". SD:/sys/uiname.txt (first
+                               line, spaces allowed) wins over it
+  web.port     80              web console port 1..65535
+  web.captive  1               1 = captive portal: DNS answers every name,
+                               unknown URLs redirect to the console;
+                               0 = no DNS server, unknown URLs get 404
+  telnet.port  23              telnet console port 1..65535
   scr.bl     100             backlight at boot, 0..100 %
   scr.pflip  0               1 = portrait upside down (ROT 0 <-> 2)
   scr.lflip  0               1 = landscape upside down (ROT 1 <-> 3)
@@ -441,7 +451,7 @@ Scripts (SD:/scripts/name.s; language: SCRIPTING.txt, section 9 here)
                              exported; NV IMPORT ignores it with a warning;
                              kept by NV RESET)
 
-  Fixed (not in NV): Wi-Fi channel 6, telnet port 23, web port 80;
+  Fixed (not in NV): Wi-Fi channel 6;
   one telnet client / one web page at a time.
 
 
@@ -476,7 +486,7 @@ at its next use.
                         debug.cfg (log volume per device, section 7),
                         system scripts onBoot.s onWait.s onConnect.s
                         (NV sys.autorun 1; by hand RUN sys/onBoot)
-  /www/                 web files served in WEB mode (http://<rad.ip>/path
+  /www/                 web files served in WEB mode (http://<wifi.ip>/path
                         -> /www/path; / -> /www/index.html if present;
                         no caching, no folder listings)
                         Reserved: /www/cfg and /www/ws are never served
@@ -488,9 +498,12 @@ at its next use.
 Created automatically when first needed: /scrshots/, /sys/, /imu/,
 /scripts/data/ (FLOG, FWRITE, VARS SAVE; FDIR / FCAT show them).
 
-Timestamp (automatic file names, INFO): bNNNN_hhmmss = boot count in hex
-(NV sys.bootcnt, +1 every boot) and time since boot, e.g. b002A_001523 =
-boot 42, 0 h 15 min 23 s. A name already taken gets -1, -2 ... added.
+Timestamp (automatic file names, INFO, $.time): once a browser has set the
+clock (web console or SD manager page connected) YYYYMMDD-HHMMSS, e.g.
+20261113-142530 (the PC's local time); before that bNNNN_hhmmss = boot
+count in hex (NV sys.bootcnt, +1 every boot) and time since boot, e.g.
+b002A_001523 = boot 42, 0 h 15 min 23 s. The clock is lost at every
+reboot. A name already taken gets -1, -2 ... added.
 Create /images/ and /www/ yourself (missing = none).
 
 
@@ -520,19 +533,26 @@ Create /images/ and /www/ yourself (missing = none).
 
     WEB / TELNET              BLE
     UI  : WEB:80              UI  : BLE
-    SSID: <rad.ssid>          Name: <rad.ble>
+    SSID: <wifi.ssid>          Name: <ble.name>
     Pwd : (hold BOOT)
-    IP  : <rad.ip> <rad.mask>
+    IP  : <wifi.ip> <wifi.cidr>
     WiFi: Waiting... | Link Active
 
     UART                      USB
     UI  : UART                UI  : USB
-    Baud: <ui.baud>
+    Baud: <ser.baud>
     Pins: TX43 RX44
 
     MSC
     UI  : MSC - Flash Drive
     BOOT: hold to start       (white after the labels)
+
+    RESET!
+    UI  : RESET!
+    MODE: NVRAM               (the selected mode only, in white: NVRAM,
+                              Script or FULL; no SD card: "NVRAM - no
+                              backup", the only mode)
+    BOOT: TAP=mode, LONG=OK
 
   - "Link Active" (white): a device has joined the Wi-Fi and has an IP;
     back to "Waiting..." when the last one leaves.
@@ -541,17 +561,41 @@ Create /images/ and /www/ yourself (missing = none).
       long press (btn.long)  show the Wi-Fi password until released;
                              MSC: start USB disk mode (as FILES)
       double press           next interface: WEB -> TELNET -> BLE -> USB
-                             -> UART -> MSC -> WEB
+                             -> UART -> MSC -> RESET! -> WEB
                              (second press within btn.dbl of the first
-                             release; this session only, ui.boot unchanged)
+                             release; this session only, sys.ui unchanged)
+  - RESET! screen (reached only by double press; not a sys.ui value or
+    UI command; no interface runs and onWait is not run):
+      tap                    next mode (after btn.dbl, so a double press
+                             still moves on to WEB); starts at NVRAM
+      long press             "Long press again..."; a second long
+                             press within 5 s of releasing the first does
+                             it; a tap or 5 s cancels
+      NVRAM                  settings exported to SD:/sys/<timestamp>.nvram
+                             (as NV EXPORT; timestamp see 4), every key
+                             reset to its default except sys.bootcnt,
+                             reboot. Export fails: "No backup: <reason>",
+                             reset anyway.
+                             No card: reset without a backup.
+      Script                 run SD:/sys/reset.s ($arg = SCRIPT) as a
+                             system script, then back to RESET!
+      FULL                   export, reset, run reset.s ($arg = FULL),
+                             reboot (no reset.s: error, nothing done)
+  - SD:/sys/reset.nvram at boot (before NV is used): settings exported to
+    SD:/sys/b<boot>_<uptime>.nvram, every key to its default (except
+    sys.bootcnt), then the file's settings (empty file = defaults only);
+    renamed reset.done (a failed export is logged; the reset goes ahead).
+    A bad file changes nothing and is renamed reset.bad. Results in the log. Without any of these: USB +
+    esptool.py --chip esp32s3 erase_region 0x9000 0x10000 (NVS).
   - Lines too long for the screen end in '~'.
 
 
 6. WEB CONSOLE
 --------------
 
-  - Join the AP; phones open the portal by themselves (needs rad.nogw 0),
-    or browse to http://<rad.ip>/.
+  - Join the AP; phones open the portal by themselves (needs wifi.gw 1
+    and web.captive 1), or browse to http://<wifi.ip>/ (add :port when
+    web.port is not 80).
   - Replies scroll as a page (works in Android's sign-in window); the
     input line and Send stay at the bottom. The page is always 2 px
     taller than the window, so it (and the "^" list) can scroll even
@@ -567,7 +611,8 @@ Create /images/ and /www/ yourself (missing = none).
   - Files in /www on the SD card are served first; /www/index.html
     replaces the built-in page. /cfg and /ws are always built in
     (settings and the command WebSocket) - a custom page needs /ws.
-  - Anything not found redirects to the console page.
+  - Anything not found redirects to the console page (web.captive 1;
+    with 0 it gets 404 "not found").
   - Reconnect: the page checks /cfg first (2 s limit) and only then opens
     the WebSocket (3 s limit), retrying every 2 s; leaving or reloading
     the page closes it. One page at a time: a newer page takes over.
@@ -586,9 +631,9 @@ Create /images/ and /www/ yourself (missing = none).
 7. SERIAL CONSOLE (UART / USB) AND LOGS
 ---------------------------------------
 
-  Terminal: 8N1 at ui.baud (UART) or any speed (USB). Replies end in CR LF.
+  Terminal: 8N1 at ser.baud (UART) or any speed (USB). Replies end in CR LF.
   Input lines end on CR, LF or CR LF. Typed characters are echoed when
-  ui.echo is 1 (turn the terminal's local echo off, or ui.echo 0);
+  ser.echo is 1 (turn the terminal's local echo off, or ser.echo 0);
   Backspace / DEL erases. Control and non-ASCII characters are ignored.
 
   [Startup Complete - UART UI active]   (or USB) is the last line at boot

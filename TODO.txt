@@ -29,13 +29,30 @@ To do
      sys/fm.html and sys/syntax.cfg overrides (and a bad syntax.cfg);
      keyboard shortcuts (?); active-pane frame; Info (DESCRIPT.ION edit,
      '*' on delete, rename / move keeps the entry).
- 14. Board test - MSC: rotation ... UART -> MSC -> WEB, ui.boot MSC, UI
+ 14. Board test - MSC: rotation ... UART -> MSC -> WEB, sys.ui MSC, UI
      MSC; "BOOT: hold to start" starts disk mode; interface name in white
      on every Wait screen.
  15. Board test - clock: after the web console connects (or the SD
      manager opens) new files get today's date, not 1980-01-01.
- 16. Board test - page title: default "wavedemo", NV ui.name, then
+ 16. Board test - page title: default "wavedemo", NV web.name, then
      SD:/sys/uiname.txt (console page and "<name> - SD card").
+ 17. Board test - NV renames / ports: NV IMPORT default (new key names;
+     an old rad.* / ui.baud file must ERR); web.port 8080 (URL on the Wait
+     screen and UI WEB reply show :8080, page works, phone portal opens);
+     telnet.port 2323; web.captive 0 (no portal, unknown URL = 404);
+     wifi.gw 0 (no gateway offered); ble.pwr -24 / 20 (range changes);
+     RAD gone (ERR unknown command); script error in an ELIF condition
+     reports the ELIF's line.
+ 18. Board test - reset: renames wifi.ip, sys.ui (NV GET); RESET! screen
+     after MSC (double press on to WEB; tap cycles the MODE line NVRAM ->
+     Script -> FULL after btn.dbl; long = "Long press again...", tap / 5 s
+     cancels); NVRAM: backup /sys/<stamp>.nvram + defaults + reboot
+     (bootcnt kept; read-only card: "No backup: ..." and still resets);
+     no card: "NVRAM - no backup"; Script: /sys/reset.s ($arg SCRIPT),
+     missing = ERR; FULL; SD:/sys/reset.nvram at boot (empty, with
+     settings, bad -> reset.bad); timestamps YYYYMMDD-HHMMSS after a
+     browser connects (SCR SHOT, INFO, $.time); SD manager ".." needs a
+     double-click.
 
 On hold
  10. Further RAM saving (now 97 KB free on Wi-Fi): stack trims, Wi-Fi /

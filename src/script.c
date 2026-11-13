@@ -147,6 +147,19 @@ esp_err_t scriptInit(void)
 	return err;
 }
 
+bool scriptHas(const char *name)
+{
+	return scriptExists(name);
+}
+
+bool scriptRunWait(const char *name, const char *args)
+{
+	if (s_running) {
+		return false;
+	}
+	return scriptStart(name, args, NULL, false, true, true, NULL);
+}
+
 bool scriptActive(void)
 {
 	return s_running;

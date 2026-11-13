@@ -18,13 +18,13 @@
 #include "ui.h"
 #include "btn.h"
 #include "nv.h"
-#include "rad.h"
 #include "bat.h"
 #include "sys.h"
 #include "ser.h"
 #include "log.h"
 #include "fm.h"
 #include "script.h"
+#include "reset.h"
 
 static const char *TAG = "main";
 
@@ -73,11 +73,11 @@ void app_main(void)
 	ESP_ERROR_CHECK(nvInit());
 	ESP_ERROR_CHECK(serInit(uiSerRx));
 	ESP_ERROR_CHECK(logInit());
-	ESP_ERROR_CHECK(radInit());
 	ESP_ERROR_CHECK(sysInit());
 	ESP_ERROR_CHECK(ledInit());
-	mainAutorunFlash();				/* autorun state: sys.aron / sys.aroff */
 	ESP_ERROR_CHECK(sdInit());
+	resetBootFile();				/* SD:/sys/reset.nvram: backup, defaults, import */
+	mainAutorunFlash();				/* autorun state: sys.aron / sys.aroff */
 	logLoadCfg();					/* SD:/sys/debug.cfg: log volume per device */
 	ESP_ERROR_CHECK(lcdInit());
 	ESP_ERROR_CHECK(gfxInit());

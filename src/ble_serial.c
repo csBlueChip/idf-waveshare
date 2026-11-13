@@ -6,6 +6,7 @@
 #include "freertos/task.h"
 #include "freertos/stream_buffer.h"
 #include "esp_attr.h"
+#include "esp_bt.h"
 
 #include "nimble/nimble_port.h"
 #include "nimble/nimble_port_freertos.h"
@@ -108,7 +109,7 @@ esp_err_t bleInit(bleRxCb_t onRxCb, bleConnCb_t onConnCb)
 		return ESP_FAIL;
 	}
 
-	rc = ble_svc_gap_device_name_set(nvGet("rad.ble"));
+	rc = ble_svc_gap_device_name_set(nvGet("ble.name"));
 	if (rc != 0) {
 		ESP_LOGE(TAG, "set device name failed: %d", rc);
 		return ESP_FAIL;
@@ -174,9 +175,28 @@ void bleDisable(void)
 	ESP_LOGI(TAG, "disabled");
 }
 
+/* NV ble.pwr (dBm, already one of the steps) -> controller power level */
+static void bleSetPower(void)
+{
+	static const int dbm[] = { -24, -21, -18, -15, -12, -9, -6, -3, 0, 3, 6, 9, 12, 15, 18, 20 };
+	int want = nvGetInt("ble.pwr");
+	int lvl  = ESP_PWR_LVL_P9;
+	for (int i = 0; i < (int)(sizeof(dbm) / sizeof(dbm[0])); i++) {
+		if (dbm[i] == want) {
+			lvl = ESP_PWR_LVL_N24 + i;
+		}
+	}
+	esp_err_t e1 = esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_DEFAULT, (esp_power_level_t)lvl);
+	esp_err_t e2 = esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, (esp_power_level_t)lvl);
+	if (e1 != ESP_OK || e2 != ESP_OK) {
+		ESP_LOGW(TAG, "TX power %d dBm not set", want);
+	}
+}
+
 void bleEnable(void)
 {
 	s_disabled = false;
+	bleSetPower();					/* NV ble.pwr, applied each time BLE starts */
 	if (s_synced && !s_connected) {
 		bleStartAdvertising();
 	}

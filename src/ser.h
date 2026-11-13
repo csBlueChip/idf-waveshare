@@ -38,5 +38,5 @@ esp_err_t serInit(serRx_t rx);
  * Bytes for an unplugged USB port are dropped. */
 void serWrite(serPort_t port, const char *data, size_t len, bool crlf);
 
-/* UART speed (UART UI: NV ui.baud; otherwise SER_LOG_BAUD). */
+/* UART speed (UART UI: NV ser.baud; otherwise SER_LOG_BAUD). */
 esp_err_t serSetBaud(uint32_t baud);

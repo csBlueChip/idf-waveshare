@@ -43,19 +43,19 @@ esp_err_t wifiApStart(bool portal)
 		},
 	};
 
-	const char *ssid = nvGet("rad.ssid");
+	const char *ssid = nvGet("wifi.ssid");
 	strlcpy((char *)cfg.ap.ssid, ssid, sizeof(cfg.ap.ssid));
 	cfg.ap.ssid_len = strlen(ssid);
-	strlcpy((char *)cfg.ap.password, nvGet("rad.pwd"), sizeof(cfg.ap.password));
-	cfg.ap.max_connection = nvGetInt("rad.maxcli");
-	int8_t qdbm = (int8_t)lroundf(nvGetFloat("rad.pwr") * 4.0f);	/* 0.25 dBm units */
+	strlcpy((char *)cfg.ap.password, nvGet("wifi.pwd"), sizeof(cfg.ap.password));
+	cfg.ap.max_connection = nvGetInt("wifi.maxconn");
+	int8_t qdbm = (int8_t)lroundf(nvGetFloat("wifi.pwr") * 4.0f);	/* 0.25 dBm units */
 
 	ESP_RETURN_ON_ERROR(esp_wifi_set_mode(WIFI_MODE_AP), TAG, "mode");
 	ESP_RETURN_ON_ERROR(esp_wifi_set_config(WIFI_IF_AP, &cfg), TAG, "config");
 	ESP_RETURN_ON_ERROR(esp_wifi_start(), TAG, "start");
 	ESP_RETURN_ON_ERROR(esp_wifi_set_max_tx_power(qdbm), TAG, "tx power");
 
-	ESP_LOGI(TAG, "AP \"%s\" up at %s%s", ssid, nvGet("rad.ip"), nvGet("rad.mask"));
+	ESP_LOGI(TAG, "AP \"%s\" up at %s%s", ssid, nvGet("wifi.ip"), nvGet("wifi.cidr"));
 	wifiApDump();
 	return ESP_OK;
 }
@@ -130,20 +130,20 @@ static void wifiApOnIp(void *arg, esp_event_base_t base, int32_t id, void *data)
 	}
 }
 
-/* AP address and netmask from NV; with rad.nogw = 1 DHCP offers no router (gateway);
- * portal: DHCP also offers the captive-portal URL. */
+/* AP address and netmask from NV; with wifi.gw = 0 DHCP offers no router (gateway);
+ * portal: DHCP also offers the captive-portal URL (NV web.port, if not 80). */
 static esp_err_t wifiApSetIp(bool portal)
 {
 	static char uri[32];					/* DHCP server keeps the pointer */
 
 	esp_netif_ip_info_t ip = { 0 };
-	int bits = atoi(nvGet("rad.mask") + 1);
+	int bits = atoi(nvGet("wifi.cidr") + 1);
 
-	ip.ip.addr      = ipaddr_addr(nvGet("rad.ip"));
+	ip.ip.addr      = ipaddr_addr(nvGet("wifi.ip"));
 	ip.gw.addr      = ip.ip.addr;
 	ip.netmask.addr = lwip_htonl(0xFFFFFFFFu << (32 - bits));
 
-	uint8_t router = nvGetInt("rad.nogw") ? 0 : 1;
+	uint8_t router = nvGetInt("wifi.gw") ? 1 : 0;
 
 	esp_err_t err = esp_netif_dhcps_stop(s_netif);
 	if (err != ESP_OK && err != ESP_ERR_ESP_NETIF_DHCP_ALREADY_STOPPED) {
@@ -153,7 +153,12 @@ static esp_err_t wifiApSetIp(bool portal)
 	ESP_RETURN_ON_ERROR(esp_netif_dhcps_option(s_netif, ESP_NETIF_OP_SET, ESP_NETIF_ROUTER_SOLICITATION_ADDRESS,
 	                                           &router, sizeof(router)), TAG, "dhcps router");
 	if (portal) {
-		snprintf(uri, sizeof(uri), "http://%s/", nvGet("rad.ip"));
+		int port = nvGetInt("web.port");
+		if (port == 80) {
+			snprintf(uri, sizeof(uri), "http://%s/", nvGet("wifi.ip"));
+		} else {
+			snprintf(uri, sizeof(uri), "http://%s:%d/", nvGet("wifi.ip"), port);
+		}
 		ESP_RETURN_ON_ERROR(esp_netif_dhcps_option(s_netif, ESP_NETIF_OP_SET, ESP_NETIF_CAPTIVEPORTAL_URI,
 		                                           uri, strlen(uri)), TAG, "dhcps portal");
 	}

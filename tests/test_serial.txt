@@ -18,16 +18,16 @@ Setup
 A. NV SETTINGS
 --------------
 
-A1  > NV GET ui.baud
-    = ui.baud=115200
-A2  > NV GET ui.echo
-    = ui.echo=1
-A3  > NV SET ui.baud 12345
-    = ERR ui.baud must be 9600|19200|38400|57600|115200|230400|460800|921600
-A4  > NV SET ui.echo 2
-    = ERR ui.echo must be 0..1
-A5  > NV SET ui.boot XYZ
-    = ERR ui.boot must be BLE|TELNET|WEB|UART|USB
+A1  > NV GET ser.baud
+    = ser.baud=115200
+A2  > NV GET ser.echo
+    = ser.echo=1
+A3  > NV SET ser.baud 12345
+    = ERR ser.baud must be 9600|19200|38400|57600|115200|230400|460800|921600
+A4  > NV SET ser.echo 2
+    = ERR ser.echo must be 0..1
+A5  > NV SET sys.ui XYZ
+    = ERR sys.ui must be BLE|TELNET|WEB|UART|USB
 
 
 B. LOG ROUTING WITH A NETWORK UI
@@ -71,7 +71,7 @@ C11 * terminal A: type   +++   then Enter at once
 C12 * terminal A: type   +++x   wait 1 s, then Enter
     = unknown |+++x|  (no debug)
 C13 * terminal A: type   +++   wait 1 s (debug on), then
-    > NV SET ui.echo 0
+    > NV SET ser.echo 0
     = OK
 C14 > UI UART
     = BAUD:115200, PINS:TX43 RX44, OK on A; glass Wait "UI  : UART",
@@ -79,14 +79,14 @@ C14 > UI UART
       keep coming there); debug ended with the UI switch
 
 
-D. UART UI (ui.echo now 0)
+D. UART UI (ser.echo now 0)
 --------------------------
 
 D1  * terminal B: type   INFO   Enter
-    = nothing echoed while typing (ui.echo 0); splash; INFO lines + OK on B
+    = nothing echoed while typing (ser.echo 0); splash; INFO lines + OK on B
 D2  * terminal A (USB): watch while sending  > UI  on B
     = UART, OK on B; log lines on A only
-D3  > NV SET ui.echo 1
+D3  > NV SET ser.echo 1
     = OK (takes effect next time the UART UI starts)
 D4  * terminal B: Enter three times
     = [Startup Complete - UART UI active]
@@ -104,7 +104,7 @@ D8  > IMU REC 3001
 E. BAUD RATE
 ------------
 
-E1  > NV SET ui.baud 921600
+E1  > NV SET ser.baud 921600
     = OK
 E2  * terminal B:   UI USB
     * terminal A:   UI UART
@@ -118,26 +118,26 @@ E4a * terminal B:   IMU REC 3000
 E5  > UI USB   (from B)
     * terminal B back to 115200
     = log lines on B readable again (UART back at 115200 when not the UI)
-E6  > NV SET ui.baud 115200   (from A)
+E6  > NV SET ser.baud 115200   (from A)
     = OK
 
 
 F. BOOT INTO A SERIAL UI
 ------------------------
 
-F1  > NV SET ui.boot UART
+F1  > NV SET sys.ui UART
     = OK
 F2  > REBOOT
     = OK; reboot. Terminal B: boot messages, then the LAST line on B is
       [Startup Complete - UART UI active]; later logs appear on A only
 F3  * terminal B: type   UI   Enter
     = splash; UART, OK
-F4  > NV SET ui.boot USB
+F4  > NV SET sys.ui USB
     > REBOOT
     = after the reboot (re-open terminal A if the PC dropped it):
       [Startup Complete - USB UI active] on A (if A was open in time;
       otherwise press Enter three times)
-F5  > NV SET ui.boot TELNET     (or your usual boot UI)
+F5  > NV SET sys.ui TELNET     (or your usual boot UI)
     > REBOOT
 
 

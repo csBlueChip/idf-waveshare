@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdbool.h>
+#include <stddef.h>
 #include "esp_err.h"
 
 /*
@@ -9,22 +10,30 @@
  * IMU commands apply at once). Every change is written
  * to flash at once (no commit step).
  *
- *   key        default          rule
- *   rad.ssid   wavedemo         1..32 chars, no spaces, ':' or '|'
- *   rad.pwd    waveP@55word     8..63 chars, no spaces, ':' or '|'
- *   rad.ble    ESP32-S3-Demo    1..29 chars, no spaces, ':' or '|'
- *   rad.ip     192.168.4.1      a.b.c.d, host address valid for rad.mask
- *   rad.mask   /24              /8../30
- *   rad.pwr    8.5              2..20 dBm, rounded to 0.25
- *   rad.nogw   0                1 = DHCP offers no gateway (router)
- *   rad.maxcli 1                1..4 Wi-Fi clients at a time
- *   ui.boot    BLE              BLE|TELNET|WEB|UART|USB|MSC (MSC: hold BOOT
- *                               on its Wait screen for USB disk mode)
- *   ui.baud    115200           9600|19200|38400|57600|115200|230400|460800|921600
- *                               (UART UI speed; read when the UART UI starts)
- *   ui.echo    1                1 = serial UIs echo typed characters
- *   ui.name    (empty)          web page title, 0..32 chars, no spaces (empty: the
- *                               default "wavedemo"; SD:/sys/uiname.txt wins)
+ *   key          default          rule
+ *   wifi.ssid    wavedemo         1..32 chars, no spaces, ':' or '|'
+ *   wifi.pwd     waveP@55word     8..63 chars, no spaces, ':' or '|' (secret)
+ *   wifi.ip      192.168.4.1      a.b.c.d, host address valid for wifi.cidr
+ *   wifi.cidr    /24              /8../30
+ *   wifi.pwr     8.5              2..20 dBm, rounded to 0.25 (Wi-Fi only)
+ *   wifi.gw      1                1 = DHCP offers a gateway (phones open the
+ *                                 captive portal); 0 = none (engineering)
+ *   wifi.maxconn 1                1..4 Wi-Fi clients at a time
+ *   ble.name     ESP32-S3-Demo    1..29 chars, no spaces, ':' or '|'
+ *   ble.pwr      9                -24..20 dBm, rounded to a step:
+ *                                 -24 -21 .. 15 18 20 (BLE only)
+ *   sys.ui       BLE              BLE|TELNET|WEB|UART|USB|MSC (MSC: hold BOOT
+ *                                 on its Wait screen for USB disk mode;
+ *                                 RESET! is not a boot choice)
+ *   ser.baud     115200           9600|19200|38400|57600|115200|230400|460800|921600
+ *                                 (UART UI speed; read when the UART UI starts)
+ *   ser.echo     1                1 = serial UIs echo typed characters
+ *   web.name     (empty)          web page title, 0..32 chars, no spaces (empty:
+ *                                 the default "wavedemo"; SD:/sys/uiname.txt wins)
+ *   web.port     80               1..65535 web console port
+ *   web.captive  1                1 = captive portal (DNS answers every name,
+ *                                 unknown URLs redirect); 0 = off (plain 404)
+ *   telnet.port  23               1..65535 telnet console port
  *   scr.bl     100              backlight 0..100 %
  *   scr.pflip  0                1 = portrait upside down (ROT 0 <-> 2)
  *   scr.lflip  0                1 = landscape upside down (ROT 1 <-> 3)
@@ -64,16 +73,23 @@
  * Commands registered by nvInit():
  *   NV SET key value      check and store
  *   NV SET key r g b      same, for colour keys (disk.*, sys.aron, sys.aroff)
- *   NV GET [key]          show one or all (key=value)
+ *   NV GET [key]          show one or all (key=value); secrets (wifi.pwd) are
+ *                         shown in clear - NV is a privileged command
  *   NV RESET [key]        back to default (all if no key; sys.bootcnt is kept)
  *   NV EXPORT name        write key=value lines to SD:/sys/name.nvram (secret keys,
- *                         rad.pwd, as "!key=value": FCAT shows "!key=[redacted]")
+ *                         wifi.pwd, as "!key=value": FCAT shows "!key=[redacted]")
  *   NV IMPORT name        set the keys found in SD:/sys/name.nvram; all lines are
  *                         checked first, nothing is written if any is bad;
  *                         read-only keys are skipped ("warning: ... ignored");
  *                         a leading '!' on a line is ignored
  *
  * In commands "\#" in a value stands for '#'.
+ *
+ * Reset when no UI works:
+ *   - RESET! Wait screen (BOOT double press after MSC; see ui.h).
+ *   - SD:/sys/reset.nvram at boot (reset.c): backup, defaults, then the file's
+ *     settings; renamed reset.done (bad file: reset.bad, nothing changed).
+ *   - USB: esptool.py --chip esp32s3 erase_region 0x9000 0x10000 (NVS partition).
  */
 
 /* Load all values (defaults for missing/invalid), register NV. Call after
@@ -87,8 +103,24 @@ float       nvGetFloat(const char *key);
 
 /* Check n key/value pairs together, then store them all, or none.
  * Returns NULL, or an error text; *badIndex (if not NULL) gets the failing
- * pair's index, or -1 for a cross-check error (e.g. rad.ip vs rad.mask). */
+ * pair's index, or -1 for a cross-check error (e.g. wifi.ip vs wifi.cidr). */
 const char *nvSetMany(int n, const char *keys[], const char *vals[], int *badIndex);
+
+/* NV EXPORT: write SD:/sys/<name>[.nvram]. NULL or an error. */
+const char *nvExport(const char *name);
+
+/* NV RESET (all): every key back to its default, except sys.bootcnt. */
+const char *nvResetAll(void);
+
+/* Export to a free timestamp name in SD:/sys (sysTimestampFile(), e.g.
+ * "20261113-142530.nvram" or "b002A_001523.nvram"); name gets that file name.
+ * NULL or an error ("no SD card", "cannot write file" ...). */
+const char *nvBackup(char *name, size_t n);
+
+/* Defaults, then the settings in SD:/sys/<name>.nvram (none = plain defaults).
+ * The file is checked against the defaults first: if it is bad (or missing)
+ * nothing is changed and the error is returned. */
+const char *nvResetImport(const char *name);
 
 /* Replace "\#" with '#' in place (command arguments). */
 void nvUnescape(char *s);

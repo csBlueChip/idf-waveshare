@@ -260,7 +260,7 @@
 
 	fetch("/cfg").then(function (r) { return r.json(); }).then(function (c) {
 		if (c.hist > 0) histMax = c.hist;
-		if (c.name) document.title = c.name;		/* SD:/sys/uiname.txt, NV ui.name or "wavedemo" */
+		if (c.name) document.title = c.name;		/* SD:/sys/uiname.txt, NV web.name or "wavedemo" */
 		saveHist();
 		pos = hist.length;
 	}).catch(function () {});

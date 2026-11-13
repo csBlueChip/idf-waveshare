@@ -103,6 +103,24 @@ conversation context. Keep it current, like the README.
   ORIENT + view flip, Wait screen ORIENT L AUTO, BOOT double/long press on
   the Wait screen, btn.* renames.
 
+  NV renames (pre-production, no migration; old .nvram files now ERR):
+    rad.ssid/pwd/ip/mask/pwr/maxcli -> wifi.ssid/pwd/ip/cidr/pwr/maxconn;
+    rad.nogw -> wifi.gw (inverted, default 1); rad.ble -> ble.name;
+    ui.baud/echo -> ser.baud/echo; ui.name -> web.name. New: web.port 80,
+    telnet.port 23, web.captive 1, ble.pwr 9 (BLE steps -24..18, 20 -
+    IDF v6.1 top level is +20). RAD command removed (rad.c/h deleted).
+    ELIF condition errors now report the ELIF's line (runLoop ONE_ERR uses
+    scr.cur when it is an ELIF; ON ERROR resumes after the ELIF, as for IF).
+  Then: wifi.ap -> wifi.ip, ui.boot -> sys.ui. Reset without a UI: RESET!
+    Wait screen (UI_RESET after MSC; ui.c uiResetPoll/uiResetEvent, uiscr.c,
+    reset.c resetRun) and SD:/sys/reset.nvram at boot (reset.c
+    resetBootFile, after sdInit; mainAutorunFlash moved after it). nv.c:
+    nvExport public, nvResetAll, nvBackup, nvResetImport (dry-run check via
+    s_dry in nvSetMany). script.c: scriptHas, scriptRunWait. sysTimestamp:
+    YYYYMMDD-HHMMSS when time() >= 2020 (set by POST /time), else
+    b<boot>_<uptime>. fm.html: ".." double-click. MODE line shows only the
+    selected mode; a failed backup never stops a reset (screen or boot).
+
 
 5. SCRIPTING - IMPLEMENTATION PLAN (agreed)
 -------------------------------------------
@@ -123,7 +141,7 @@ conversation context. Keep it current, like the README.
     starts after onBoot), system scripts + 3 s BOOT escape, event renames
     (LONG DOWN/UP/REPEAT -> DOWN/UP/REPEAT), UI events (CONNECT,
     DISCONNECT, LINK UP/DOWN), UI NEXT, NV sys.autorun, NV check refusing
-    ':' and '|' in rad.ssid/pwd/ble, WAIT on the high-resolution timer,
+    ':' and '|' in wifi.ssid/pwd/ble, WAIT on the high-resolution timer,
     ACC/GYR $x $y $z, STOP NOW abort checks, btn.c comment, README.
     Ends with a build and a board test procedure tests/test_scripts.txt.
 
@@ -139,7 +157,7 @@ conversation context. Keep it current, like the README.
             spaces kept for PRINT); ECHO skips its own leading blanks
     sys.c   PRINT, DEBUG, APPEND (SD:/scripts/data/x.txt), WAIT on a
             one-shot esp_timer + semaphore (per call)
-    nv.c    sys.autorun 0|1 (unused yet); rad.ssid/pwd/ble refuse ':' '|'
+    nv.c    sys.autorun 0|1 (unused yet); wifi.ssid/pwd/ble refuse ':' '|'
     web.c   <<PING>> answered <<PONG>> in the server task (never queued);
             esp_restart shutdown handler closes the page with code 4001.
             index.html: ping after 3 s idle, no pong in 3 s = reconnect.
@@ -199,7 +217,7 @@ conversation context. Keep it current, like the README.
     fext    FCAT / FSTAT / FDELETE: name = name.txt, or name.var
             (scripts/data) or name.nvram (sys). FDIR [txt|var|nvram|*].
             FLOG and script file commands stay .txt. NV table flags
-            NV_RO / NV_SECRET (rad.pwd); EXPORT writes !key=value, IMPORT
+            NV_RO / NV_SECRET (wifi.pwd); EXPORT writes !key=value, IMPORT
             ignores a leading '!', FCAT of a .nvram shows !key=[redacted]
             (long secret lines: no pieces after the first). NV GET and the
             screens still show the password.
@@ -313,7 +331,7 @@ conversation context. Keep it current, like the README.
             by running mcedit in a pty (pyte); word lists checked against
             the page. Regenerate the command list when commands change.
     uiname  Web page title: /cfg "name" = SD:/sys/uiname.txt first line
-            (ASCII, trimmed, max 32, spaces allowed) else NV ui.name (no
+            (ASCII, trimmed, max 32, spaces allowed) else NV web.name (no
             spaces, may be empty) else "wavedemo". index.html sets
             document.title; fm.html "<name> - SD card".
     npp     tools/notepadpp/wavescript_{dark,light}.xml: UDL 2.1, generated
@@ -332,7 +350,7 @@ conversation context. Keep it current, like the README.
             MSC screen), a card reader, or a Makefile target that uploads
             sd/ with curl to /fm/put while FILES WEB is on.
     msc     UI_MSC: a Wait-screen-only interface (no start / stop work);
-            rotation ... UART -> MSC -> WEB; NV ui.boot MSC; UI MSC. BOOT
+            rotation ... UART -> MSC -> WEB; NV sys.ui MSC; UI MSC. BOOT
             long press on it -> UI_EV_MSC -> usbDiskBegin() (= FILES).
             Wait screens: "UI  : " orange, the interface white.
     time    POST /time?t=<browser local seconds> (web.c) -> settimeofday;

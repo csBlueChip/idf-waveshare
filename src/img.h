@@ -39,7 +39,7 @@ esp_err_t imgShowPngMem(const uint8_t *data, size_t len, int x, int y);
 esp_err_t imgPngSize(const uint8_t *data, size_t len, int *w, int *h);
 
 /* SCR SHOT [name] [-f]: save the glass (current ROT) as SD:/scrshots/name.png.
- * No name = timestamp, e.g. b002A_001523.png (-1, -2 ... if taken). An
+ * No name = timestamp (sysTimestamp), e.g. b002A_001523.png (-1, -2 ... if taken). An
  * existing file is an error unless -f. Replies the file name. Called by lcd's
  * SCR command with the arguments after SHOT. */
 const char *imgShotCmd(int argc, char *argv[], void (*reply)(const char *text));

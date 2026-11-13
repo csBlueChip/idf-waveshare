@@ -10,7 +10,7 @@
  * upload, delete, rename / move files and make folders.
  *
  *   FILES WEB        (web UI with a page connected) enter the mode: the page
- *                    is sent "<<GOTO /fm>>" and opens http://<rad.ip>/fm:
+ *                    is sent "<<GOTO /fm>>" and opens http://<wifi.ip>/fm:
  *                    the built-in page (assets/fm.html), or SD:/sys/fm.html
  *                    if present. Refused if a script is running or there is
  *                    no card. Already on: the page is just re-opened.

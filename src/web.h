@@ -5,12 +5,12 @@
 #include <stdint.h>
 #include "esp_err.h"
 
-#define WEB_PORT	80
 
 /*
- * Web UI: HTTP on port 80 + captive-portal DNS.
+ * Web UI: HTTP on NV web.port + captive-portal DNS (NV web.captive 1; with 0
+ * no DNS server and unknown URLs get a plain 404).
  *   /cfg   {"hist":n,"name":"..."} - command history length (NV web.hist) and
- *          the page title: SD:/sys/uiname.txt first line, else NV ui.name,
+ *          the page title: SD:/sys/uiname.txt first line, else NV web.name,
  *          else "wavedemo" (max 32 chars, ASCII)
  *   /fm... SD card manager (FILES WEB) - see fm.h
  *   POST /time?t=n  set the clock (n = the browser's local time in seconds;
@@ -20,8 +20,8 @@
  *   other  the file SD:/www/<path> if it exists ("/" = /www/index.html; no
  *          caching, no folder listings, ".." etc. refused - see webpath.h);
  *          otherwise "/" is the built-in console page (assets/index.html)
- *          and anything else a 302 redirect to http://<rad.ip>/ (makes
- *          phones open the portal)
+ *          and anything else a 302 redirect to http://<wifi.ip>[:port]/
+ *          (makes phones open the portal; web.captive 0: 404)
  * A text frame containing "<<GOTO /path>>" makes the console page open
  * that path (FILES WEB sends "<<GOTO /fm>>").
  * One client: a new WebSocket connection replaces the previous one; the old

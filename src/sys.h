@@ -26,7 +26,9 @@
 /* Count this boot, register the commands above. Call after cmdInit() and nvInit(). */
 esp_err_t sysInit(void);
 
-/* Current timestamp, e.g. "b002A_001523" (n >= 16). */
+/* Current timestamp (n >= 16): "YYYYMMDD-HHMMSS" once a browser has set the
+ * clock (POST /time), e.g. "20261113-142530"; else boot count (hex) and
+ * uptime hhmmss, e.g. "b002A_001523". */
 void sysTimestamp(char *out, size_t n);
 
 /* Free file name in dir from the timestamp: "<stamp><ext>", or "<stamp>-1<ext>",

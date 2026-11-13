@@ -112,23 +112,29 @@ SCR SHOT selftest                      # ERR file exists
 SCR SHOT selftest.png -f               # selftest.png (overwritten)
 SCR SHOT a/b                           # ERR bad file name
 
-# ---------- NV / RAD (settings are backed up and restored) ----------
+# ---------- NV (settings are backed up and restored) ----------
 NV EXPORT selftest_backup              # SD:/sys/selftest_backup.nvram
 NV GET
 NV GET scr.bl
 NV SET scr.bl 60                       # next boot: backlight 60 %
-NV SET rad.pwr 7.3                     # stored as 7.25
-NV GET rad.pwr
-NV SET rad.pwd short                   # ERR rad.pwd must be 8..63 chars, no spaces
-NV SET btn.l 10                        # ERR btn.l must be 50..5000
+NV SET wifi.pwr 7.3                    # stored as 7.25
+NV GET wifi.pwr
+NV SET wifi.pwd short                  # ERR wifi.pwd must be 8..63 chars, no spaces
+NV SET btn.long 10                     # ERR btn.long must be 50..5000
 NV SET nope 1                          # ERR unknown key nope
 NV SET web.hist 5                      # ERR web.hist must be 10..500
-RAD GET
-RAD SET ssid labnet pwd secret123 pwr 10
-RAD GET ssid pwd pwr
-RAD SET ip 192.168.4.255               # ERR rad.ip is not a host address for rad.mask
-RAD SET ssid ok pwd bad                # ERR ... (nothing stored)
-RAD GET ssid
+NV SET wifi.ssid labnet
+NV SET wifi.pwd secret123
+NV SET ble.pwr 10                      # stored as 9
+NV GET ble.pwr
+NV SET ble.pwr 25                      # ERR ble.pwr must be -24..20 dBm (steps of 3, top step 20)
+NV SET web.port 8080
+NV SET web.port 0                      # ERR web.port must be 1..65535
+NV SET telnet.port 2323
+NV SET web.captive 2                   # ERR web.captive must be 0..1
+NV SET sys.ui RESET!                   # ERR sys.ui must be BLE|TELNET|WEB|UART|USB|MSC
+NV SET wifi.ip 192.168.4.255           # ERR wifi.ip is not a host address for wifi.cidr
+NV GET wifi.ssid
 NV RESET scr.bl
 NV GET scr.bl                          # scr.bl=100
 NV IMPORT missing                      # ERR file not found

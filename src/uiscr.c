@@ -27,10 +27,14 @@
 #define UISCR_HIDDEN		"(hold BOOT)"
 #define UISCR_SPLASH		SD_MOUNT_POINT "/sys/splash.png"
 #define UISCR_SPLASH_NAME	"sys/splash.png"
+#define UISCR_ROW_RSTMODE	1
+#define UISCR_ROW_RSTMSG	3	/* and the row below */
 
 static bool   s_shown;		/* details screen is up */
 static bool   s_link;		/* Wi-Fi station with an IP */
 static uiIf_t s_ifc;
+static int    s_rstMode;	/* RESET! screen: selected mode */
+static bool   s_rstNoSd;
 
 static void uiScrLine(int row, const char *prefix, const char *value, uint16_t valueInk);
 static void uiScrFade(int ms);
@@ -42,6 +46,8 @@ static void uiWebOnStart(void);
 static void uiUartOnStart(void);
 static void uiUsbOnStart(void);
 static void uiMscOnStart(void);
+static void uiResetOnStart(void);
+static void uiScrModeLine(void);
 
 /* ================= Public API ================= */
 
@@ -55,6 +61,7 @@ void uiScrStart(uiIf_t ifc)
 	case UI_UART:   onStart = uiUartOnStart; break;
 	case UI_USB:    onStart = uiUsbOnStart; break;
 	case UI_MSC:    onStart = uiMscOnStart; break;
+	case UI_RESET:  onStart = uiResetOnStart; break;
 	default:        return;
 	}
 
@@ -139,7 +146,7 @@ void uiScrPassword(bool show)
 	if (!uiScrWantsButton()) {
 		return;
 	}
-	uiScrLine(UISCR_ROW_PWD, "Pwd : ", show ? nvGet("rad.pwd") : UISCR_HIDDEN, UISCR_INK);
+	uiScrLine(UISCR_ROW_PWD, "Pwd : ", show ? nvGet("wifi.pwd") : UISCR_HIDDEN, UISCR_INK);
 	lcdUpdateNoTr();
 }
 
@@ -167,6 +174,29 @@ bool uiScrWaiting(void)
 	return s_shown;
 }
 
+void uiScrResetSet(int mode, bool noSd)
+{
+	s_rstMode  = mode;
+	s_rstNoSd  = noSd;
+}
+
+void uiScrResetMode(void)
+{
+	if (s_shown && s_ifc == UI_RESET) {
+		uiScrModeLine();
+		lcdUpdateNoTr();
+	}
+}
+
+void uiScrResetMsg(const char *a, const char *b)
+{
+	if (s_shown && s_ifc == UI_RESET) {
+		uiScrLine(UISCR_ROW_RSTMSG, "", a, UISCR_LINK_INK);
+		uiScrLine(UISCR_ROW_RSTMSG + 1, "", b, UISCR_LINK_INK);
+		lcdUpdateNoTr();
+	}
+}
+
 /* Update the screen with a FADE of ms (firmware one-off; SCR TR/TRP untouched). */
 static void uiScrFade(int ms)
 {
@@ -180,24 +210,24 @@ static void uiScrFade(int ms)
 static void uiBleOnStart(void)
 {
 	uiScrLine(0, "UI  : ", "BLE", UISCR_LINK_INK);
-	uiScrLine(1, "Name: ", nvGet("rad.ble"), UISCR_INK);
+	uiScrLine(1, "Name: ", nvGet("ble.name"), UISCR_INK);
 }
 
 static void uiTelnetOnStart(void)
 {
-	uiScrWifi("TELNET", TELNET_PORT);
+	uiScrWifi("TELNET", nvGetInt("telnet.port"));
 }
 
 static void uiWebOnStart(void)
 {
-	uiScrWifi("WEB", WEB_PORT);
+	uiScrWifi("WEB", nvGetInt("web.port"));
 }
 
 static void uiUartOnStart(void)
 {
 	char text[24];
 	uiScrLine(0, "UI  : ", "UART", UISCR_LINK_INK);
-	uiScrLine(1, "Baud: ", nvGet("ui.baud"), UISCR_INK);
+	uiScrLine(1, "Baud: ", nvGet("ser.baud"), UISCR_INK);
 	snprintf(text, sizeof(text), "TX%d RX%d", SER_UART_TX_GPIO, SER_UART_RX_GPIO);
 	uiScrLine(2, "Pins: ", text, UISCR_INK);
 }
@@ -213,16 +243,33 @@ static void uiMscOnStart(void)
 	uiScrLine(1, "BOOT: ", "hold to start", UISCR_LINK_INK);
 }
 
+static void uiResetOnStart(void)
+{
+	s_ifc = UI_RESET;				/* uiScrModeLine() is drawn before s_ifc is set */
+	uiScrLine(0, "UI  : ", "RESET!", UISCR_LINK_INK);
+	uiScrModeLine();
+	uiScrLine(2, "BOOT: ", "TAP=mode, LONG=OK", UISCR_INK);
+}
+
 /* ================= Internals ================= */
+
+/* MODE: NVRAM | Script | FULL (the selected one, in white), or
+ * MODE: NVRAM - no backup (no SD card). */
+static void uiScrModeLine(void)
+{
+	static const char *const names[] = { "NVRAM", "Script", "FULL" };
+	const char *m = s_rstNoSd ? "NVRAM - no backup" : names[(unsigned)s_rstMode < 3 ? s_rstMode : 0];
+	uiScrLine(UISCR_ROW_RSTMODE, "MODE: ", m, UISCR_LINK_INK);
+}
 
 static void uiScrWifi(const char *name, int port)
 {
 	char text[48];
 	snprintf(text, sizeof(text), "%s:%d", name, port);
 	uiScrLine(0, "UI  : ", text, UISCR_LINK_INK);	/* the interface in white */
-	uiScrLine(1, "SSID: ", nvGet("rad.ssid"), UISCR_INK);
+	uiScrLine(1, "SSID: ", nvGet("wifi.ssid"), UISCR_INK);
 	uiScrLine(UISCR_ROW_PWD, "Pwd : ", UISCR_HIDDEN, UISCR_INK);
-	snprintf(text, sizeof(text), "%s %s", nvGet("rad.ip"), nvGet("rad.mask"));
+	snprintf(text, sizeof(text), "%s %s", nvGet("wifi.ip"), nvGet("wifi.cidr"));
 	uiScrLine(3, "IP  : ", text, UISCR_INK);
 	uiScrLinkLine();
 }

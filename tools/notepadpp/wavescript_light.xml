@@ -34,7 +34,7 @@
             <Keywords name="Keywords2">START SET OFFS TAG EOL EVENT STOP CONT TRNG PRNG SAVE LOAD ALL NOW</Keywords>
             <Keywords name="Keywords3">INT ROUND ABS MIN MAX SQRT SIN COS ATAN2 LEN UPPER LOWER MID FIND RND</Keywords>
             <Keywords name="Keywords4">AND OR</Keywords>
-            <Keywords name="Keywords5">ACC BAT BL BOX BPT BTN CIRC CLS ECHO EVENTS FBOX FCAT FCIRC FDELETE FDIR FILES FLOG FONT FSTAT FTRI GYR HELP IMG IMU INFO LED LINE LIST LOG MEM NV PAUSE PLOT RAD REBOOT ROT RUN SCR STACK TBOX TCLS TEMP TINK TRI TSCRL TYX UI</Keywords>
+            <Keywords name="Keywords5">ACC BAT BL BOX BPT BTN CIRC CLS ECHO EVENTS FBOX FCAT FCIRC FDELETE FDIR FILES FLOG FONT FSTAT FTRI GYR HELP IMG IMU INFO LED LINE LIST LOG MEM NV PAUSE PLOT REBOOT ROT RUN SCR STACK TBOX TCLS TEMP TINK TRI TSCRL TYX UI</Keywords>
             <Keywords name="Keywords6">$.</Keywords>
             <Keywords name="Keywords7">$</Keywords>
             <Keywords name="Keywords8">: .STACK .CONST .FILES</Keywords>

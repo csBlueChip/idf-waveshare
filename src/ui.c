@@ -26,6 +26,8 @@
 #include "script.h"
 #include "fm.h"
 #include "usbdisk.h"
+#include "reset.h"
+#include "sd.h"
 
 static const char *TAG = "ui";
 
@@ -40,6 +42,7 @@ static const char *TAG = "ui";
 #define UI_BOOT_POLL_US		50000
 #define UI_SER_ESC_MS		1000	/* "+++" / "---" then this long with no input */
 #define UI_SER_BANNER_ENTERS	3	/* empty lines in a row -> banner */
+#define UI_RST_CONFIRM_MS	5000	/* RESET!: second long press within this of the first release */
 
 /* Queue item kinds: data, or screen events handled in the main task */
 enum {
@@ -52,6 +55,10 @@ enum {
 	UI_EV_CALL,		/* uiRunMain(): data = function + argument */
 	UI_EV_FMSTOP,		/* BOOT short press on the SD manager screen */
 	UI_EV_MSC,		/* BOOT held on the MSC Wait screen: start disk mode */
+	UI_EV_RSTTAP,		/* RESET! screen: tap = next mode */
+	UI_EV_RSTARM,		/* RESET!: first long press */
+	UI_EV_RSTGO,		/* RESET!: second long press - do it */
+	UI_EV_RSTCANCEL,	/* RESET!: tap or time-out after the first long press */
 };
 
 typedef struct {
@@ -85,6 +92,14 @@ static int               s_bootLongMs, s_bootDblMs;
 static volatile bool     s_link;		/* a Wi-Fi station has an IP */
 static bool              s_client;	/* a client is connected (main task) */
 
+/* RESET! screen */
+static resetMode_t       s_rstMode;	/* main task */
+static bool              s_rstNoSd;	/* main task: no card -> NVRAM without backup */
+static bool              s_rstArmed;	/* poll: first long press done */
+static bool              s_rstTap;	/* poll: a tap waits for the double-press window */
+static int64_t           s_rstArmedAt;	/* poll: first long press released (ms) */
+static volatile bool     s_rstBusy;	/* main task is carrying it out */
+
 /* EVENTS: which <<src ...>> messages the client receives (this boot) */
 static const char *const s_evNames[] = { "BTN", "IMU", "UI", "SCRIPT" };
 #define UI_EV_SOURCES		(int)(sizeof(s_evNames) / sizeof(s_evNames[0]))
@@ -92,7 +107,7 @@ static volatile uint8_t  s_evMute;	/* bit i set = s_evNames[i] muted */
 
 /* serial UI line editing (serial task only, except the reset in uiStart) */
 static bool              s_serConn;	/* first line seen: client "connected" */
-static bool              s_serEcho;	/* NV ui.echo */
+static bool              s_serEcho;	/* NV ser.echo */
 static EXT_RAM_BSS_ATTR char s_serLine[CMD_LINE_MAX + 1];
 static size_t            s_serLen;
 static bool              s_serLastCr;	/* CR seen: a following LF is the same Enter */
@@ -138,6 +153,9 @@ static void        uiSerEnter(serPort_t port);
 static void        uiSerTick(void);
 static void        uiSerBanner(serPort_t port);
 static void        uiWaitDetails(char *out, size_t n);
+static void        uiResetPoll(bool down, int64_t now);
+static void        uiResetEvent(uint8_t kind);
+static void        uiResetMsg(const char *a, const char *b);
 
 /* ================= Public API ================= */
 
@@ -174,7 +192,7 @@ esp_err_t uiInit(void)
 
 void uiBegin(void)
 {
-	uiIf_t boot = uiBootIf();				/* NV ui.boot */
+	uiIf_t boot = uiBootIf();				/* NV sys.ui */
 	if (uiStart(boot) == ESP_OK) {
 		s_active = boot;
 	} else {
@@ -436,7 +454,7 @@ static esp_err_t uiStart(uiIf_t ifc)
 		break;
 	case UI_WEB:
 		s_link = false;
-		err = wifiApStart(true);
+		err = wifiApStart(nvGetInt("web.captive") != 0);	/* DHCP portal URL only with the captive portal */
 		if (err == ESP_OK) {
 			err = webStart(uiWebRx, uiWebConn);
 			if (err != ESP_OK) {
@@ -445,14 +463,17 @@ static esp_err_t uiStart(uiIf_t ifc)
 		}
 		break;
 	case UI_UART:
-		err = serSetBaud(nvGetInt("ui.baud"));
+		err = serSetBaud(nvGetInt("ser.baud"));
+		break;
+	case UI_RESET:
+		s_rstMode = RESET_NV;				/* each visit starts at NVRAM */
 		break;
 	default:
 		break;
 	}
 	if (err == ESP_OK && uiSerPort(ifc) >= 0) {		/* fresh serial session */
 		s_serConn   = false;
-		s_serEcho   = nvGetInt("ui.echo");
+		s_serEcho   = nvGetInt("ser.echo");
 		s_serLen    = 0;
 		s_serLastCr = false;
 		s_serEmpty  = 0;
@@ -494,6 +515,7 @@ static const char *uiName(uiIf_t ifc)
 	case UI_UART:   return "UART";
 	case UI_USB:    return "USB";
 	case UI_MSC:    return "MSC";
+	case UI_RESET:  return "RESET!";
 	default:        return "NONE";
 	}
 }
@@ -609,6 +631,12 @@ static void uiEvent(uint8_t kind)
 			ESP_LOGW(TAG, "disk mode could not start");
 		}
 		break;
+	case UI_EV_RSTTAP:
+	case UI_EV_RSTARM:
+	case UI_EV_RSTGO:
+	case UI_EV_RSTCANCEL:
+		uiResetEvent(kind);
+		break;
 	case UI_EV_BUTTON:
 		uiScrPassword(s_pwdShown);
 		break;
@@ -633,7 +661,15 @@ static void uiStartScreen(bool afterClient)
 	esp_timer_stop(s_bootPoll);
 	uiScrSetLink(s_link);				/* current state, drawn with the details */
 	uiWaitDetails(details, sizeof(details));
-	if (scriptWaitBegin(details)) {
+	if (s_active == UI_RESET) {			/* no onWait: the reset is for when things are broken */
+		sdLock();
+		s_rstNoSd = (sdEnsureMounted() != ESP_OK);
+		sdUnlock();
+		if (s_rstNoSd) {
+			s_rstMode = RESET_NV;
+		}
+		uiScrResetSet(s_rstMode, s_rstNoSd);
+	} else if (scriptWaitBegin(details)) {
 		return;					/* onWait 'instead' shows the Wait screen */
 	}
 	if (afterClient) {
@@ -656,6 +692,8 @@ static void uiBootWatch(void)
 	s_bootLong    = false;
 	s_bootRelease = 0;
 	s_pwdShown    = false;
+	s_rstArmed    = false;
+	s_rstTap      = false;
 	esp_timer_start_periodic(s_bootPoll, UI_BOOT_POLL_US);
 }
 
@@ -664,7 +702,7 @@ static void uiFmScreen(void)
 {
 	char url[48];
 	esp_timer_stop(s_bootPoll);
-	snprintf(url, sizeof(url), "http://%s/fm", nvGet("rad.ip"));
+	snprintf(url, sizeof(url), "http://%s/fm", nvGet("wifi.ip"));
 	uiScrFm(url);
 	uiBootWatch();
 }
@@ -677,14 +715,14 @@ static void uiWaitDetails(char *out, size_t n)
 	case UI_WEB:
 	case UI_TELNET:
 		snprintf(out, n, "UI:%s:%d|SSID:%s|Pwd:%s|IP:%s|Mask:%s|Link:%s", uiName(s_active),
-		         s_active == UI_WEB ? WEB_PORT : TELNET_PORT, nvGet("rad.ssid"), nvGet("rad.pwd"),
-		         nvGet("rad.ip"), nvGet("rad.mask"), link);
+		         nvGetInt(s_active == UI_WEB ? "web.port" : "telnet.port"), nvGet("wifi.ssid"), nvGet("wifi.pwd"),
+		         nvGet("wifi.ip"), nvGet("wifi.cidr"), link);
 		break;
 	case UI_BLE:
-		snprintf(out, n, "UI:BLE|Name:%s", nvGet("rad.ble"));
+		snprintf(out, n, "UI:BLE|Name:%s", nvGet("ble.name"));
 		break;
 	case UI_UART:
-		snprintf(out, n, "UI:UART|Baud:%s|Pins:TX%d RX%d", nvGet("ui.baud"), SER_UART_TX_GPIO, SER_UART_RX_GPIO);
+		snprintf(out, n, "UI:UART|Baud:%s|Pins:TX%d RX%d", nvGet("ser.baud"), SER_UART_TX_GPIO, SER_UART_RX_GPIO);
 		break;
 	default:
 		snprintf(out, n, "UI:%s", uiName(s_active));
@@ -709,6 +747,10 @@ static void uiBootPoll(void *arg)
 		} else if (down) {
 			s_bootDown = true;
 		}
+		return;
+	}
+	if (s_active == UI_RESET) {
+		uiResetPoll(down, now);
 		return;
 	}
 
@@ -741,8 +783,8 @@ static void uiBootPoll(void *arg)
 	}
 }
 
-/* Main task: BOOT double press on the Wait screen.
- * WEB -> TELNET -> BLE -> USB -> UART -> WEB, this session only (NV ui.boot unchanged). */
+/* Main task: BOOT double press on the Wait screen: next interface (uiIfNext),
+ * this session only (NV sys.ui unchanged). */
 static void uiNextIf(void)
 {
 	uiIf_t next = uiIfNext(s_active);
@@ -756,7 +798,8 @@ static void uiNextIf(void)
 	}
 }
 
-/* WEB -> TELNET -> BLE -> USB -> UART -> MSC -> WEB (BOOT double press, UI NEXT). */
+/* WEB -> TELNET -> BLE -> USB -> UART -> MSC -> RESET! -> WEB (BOOT double press,
+ * UI NEXT; a client is never on MSC / RESET!, so UI NEXT stops at MSC). */
 static uiIf_t uiIfNext(uiIf_t ifc)
 {
 	switch (ifc) {
@@ -765,15 +808,16 @@ static uiIf_t uiIfNext(uiIf_t ifc)
 	case UI_BLE:    return UI_USB;
 	case UI_USB:    return UI_UART;
 	case UI_UART:   return UI_MSC;
-	case UI_MSC:    return UI_WEB;
+	case UI_MSC:    return UI_RESET;
+	case UI_RESET:  return UI_WEB;
 	default:        return UI_NONE;
 	}
 }
 
-/* NV ui.boot as an interface. */
+/* NV sys.ui as an interface. */
 static uiIf_t uiBootIf(void)
 {
-	const char *b = nvGet("ui.boot");
+	const char *b = nvGet("sys.ui");
 	if (UI_DEBUG_BOOT_TELNET || strcmp(b, "TELNET") == 0) {
 		return UI_TELNET;
 	}
@@ -819,6 +863,112 @@ static void uiSwitchTask(void *arg)
 	vTaskDelete(NULL);
 }
 
+/* ================= RESET! screen ================= */
+
+/* esp_timer task: BOOT on the RESET! screen.
+ *   tap               next mode, once btn.dbl has passed with no second tap
+ *   two taps          next interface (as on every Wait screen)
+ *   long press        arm ("Long press again...")
+ *   long press, armed (within UI_RST_CONFIRM_MS of the first release) -> go
+ *   tap, armed / time-out  cancel */
+static void uiResetPoll(bool down, int64_t now)
+{
+	if (s_rstBusy) {
+		return;
+	}
+	if (down && !s_bootDown) {			/* press */
+		s_bootDown  = true;
+		s_bootLong  = false;
+		s_bootPress = now;
+	} else if (down && !s_bootLong && now - s_bootPress >= s_bootLongMs) {
+		s_bootLong = true;			/* long press */
+		s_rstTap   = false;
+		if (s_rstArmed) {
+			s_rstArmed = false;
+			uiPost(UI_EV_RSTGO);
+		} else {
+			s_rstArmed   = true;
+			s_rstArmedAt = now;
+			uiPost(UI_EV_RSTARM);
+		}
+	} else if (!down && s_bootDown) {		/* release */
+		s_bootDown = false;
+		if (s_bootLong) {
+			if (s_rstArmed) {
+				s_rstArmedAt = now;	/* the confirm window starts now */
+			}
+		} else if (s_rstArmed) {
+			s_rstArmed = false;
+			uiPost(UI_EV_RSTCANCEL);
+		} else if (s_rstTap && s_bootPress - s_bootRelease <= s_bootDblMs) {
+			s_rstTap = false;
+			uiPost(UI_EV_NEXT);
+		} else {
+			s_rstTap      = true;
+			s_bootRelease = now;
+		}
+	} else if (!down && s_rstTap && now - s_bootRelease > s_bootDblMs) {
+		s_rstTap = false;			/* no second tap: a mode change */
+		uiPost(UI_EV_RSTTAP);
+	} else if (!down && s_rstArmed && now - s_rstArmedAt > UI_RST_CONFIRM_MS) {
+		s_rstArmed = false;
+		uiPost(UI_EV_RSTCANCEL);
+	}
+}
+
+/* Main task: RESET! screen events. */
+static void uiResetEvent(uint8_t kind)
+{
+	if (s_active != UI_RESET || !uiScrWaiting()) {
+		return;
+	}
+	switch (kind) {
+	case UI_EV_RSTTAP:
+		if (!s_rstNoSd) {
+			s_rstMode = (resetMode_t)((s_rstMode + 1) % RESET_MODES);
+		}
+		uiScrResetSet(s_rstMode, s_rstNoSd);
+		uiScrResetMode();
+		uiScrResetMsg("", "");
+		break;
+	case UI_EV_RSTARM:
+		uiScrResetMsg("Long press again...", "");
+		break;
+	case UI_EV_RSTCANCEL:
+		uiScrResetMsg("Cancelled", "");
+		break;
+	case UI_EV_RSTGO: {
+		s_rstBusy = true;
+		esp_timer_stop(s_bootPoll);
+		ESP_LOGW(TAG, "RESET! mode %d%s", (int)s_rstMode, s_rstNoSd ? " (no SD)" : "");
+		const char *e = resetRun(s_rstMode, s_rstNoSd, uiResetMsg);	/* NVRAM / FULL reboot */
+		if (e) {
+			char text[48];
+			snprintf(text, sizeof(text), "ERR %s", e);
+			uiScrResetMsg(text, "");
+		} else {
+			uiScrResetMsg("reset.s done", "");
+		}
+		s_rstBusy = false;
+		uiBootWatch();
+		break;
+	}
+	default:
+		break;
+	}
+}
+
+/* resetRun() progress: two message lines; NULL = redraw the RESET! screen. */
+static void uiResetMsg(const char *a, const char *b)
+{
+	if (!a) {
+		uiScrResetSet(s_rstMode, s_rstNoSd);
+		uiScrDisconnect(UI_RESET);		/* fade to black, screen again */
+		return;
+	}
+	uiScrResetMsg(a, b);
+}
+
 /* ================= Commands ================= */
 
 static const char *uiCmd(int argc, char *argv[], cmdReply_t reply)
@@ -860,17 +1010,22 @@ static const char *uiCmd(int argc, char *argv[], cmdReply_t reply)
 
 	if (target == UI_TELNET) {
 		char text[96];
-		snprintf(text, sizeof(text), "SSID:%s\nPWD:%s\nIP:%s\nPORT:" UI_STR(TELNET_PORT) "\n",
-		         nvGet("rad.ssid"), nvGet("rad.pwd"), nvGet("rad.ip"));
+		snprintf(text, sizeof(text), "SSID:%s\nPWD:%s\nIP:%s\nPORT:%d\n",
+		         nvGet("wifi.ssid"), nvGet("wifi.pwd"), nvGet("wifi.ip"), nvGetInt("telnet.port"));
 		reply(text);
 	} else if (target == UI_WEB) {
 		char text[112];
-		snprintf(text, sizeof(text), "SSID:%s\nPWD:%s\nURL:http://%s/\n",
-		         nvGet("rad.ssid"), nvGet("rad.pwd"), nvGet("rad.ip"));
+		int  port = nvGetInt("web.port");
+		char pp[8] = "";
+		if (port != 80) {
+			snprintf(pp, sizeof(pp), ":%d", port);
+		}
+		snprintf(text, sizeof(text), "SSID:%s\nPWD:%s\nURL:http://%s%s/\n",
+		         nvGet("wifi.ssid"), nvGet("wifi.pwd"), nvGet("wifi.ip"), pp);
 		reply(text);
 	} else if (target == UI_UART) {
 		char text[48];
-		snprintf(text, sizeof(text), "BAUD:%s\nPINS:TX%d RX%d\n", nvGet("ui.baud"),
+		snprintf(text, sizeof(text), "BAUD:%s\nPINS:TX%d RX%d\n", nvGet("ser.baud"),
 		         SER_UART_TX_GPIO, SER_UART_RX_GPIO);
 		reply(text);
 	}

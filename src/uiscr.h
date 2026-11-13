@@ -15,14 +15,20 @@
  * Details screen ("onStart"), font 1, ink 220 110 20 on black, 10 px side margins;
  * the interface (after "UI  : ") in white:
  *   WEB/TELNET:  UI  : WEB:80 | UI  : TELNET:23
- *                SSID: <rad.ssid>
+ *                SSID: <wifi.ssid>
  *                Pwd : (hold BOOT)      password shown while BOOT (GP0) is held
- *                IP  : <rad.ip> <rad.mask>
+ *                IP  : <wifi.ip> <wifi.cidr>
  *                WiFi: Waiting... | Link Active (white: a station has an IP)
  *   BLE:         UI  : BLE
- *                Name: <rad.ble>
+ *                Name: <ble.name>
  *   MSC:         UI  : MSC - Flash Drive
  *                BOOT: hold to start    (BOOT held: USB disk mode, as FILES)
+ *   RESET!:      UI  : RESET!
+ *                MODE: NVRAM | Script | FULL   (the selected mode only, in
+ *                                               white; no SD card:
+ *                                               NVRAM - no backup)
+ *                BOOT: TAP=mode, LONG=OK
+ *                (rows 3-4: messages in white, e.g. "Long press again...")
  *   Lines too long for the screen end in '~'.
  *
  * Splash: SD:/sys/splash.png at 0,0 ("sys/splash.png" printed on the top line if missing).
@@ -58,3 +64,10 @@ bool uiScrWantsButton(void);
 
 /* True while any Wait (details) screen is up. */
 bool uiScrWaiting(void);
+
+/* RESET! screen: mode (resetMode_t) and no-card state for the next drawing. */
+void uiScrResetSet(int mode, bool noSd);
+
+/* RESET! screen up: redraw the MODE line / the two message rows. */
+void uiScrResetMode(void);
+void uiScrResetMsg(const char *a, const char *b);

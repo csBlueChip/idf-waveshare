@@ -244,7 +244,8 @@ implementation:
     $.ret               value from the last RETURN / WAIT EVENT / FSTAT
     $.event             full text of the last event, e.g. "BTN 1 SHORT"
                         (WAIT EVENT; empty after a time-out)
-    $.time              timestamp as used for file names, e.g. b002A_001523
+    $.time              timestamp as used for file names: 20261113-142530
+                        (clock set by a browser) or b002A_001523 (not set)
     $.uptime            ms since boot
     $.runtime           ms since the script started
     $.w $.h $.rot       screen width, height, rotation (current ROT)
@@ -692,6 +693,11 @@ implementation:
 
   onWait.s       runs each time a Wait screen is shown.
   onConnect.s    runs when a client connects (built-in: splash).
+  reset.s        run from the RESET! Wait screen (Script / FULL modes;
+                  README section 5), whatever sys.autorun says; $arg is
+                  SCRIPT or FULL (FULL: NV is already reset and the board
+                  reboots when it ends). Plain top-level code; no client.
+                  Not run on the onWait path (onWait is skipped on RESET!).
 
   onWait and onConnect have three functions, all optional:
     FN before     runs before the built-in handler or 'instead'
@@ -701,7 +707,7 @@ implementation:
     FN after      runs once the built-in handler or 'instead' has ended
                   (for onWait: when a client connects or the UI switches)
   Each gets one argument:
-    onWait:    the details fields (rad.ssid, rad.pwd and rad.ble may not
+    onWait:    the details fields (wifi.ssid, wifi.pwd and ble.name may not
                 contain ':' or '|' - the NV check refuses them - so the
                 fields always split correctly)
                   UI:WEB:80|SSID:xxx|Pwd:secret|IP:1.2.3.4|Mask:/24|Link:Waiting
@@ -755,7 +761,7 @@ implementation:
   2. onBoot (if sys.autorun 1), with the 3 s BOOT watcher active;
      no interface is up: no Wi-Fi, no BLE advertising, no serial console
      (PRINT goes nowhere; DEBUG reaches the log ports)
-  3. the boot interface (NV ui.boot) starts
+  3. the boot interface (NV sys.ui) starts
   4. serial UI: the start-up banner (still the last start-up line)
   5. Wait screen (built-in and/or onWait)
 
@@ -776,7 +782,7 @@ implementation:
     RNG EVENTS LOG.
   - UI NEXT: switch to the next interface in the BOOT double-press order
     (WEB -> TELNET -> BLE -> USB -> UART -> MSC -> WEB).
-  - NV: sys.autorun; rad.ssid, rad.pwd, rad.ble refuse ':' and '|'.
+  - NV: sys.autorun; wifi.ssid, wifi.pwd, ble.name refuse ':' and '|'.
   - WAIT ms (console and scripts), WAIT EVENT ms and INPUT ms use the
     high-resolution timer: 1 ms resolution (the 200 Hz tick is unchanged).
   - Boot order (section 13a): the boot interface starts after onBoot.

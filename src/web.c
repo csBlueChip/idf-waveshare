@@ -64,7 +64,8 @@ static webRxCb_t         s_rxCb;
 static webConnCb_t       s_connCb;
 static SemaphoreHandle_t s_sent;
 static SemaphoreHandle_t s_closed;		/* restart: close frame sent */
-static char              s_home[40];		/* http://<ip>/ */
+static char              s_home[48];		/* http://<ip>[:port]/ */
+static bool              s_captive;		/* NV web.captive: DNS + redirects */
 static int               s_open;		/* DEBUG: open connections */
 
 static esp_err_t webGetPage(httpd_req_t *req);
@@ -108,15 +109,21 @@ esp_err_t webStart(webRxCb_t rxCb, webConnCb_t connCb)
 	s_connCb = connCb;
 	s_fd     = -1;
 	s_open   = 0;
-	snprintf(s_home, sizeof(s_home), "http://%s/", nvGet("rad.ip"));
+	int port   = nvGetInt("web.port");
+	s_captive  = nvGetInt("web.captive") != 0;
+	if (port == 80) {
+		snprintf(s_home, sizeof(s_home), "http://%s/", nvGet("wifi.ip"));
+	} else {
+		snprintf(s_home, sizeof(s_home), "http://%s:%d/", nvGet("wifi.ip"), port);
+	}
 
-	esp_err_t err = dnsStart(inet_addr(nvGet("rad.ip")));
+	esp_err_t err = s_captive ? dnsStart(inet_addr(nvGet("wifi.ip"))) : ESP_OK;	/* captive portal DNS */
 	if (err != ESP_OK) {
 		return err;
 	}
 
 	httpd_config_t cfg   = HTTPD_DEFAULT_CONFIG();
-	cfg.server_port      = WEB_PORT;
+	cfg.server_port      = port;
 	cfg.lru_purge_enable = true;			/* phones open many probe connections */
 	cfg.close_fn         = webOnClose;
 	cfg.open_fn          = webOnOpen;
@@ -143,7 +150,7 @@ esp_err_t webStart(webRxCb_t rxCb, webConnCb_t connCb)
 	httpd_register_uri_handler(s_server, &uris[3]);
 	httpd_register_err_handler(s_server, HTTPD_404_NOT_FOUND, webRedirect);
 
-	ESP_LOGI(TAG, "portal at %s", s_home);
+	ESP_LOGI(TAG, "%s at %s", s_captive ? "portal" : "console", s_home);
 	return ESP_OK;
 }
 
@@ -290,7 +297,7 @@ static esp_err_t webGetCfg(httpd_req_t *req)
 	int64_t t0 = esp_timer_get_time();
 	char    host[48];
 	webDbgHost(req, host, sizeof(host));		/* before the reply: headers are gone after */
-	/* page title: SD:/sys/uiname.txt (first line), else NV ui.name, else "wavedemo" */
+	/* page title: SD:/sys/uiname.txt (first line), else NV web.name, else "wavedemo" */
 	char name[WEB_NAME_MAX + 1] = "";
 	sdLock();
 	FILE *f = sdEnsureMounted() == ESP_OK ? fopen(WEB_NAME_FILE, "rb") : NULL;
@@ -312,7 +319,7 @@ static esp_err_t webGetCfg(httpd_req_t *req)
 	}
 	sdUnlock();
 	if (!name[0]) {
-		snprintf(name, sizeof(name), "%s", nvGet("ui.name"));
+		snprintf(name, sizeof(name), "%s", nvGet("web.name"));
 	}
 	if (!name[0]) {
 		snprintf(name, sizeof(name), "wavedemo");
@@ -360,6 +367,11 @@ static esp_err_t webTime(httpd_req_t *req)
 /* Anything unknown (incl. OS connectivity checks) -> the console page. */
 static esp_err_t webRedirect(httpd_req_t *req, httpd_err_code_t err)
 {
+	if (!s_captive) {					/* no portal: plain 404 */
+		httpd_resp_set_status(req, "404 Not Found");
+		httpd_resp_set_type(req, "text/plain");
+		return httpd_resp_sendstr(req, "not found");
+	}
 	httpd_resp_set_status(req, "302 Found");
 	httpd_resp_set_hdr(req, "Location", s_home);
 	httpd_resp_set_hdr(req, "Cache-Control", "no-store");

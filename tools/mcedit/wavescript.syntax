@@ -147,7 +147,6 @@ context default
     keyword whole NV cyan
     keyword whole PAUSE cyan
     keyword whole PLOT cyan
-    keyword whole RAD cyan
     keyword whole REBOOT cyan
     keyword whole ROT cyan
     keyword whole RUN cyan

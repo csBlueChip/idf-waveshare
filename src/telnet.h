@@ -6,14 +6,14 @@
 #include "esp_err.h"
 
 /*
- * Minimal telnet server: one client at a time on TELNET_PORT.
+ * Minimal telnet server: one client at a time on NV telnet.port (default 23,
+ * read when the server starts).
  *   - a second connection is closed immediately (rejected)
  *   - telnet IAC negotiation is stripped from input, NULs dropped
  *   - "\n" in output is sent as "\r\n"
  * The server task blocks in select() - no polling.
  */
 
-#define TELNET_PORT	23
 
 typedef void (*telnetRxCb_t)(const uint8_t *data, size_t len);	/* runs in telnet task */
 typedef void (*telnetConnCb_t)(bool connected);

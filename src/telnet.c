@@ -1,4 +1,5 @@
 #include "telnet.h"
+#include "nv.h"
 
 #include <string.h>
 #include <unistd.h>
@@ -82,7 +83,7 @@ esp_err_t telnetStart(telnetRxCb_t rxCb, telnetConnCb_t connCb)
 
 	struct sockaddr_in addr = {
 		.sin_family      = AF_INET,
-		.sin_port        = htons(TELNET_PORT),
+		.sin_port        = htons(nvGetInt("telnet.port")),
 		.sin_addr.s_addr = htonl(INADDR_ANY),
 	};
 	if (bind(s_listenFd, (struct sockaddr *)&addr, sizeof(addr)) != 0 || listen(s_listenFd, 1) != 0) {
@@ -102,7 +103,7 @@ esp_err_t telnetStart(telnetRxCb_t rxCb, telnetConnCb_t connCb)
 		return ESP_ERR_NO_MEM;
 	}
 
-	ESP_LOGI(TAG, "listening on port %d", TELNET_PORT);
+	ESP_LOGI(TAG, "listening on port %d", nvGetInt("telnet.port"));
 	return ESP_OK;
 }
 

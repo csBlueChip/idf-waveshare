@@ -389,7 +389,7 @@ bool scrHostNv(const char *key, char *out, size_t n)
 		snprintf(out, n, "50");
 		return true;
 	}
-	if (!strcasecmp(key, "rad.ssid")) {
+	if (!strcasecmp(key, "wifi.ssid")) {
 		snprintf(out, n, "wavedemo");
 		return true;
 	}

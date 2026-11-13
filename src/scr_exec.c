@@ -1435,7 +1435,8 @@ static void execStmt(scrFrame_t *f, scrStmt_t *s)
 			for (;;) {
 				scrStmt_t *b = &m->st[t];
 				if (b->kind == K_ELIF) {
-					f->pc = t;		/* errors point at the ELIF */
+					f->pc   = t;		/* errors (and TRACE) point at the ELIF */
+					scr.cur = b;
 					if (scrTruth(scrEvalAll(b->arg))) {
 						f->pc = t + 1;
 						break;
@@ -2024,7 +2025,12 @@ static scrResult_t runLoop(void)
 			if (scrHostCheck() & SCR_CHK_STOP) {
 				return SCR_RES_STOPPED;		/* e.g. STOP NOW cut a command: "aborted" */
 			}
-			if (!onError(&scr.frames[depth - 1].mod->st[si], si, depth)) {
+			scrStmt_t *es = &scr.frames[depth - 1].mod->st[si];
+			if (scr.depth == depth && scr.cur && scr.cur->kind == K_ELIF) {
+				es = scr.cur;		/* failed in an ELIF condition: report its line, */
+				si = F()->pc;		/* resume as a failed IF would (next line) */
+			}
+			if (!onError(es, si, depth)) {
 				return SCR_RES_ERROR;
 			}
 			break;

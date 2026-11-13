@@ -5,6 +5,8 @@ t_bpt.s breakpoints in two files
 t_debug.opt extra arguments for t_debug.s
 t_debug.out expected output of t_debug.s
 t_debug.s LOAD, STEP, STEP IN/OUT, BPT!, PAUSE
+t_elif.out expected output of t_elif.s
+t_elif.s error in an ELIF condition reports the ELIF line
 t_errors.out expected output of t_errors.s
 t_errors.s ONERROR GOTO across calls, run-time errors
 t_events.out expected output of t_events.s

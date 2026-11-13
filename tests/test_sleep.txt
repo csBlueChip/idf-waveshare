@@ -94,7 +94,7 @@ D. RAD - screen, LED and radio off
 D1  > IMU SLEEP RAD
     = OK; ~0.3 s later the connection drops; backlight and LED off
 D2  * check the phone/PC Wi-Fi list
-    = rad.ssid gone
+    = wifi.ssid gone
 D3  * leave it still for 30 s
     = stays dark; SSID stays gone
 D4  * move the board

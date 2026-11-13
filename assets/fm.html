@@ -479,11 +479,10 @@
 			tr.it = it;
 			tr.onclick = function () {
 				pane("list");
-				if (it.up) { load(parent(cwd)); return; }
-				pick(tr);
+				pick(tr);			/* ".." too: double-click goes up, like a folder */
 			};
 			tr.ondblclick = function () {
-				if (it.up) return;
+				if (it.up) { load(parent(cwd)); return; }
 				if (it.dir) load(join(cwd, it.name)); else if (kindOf(it.name)) view(); else download();
 			};
 			tb.appendChild(tr);

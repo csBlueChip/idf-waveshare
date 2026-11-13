@@ -16,7 +16,7 @@ A. BOOT ORDER
 -------------
 
 A1  * Power-cycle the device; watch the screen.
-    = Boot square, then the Wait screen of the ui.boot interface. Nothing
+    = Boot square, then the Wait screen of the sys.ui interface. Nothing
       connectable before the Wait screen appears.
 A2  * Connect the client.
     = <<UI CONNECT>> is the first line the client receives, then the
@@ -239,10 +239,10 @@ H1  > UI NEXT        (from WEB)
     = SSID/PWD/IP/PORT reply, OK; device switches to TELNET (Wait screen)
 H2  * Connect with telnet.
     = <<UI CONNECT>>
-H3  > NV SET rad.maxcli 2   then REBOOT, reconnect telnet
+H3  > NV SET wifi.maxconn 2   then REBOOT, reconnect telnet
     * Join the device's Wi-Fi with a second device (phone).
     = <<UI LINK UP>> on the telnet client
-H4  > NV SET rad.maxcli 1   then REBOOT, reconnect
+H4  > NV SET wifi.maxconn 1   then REBOOT, reconnect
 H5  > UI NEXT        (from TELNET)
     = OK; switches to BLE
     (continue with UI NEXT from each interface: BLE -> USB -> UART -> WEB)
@@ -255,13 +255,13 @@ I1  > NV GET sys.autorun
     = sys.autorun=0
 I2  > NV SET sys.autorun 2
     = ERR sys.autorun must be 0..1
-I3  > NV SET rad.ssid ab:cd
-    = ERR rad.ssid must be 1..32 chars, no spaces, ':' or '|'
-I4  > NV SET rad.pwd abcd|efgh
-    = ERR rad.pwd must be 8..63 chars, no spaces, ':' or '|'
-I5  > NV SET rad.ble my:dev
-    = ERR rad.ble must be 1..29 chars, no spaces, ':' or '|'
-I6  > NV SET rad.ble ESP32-S3-Demo
+I3  > NV SET wifi.ssid ab:cd
+    = ERR wifi.ssid must be 1..32 chars, no spaces, ':' or '|'
+I4  > NV SET wifi.pwd abcd|efgh
+    = ERR wifi.pwd must be 8..63 chars, no spaces, ':' or '|'
+I5  > NV SET ble.name my:dev
+    = ERR ble.name must be 1..29 chars, no spaces, ':' or '|'
+I6  > NV SET ble.name ESP32-S3-Demo
     = OK
 
 

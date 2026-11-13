@@ -60,6 +60,13 @@ void scriptConnect(const char *uiName, void (*builtin)(void));
  * without is stopped; a paused one is stopped. */
 void scriptClientGone(void);
 
+/* Script name ("name" or "sys/name") exists on the card. */
+bool scriptHas(const char *name);
+
+/* Main task: run a script as a system script (BOOT 3 s escape on) and wait
+ * for it to end (RESET! screen: sys/reset). false = could not start. */
+bool scriptRunWait(const char *name, const char *args);
+
 /* A script is running or paused. */
 bool scriptActive(void);
 

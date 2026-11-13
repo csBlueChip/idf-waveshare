@@ -1,7 +1,7 @@
 idf_component_register(
 	SRCS          "main.c" "ble_serial.c" "cmd.c" "led.c" "lcd.c" "gfx.c" "text.c" "font.c" "font_mono.c" "font_serif.c" "i2c.c" "imu.c" "sd.c" "img.c" "usbdisk.c" "fm.c"
 	              "ui.c" "wifi_ap.c" "telnet.c" "btn.c" "scrtr.c"
-	              "nv.c" "rad.c" "bat.c" "sys.c" "dns.c" "web.c" "webpath.c" "uiscr.c"
+	              "nv.c" "reset.c" "bat.c" "sys.c" "dns.c" "web.c" "webpath.c" "uiscr.c"
 	              "ser.c" "log.c" "script.c" "scr_load.c" "scr_eval.c" "scr_exec.c"
 	INCLUDE_DIRS  "."
 	EMBED_FILES   "../assets/usbdrive.png"

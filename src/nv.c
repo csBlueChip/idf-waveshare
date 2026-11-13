@@ -13,6 +13,7 @@
 
 #include "cmd.h"
 #include "sd.h"
+#include "sys.h"
 
 static const char *TAG = "nv";
 
@@ -48,21 +49,26 @@ static const char *nvChkRgb(const char *in, int min, int max, char *out);
 static const char *nvChkDbl(const char *in, int min, int max, char *out);
 static const char *nvChkTenth(const char *in, int min, int max, char *out);
 static const char *nvChkBaud(const char *in, int min, int max, char *out);
+static const char *nvChkBlePwr(const char *in, int min, int max, char *out);
 
 static const nvKey_t s_keys[] = {
 	/* key               default          check       min  max    flags */
-	{ "rad.ssid",         "wavedemo",      nvChkText,  1,   32,    0 },
-	{ "rad.pwd",          "waveP@55word",  nvChkText,  8,   63,    NV_SECRET },
-	{ "rad.ble",          "ESP32-S3-Demo", nvChkText,  1,   29,    0 },
-	{ "rad.ip",           "192.168.4.1",   nvChkIp,    0,   0,     0 },
-	{ "rad.mask",         "/24",           nvChkMask,  8,   30,    0 },
-	{ "rad.pwr",          "8.5",           nvChkPwr,   2,   20,    0 },
-	{ "rad.nogw",         "0",             nvChkInt,   0,   1,     0 },
-	{ "rad.maxcli",       "1",             nvChkInt,   1,   4,     0 },
-	{ "ui.boot",          "BLE",           nvChkUi,    0,   0,     0 },
-	{ "ui.baud",          "115200",        nvChkBaud,  0,   0,     0 },
-	{ "ui.echo",          "1",             nvChkInt,   0,   1,     0 },
-	{ "ui.name",          "",              nvChkText,  0,   32,    0 },
+	{ "wifi.ssid",        "wavedemo",      nvChkText,  1,   32,    0 },
+	{ "wifi.pwd",         "waveP@55word",  nvChkText,  8,   63,    NV_SECRET },
+	{ "wifi.ip",          "192.168.4.1",   nvChkIp,    0,   0,     0 },
+	{ "wifi.cidr",        "/24",           nvChkMask,  8,   30,    0 },
+	{ "wifi.pwr",         "8.5",           nvChkPwr,   2,   20,    0 },
+	{ "wifi.gw",          "1",             nvChkInt,   0,   1,     0 },
+	{ "wifi.maxconn",     "1",             nvChkInt,   1,   4,     0 },
+	{ "ble.name",         "ESP32-S3-Demo", nvChkText,  1,   29,    0 },
+	{ "ble.pwr",          "9",             nvChkBlePwr, -24, 20,   0 },
+	{ "sys.ui",           "BLE",          nvChkUi,    0,   0,     0 },
+	{ "ser.baud",         "115200",        nvChkBaud,  0,   0,     0 },
+	{ "ser.echo",         "1",             nvChkInt,   0,   1,     0 },
+	{ "web.name",         "",              nvChkText,  0,   32,    0 },
+	{ "web.port",         "80",            nvChkInt,   1,   65535, 0 },
+	{ "web.captive",      "1",             nvChkInt,   0,   1,     0 },
+	{ "telnet.port",      "23",            nvChkInt,   1,   65535, 0 },
 	{ "scr.bl",           "100",           nvChkInt,   0,   100,   0 },
 	{ "scr.pflip",        "0",             nvChkInt,   0,   1,     0 },
 	{ "scr.lflip",        "0",             nvChkInt,   0,   1,     0 },
@@ -99,13 +105,15 @@ static const nvKey_t s_keys[] = {
 static EXT_RAM_BSS_ATTR char s_val[NV_COUNT][NV_VAL_MAX];	/* current values */
 static EXT_RAM_BSS_ATTR char s_stage[NV_COUNT][NV_VAL_MAX];	/* nvSetMany() working copy */
 static char         s_err[80];
+static bool         s_dry;		/* nvSetMany(): check only, store nothing */
+static EXT_RAM_BSS_ATTR char s_save[NV_COUNT][NV_VAL_MAX];	/* nvResetImport() */
+static const char   s_noSet[] = "no settings in file";
 static nvs_handle_t s_nvs;
 
 static int         nvFind(const char *key);
 static const char *nvCross(char (*vals)[NV_VAL_MAX]);
 static bool        nvParseIp(const char *s, uint32_t *ip);
 static const char *nvFilePath(const char *name, char *path, size_t n);
-static const char *nvExport(const char *name);
 static const char *nvImport(const char *name, cmdReply_t reply);
 static const char *nvCmd(int argc, char *argv[], cmdReply_t reply);
 
@@ -131,9 +139,9 @@ esp_err_t nvInit(void)
 		}
 	}
 	if (nvCross(s_val) != NULL) {				/* ip/mask pair unusable */
-		ESP_LOGW(TAG, "rad.ip/rad.mask invalid together, using defaults");
-		strcpy(s_val[nvFind("rad.ip")], "192.168.4.1");
-		strcpy(s_val[nvFind("rad.mask")], "/24");
+		ESP_LOGW(TAG, "wifi.ip/wifi.cidr invalid together, using defaults");
+		strcpy(s_val[nvFind("wifi.ip")], "192.168.4.1");
+		strcpy(s_val[nvFind("wifi.cidr")], "/24");
 	}
 
 	return cmdRegister("NV", 1, 5, nvCmd,
@@ -184,7 +192,7 @@ const char *nvSetMany(int n, const char *keys[], const char *vals[], int *badInd
 		*badIndex = -1;
 	}
 	const char *e = nvCross(s_stage);
-	if (e) {
+	if (e || s_dry) {
 		return e;
 	}
 
@@ -216,6 +224,63 @@ void nvUnescape(char *s)
 	*d = '\0';
 }
 
+const char *nvResetAll(void)
+{
+	if (nvs_erase_all(s_nvs) != ESP_OK) {
+		return "NV write failed";
+	}
+	for (int i = 0; i < NV_COUNT; i++) {
+		if ((s_keys[i].flags & NV_RO)) {				/* firmware-owned: keep */
+			if (nvs_set_str(s_nvs, s_keys[i].key, s_val[i]) != ESP_OK) {
+				return "NV write failed";
+			}
+		} else {
+			strcpy(s_val[i], s_keys[i].def);
+		}
+	}
+	return (nvs_commit(s_nvs) == ESP_OK) ? NULL : "NV write failed";
+}
+
+const char *nvBackup(char *name, size_t n)
+{
+	sdLock();
+	if (sdEnsureMounted() != ESP_OK) {
+		sdUnlock();
+		return "no SD card";
+	}
+	if (mkdir(NV_DIR, 0777) != 0 && errno != EEXIST) {
+		sdUnlock();
+		return "cannot create /sys";
+	}
+	const char *e = sysTimestampFile(NV_DIR, NV_EXT, name, n);
+	sdUnlock();
+	return e ? e : nvExport(name);
+}
+
+const char *nvResetImport(const char *name)
+{
+	/* check the file against the defaults first (nothing stored) */
+	memcpy(s_save, s_val, sizeof(s_save));
+	for (int i = 0; i < NV_COUNT; i++) {
+		if (!(s_keys[i].flags & NV_RO)) {
+			strcpy(s_val[i], s_keys[i].def);
+		}
+	}
+	s_dry = true;
+	const char *e = nvImport(name, NULL);
+	s_dry = false;
+	memcpy(s_val, s_save, sizeof(s_val));
+	bool empty = (e == s_noSet);
+	if (e && !empty) {
+		return e;
+	}
+	e = nvResetAll();
+	if (!e && !empty) {
+		e = nvImport(name, NULL);
+	}
+	return e;
+}
+
 /* ================= Checkers ================= */
 
 static const char *nvChkText(const char *in, int min, int max, char *out)
@@ -232,6 +297,25 @@ static const char *nvChkText(const char *in, int min, int max, char *out)
 		return msg;
 	}
 	strcpy(out, in);
+	return NULL;
+}
+
+/* BLE TX power in dBm: rounded to the radio's steps -24 -21 ... +15 +18 +20 */
+static const char *nvChkBlePwr(const char *in, int min, int max, char *out)
+{
+	static const int steps[] = { -24, -21, -18, -15, -12, -9, -6, -3, 0, 3, 6, 9, 12, 15, 18, 20 };
+	char  *end;
+	double d = strtod(in, &end);
+	if (end == in || *end || d < min - 1.5 || d > max + 1.5) {
+		return "must be -24..20 dBm (steps of 3, top step 20)";
+	}
+	int best = steps[0];
+	for (size_t i = 0; i < sizeof(steps) / sizeof(steps[0]); i++) {
+		if (fabs(d - steps[i]) < fabs(d - best)) {
+			best = steps[i];
+		}
+	}
+	sprintf(out, "%d", best);
 	return NULL;
 }
 
@@ -396,15 +480,15 @@ static int nvFind(const char *key)
 	return -1;
 }
 
-/* Checks across keys: rad.ip must be a host address in its rad.mask network. */
+/* Checks across keys: wifi.ip must be a host address in its wifi.cidr network. */
 static const char *nvCross(char (*vals)[NV_VAL_MAX])
 {
 	uint32_t ip;
-	int      bits = atoi(vals[nvFind("rad.mask")] + 1);
+	int      bits = atoi(vals[nvFind("wifi.cidr")] + 1);
 	uint32_t host = (1u << (32 - bits)) - 1;
 
-	if (!nvParseIp(vals[nvFind("rad.ip")], &ip) || (ip & host) == 0 || (ip & host) == host) {
-		return "rad.ip is not a host address for rad.mask";
+	if (!nvParseIp(vals[nvFind("wifi.ip")], &ip) || (ip & host) == 0 || (ip & host) == host) {
+		return "wifi.ip is not a host address for wifi.cidr";
 	}
 	return NULL;
 }
@@ -448,7 +532,7 @@ static const char *nvFilePath(const char *name, char *path, size_t n)
 	return NULL;
 }
 
-static const char *nvExport(const char *name)
+const char *nvExport(const char *name)
 {
 	char path[96];
 	const char *e = nvFilePath(name, path, sizeof(path));
@@ -548,7 +632,7 @@ static const char *nvImport(const char *name, cmdReply_t reply)
 		return e;
 	}
 	if (n == 0) {
-		return "no settings in file";
+		return s_noSet;
 	}
 
 	int bad;
@@ -558,7 +642,7 @@ static const char *nvImport(const char *name, cmdReply_t reply)
 		snprintf(msg, sizeof(msg), "line %d: %s", lineNo[bad], e);
 		return msg;
 	}
-	if (!e && skipped[0]) {
+	if (!e && skipped[0] && reply && !s_dry) {
 		char text[NV_FILE_LINE + 40];
 		snprintf(text, sizeof(text), "warning:%s ignored (read-only)\n", skipped);
 		reply(text);
@@ -617,19 +701,7 @@ static const char *nvCmd(int argc, char *argv[], cmdReply_t reply)
 			const char *k[] = { s_keys[i].key }, *v[] = { s_keys[i].def };
 			return nvSetMany(1, k, v, NULL);
 		}
-		if (nvs_erase_all(s_nvs) != ESP_OK) {
-			return "NV write failed";
-		}
-		for (int i = 0; i < NV_COUNT; i++) {
-			if ((s_keys[i].flags & NV_RO)) {				/* firmware-owned: keep */
-				if (nvs_set_str(s_nvs, s_keys[i].key, s_val[i]) != ESP_OK) {
-					return "NV write failed";
-				}
-			} else {
-				strcpy(s_val[i], s_keys[i].def);
-			}
-		}
-		return (nvs_commit(s_nvs) == ESP_OK) ? NULL : "NV write failed";
+		return nvResetAll();
 	}
 	if (strcasecmp(sub, "EXPORT") == 0 && argc == 2) {
 		return nvExport(argv[1]);

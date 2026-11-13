@@ -7,6 +7,7 @@
 #include <errno.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <time.h>
 #include "esp_system.h"
 #include "esp_chip_info.h"
 #include "esp_flash.h"
@@ -33,6 +34,7 @@
 #define SYS_WAIT_MAX	60000
 #define SYS_REBOOT_MS	300	/* let OK reach the client first */
 #define SYS_STAMP_TRIES	100	/* -1 .. -99 suffixes */
+#define SYS_CLOCK_SET	1577836800	/* 2020-01-01: below = never set (boots at 1970) */
 #define SYS_DATA_DIR	SD_MOUNT_POINT "/scripts/data"
 #define SYS_NV_DIR	SD_MOUNT_POINT "/sys"	/* name.nvram files */
 #define SYS_PATH_MAX	(sizeof(SYS_DATA_DIR) + SYS_FILE_MAX + 8)
@@ -111,6 +113,14 @@ esp_err_t sysInit(void)
 
 void sysTimestamp(char *out, size_t n)
 {
+	time_t now = time(NULL);
+	if (now >= SYS_CLOCK_SET) {			/* clock set by a browser (POST /time) */
+		struct tm t;
+		gmtime_r(&now, &t);			/* the browser sent local time */
+		snprintf(out, n, "%04d%02d%02d-%02d%02d%02d", t.tm_year + 1900, t.tm_mon + 1, t.tm_mday,
+		         t.tm_hour, t.tm_min, t.tm_sec);
+		return;
+	}
 	uint32_t s = (uint32_t)(esp_timer_get_time() / 1000000);
 	snprintf(out, n, "b%04X_%02" PRIu32 "%02" PRIu32 "%02" PRIu32,
 	         (unsigned)s_boot, s / 3600, (s / 60) % 60, s % 60);

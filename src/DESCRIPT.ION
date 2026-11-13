@@ -32,8 +32,8 @@ log.c log routing to UART / USB, dbgf(), LOG command
 log.h log API
 nv.c NV settings (NVS flash): NV SET/GET/RESET/EXPORT/IMPORT
 nv.h NV keys and API
-rad.c radio setup (Wi-Fi AP parameters, TX power)
-rad.h radio API
+reset.c reset when no UI works: SD:/sys/reset.nvram at boot, RESET! screen actions
+reset.h reset API and behaviour
 scr.h script interpreter API
 scr_host.h hooks the interpreter needs from its host
 scr_int.h interpreter internals
