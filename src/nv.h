@@ -50,7 +50,7 @@
  *   btn.gpio   0 2 4 5 6 7 8 9 10 11  button n -> GPIO (next boot): 1..10 of
  *                               0, 2..11, 43, 44; first 0 (BOOT); no repeats
  *   web.hist   50               10..500       (web page command history entries)
- *   disk.read  0,255,0          colour: r,g,b or RRGGBB  (LED during USB disk reads)
+ *   disk.read  0,255,0          colour: r,g,b, RRGGBB or @h,s,l  (LED during USB disk reads)
  *   disk.write 255,0,0          colour        (LED during USB disk writes)
  *   imu.arange 4                2|4|8|16 g            (IMU ACC; applied now)
  *   imu.arate  224              28|56|112|224|448|896 Hz

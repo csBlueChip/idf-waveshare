@@ -124,10 +124,17 @@ LED
 
   LED colour                    RGB LED colour
 
-  Colours are one word: r,g,b (three decimals 0..255, e.g. 255,128,127)
-  or RRGGBB (six hex digits, either case, e.g. FF807F; a 6-digit word is
-  always hex). Used by LED, CLS, the drawing commands, TINK, TCLS and the
-  NV colour keys. Anything else: "ERR colour must be r,g,b or RRGGBB".
+  Colours are one word:
+    r,g,b    three decimals 0..255, e.g. 255,128,127
+    RRGGBB   six hex digits, either case, e.g. FF807F (a 6-digit word is
+             always hex)
+    @h,s,l   HSL, whole decimals: hue 0..359 degrees, saturation and
+             lightness 0..100 %, e.g. @0,100,50 = red, @27,83,47 = the UI
+             orange (converted to the nearest r,g,b)
+  Used by LED, CLS, the drawing commands, TINK, TCLS and the NV colour
+  keys. Anything else: "ERR colour must be r,g,b, RRGGBB or @h,s,l".
+  The screen shows 16-bit colour (RGB565): each channel is rounded to the
+  nearest level (32 for red / blue, 64 for green).
 
 Screen
 
@@ -451,7 +458,8 @@ Scripts (SD:/scripts/name.s; language: SCRIPTING.txt, section 9 here)
   web.hist   50              web console history entries 10..500
   disk.read  0,255,0         LED colour for USB disk reads
   disk.write 255,0,0         LED colour for USB disk writes
-                             (colour keys: r,g,b or RRGGBB, kept as typed)
+                             (colour keys: r,g,b, RRGGBB or @h,s,l, kept
+                             as typed)
   imu.arange 4               accel range 2|4|8|16 g
   imu.arate  224             accel rate 28|56|112|224|448|896 Hz
   imu.grange 512             gyro range 16|32|64|128|256|512|1024|2048 dps

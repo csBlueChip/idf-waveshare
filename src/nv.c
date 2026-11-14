@@ -495,7 +495,7 @@ static const char *nvChkRgb(const char *in, int min, int max, char *out)
 {
 	uint8_t c[3];
 	if (!cmdParseColour(in, c)) {
-		return "must be r,g,b or RRGGBB";
+		return "must be r,g,b, RRGGBB or @h,s,l";
 	}
 	snprintf(out, NV_VAL_MAX, "%s", in);		/* kept as typed */
 	return NULL;

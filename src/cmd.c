@@ -1,6 +1,7 @@
 #include "cmd.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <strings.h>
 #include "esp_attr.h"
@@ -221,10 +222,59 @@ bool cmdParseU8(const char *str, uint8_t *out)
 	return true;
 }
 
+/* "h,s,l" (after the '@'): h 0..359, s and l 0..100, whole decimals. */
+static bool cmdParseHsl(const char *str, uint8_t rgb[3])
+{
+	static const int max[3] = { 359, 100, 100 };
+	int         v[3];
+	char        part[4];
+	const char *p = str;
+	for (int i = 0; i < 3; i++) {
+		const char *e = (i < 2) ? strchr(p, ',') : p + strlen(p);
+		if (!e || e - p < 1 || e - p > 3) {
+			return false;
+		}
+		memcpy(part, p, e - p);
+		part[e - p] = '\0';
+		v[i] = 0;
+		for (const char *d = part; *d; d++) {
+			if (*d < '0' || *d > '9') {
+				return false;
+			}
+			v[i] = v[i] * 10 + (*d - '0');
+		}
+		if (v[i] > max[i]) {
+			return false;
+		}
+		p = e + 1;
+	}
+	/* exact integer HSL -> RGB, values in units of 1/600000 (60 deg x 100 % x 100 %) */
+	int32_t c = (100 - abs(2 * v[2] - 100)) * v[1] * 60;	/* chroma */
+	int32_t t = v[0] % 120;
+	int32_t x = c * (60 - abs(t - 60)) / 60;		/* exact: c is a multiple of 60 */
+	int32_t m = v[2] * 6000 - c / 2;
+	int32_t f[3];
+	switch (v[0] / 60) {
+	case 0:  f[0] = c; f[1] = x; f[2] = 0; break;
+	case 1:  f[0] = x; f[1] = c; f[2] = 0; break;
+	case 2:  f[0] = 0; f[1] = c; f[2] = x; break;
+	case 3:  f[0] = 0; f[1] = x; f[2] = c; break;
+	case 4:  f[0] = x; f[1] = 0; f[2] = c; break;
+	default: f[0] = c; f[1] = 0; f[2] = x; break;
+	}
+	for (int i = 0; i < 3; i++) {
+		rgb[i] = (uint8_t)(((f[i] + m) * 255 + 300000) / 600000);	/* nearest, .5 up */
+	}
+	return true;
+}
+
 bool cmdParseColour(const char *str, uint8_t rgb[3])
 {
 	if (!str) {
 		return false;
+	}
+	if (str[0] == '@') {					/* @h,s,l */
+		return cmdParseHsl(str + 1, rgb);
 	}
 	if (!strchr(str, ',')) {				/* RRGGBB */
 		if (strlen(str) != 6) {

@@ -129,6 +129,9 @@ implementation:
     (CLS 0,0,0, IMU TAP 1 0 0, ...). Before it runs, every $variable in
     it is replaced by its value; "\$" is a literal '$'.
       FBOX $x $y 10 10 255,0,0
+  - A colour is one word: r,g,b, RRGGBB or @h,s,l (README, LED). Build it
+    from variables with commas: LED $r,$g,$b ; CLS @$h,100,50 (stepping
+    $h through 0..359 gives a rainbow). Commands need whole numbers.
   - Order: a line is split into statements at ';' and its comment is
     removed FIRST, then variables are substituted (one pass) - a ';', '#'
     or '$' inside a variable's value is never re-read.

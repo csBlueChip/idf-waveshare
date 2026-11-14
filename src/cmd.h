@@ -66,10 +66,12 @@ void cmdExecute(const char *line, cmdReply_t reply);
 /* Strict 0..255 decimal parse. Rejects empty, sign, non-digits, overflow. */
 bool cmdParseU8(const char *str, uint8_t *out);
 
-/* A colour as one word: "r,g,b" (three 0..255 decimals) or "RRGGBB" (exactly
- * six hex digits, either case; a 6-digit word is always hex). */
+/* A colour as one word: "r,g,b" (three 0..255 decimals), "RRGGBB" (exactly
+ * six hex digits, either case; a 6-digit word is always hex) or "@h,s,l"
+ * (HSL: h 0..359, s and l 0..100 %, whole decimals; converted to the nearest
+ * RGB888). */
 bool cmdParseColour(const char *str, uint8_t rgb[3]);
-#define CMD_COLOUR_ERR	"colour must be r,g,b or RRGGBB"
+#define CMD_COLOUR_ERR	"colour must be r,g,b, RRGGBB or @h,s,l"
 
 /* Strict signed decimal parse within min..max. Optional leading '-'. */
 bool cmdParseInt(const char *str, int min, int max, int *out);

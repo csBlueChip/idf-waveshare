@@ -283,9 +283,14 @@ void lcdDeepSleepPrep(void)
 	gpio_deep_sleep_hold_en();
 }
 
+/* RGB888 -> RGB565, each channel to the nearest level: round(x * 31 / 255)
+ * (6 bits: * 63 / 255), exact for all 256 inputs, no divide. */
 uint16_t lcdRgb(uint8_t r, uint8_t g, uint8_t b)
 {
-	return (uint16_t)(((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3));
+	uint32_t r5 = ((uint32_t)r * 249 + 1014) >> 11;
+	uint32_t g6 = ((uint32_t)g * 253 + 505) >> 10;
+	uint32_t b5 = ((uint32_t)b * 249 + 1014) >> 11;
+	return (uint16_t)((r5 << 11) | (g6 << 5) | b5);
 }
 
 esp_err_t lcdFill(uint16_t colour)

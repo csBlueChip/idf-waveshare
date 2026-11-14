@@ -7,14 +7,15 @@
 
 /*
  * 1.47" ST7789T LCD, 172x320, SPI.
- * Colours are RGB565 - build them with lcdRgb().
+ * Colours are RGB565 - build them with lcdRgb() (each channel rounded to
+ * the nearest 565 level).
  *
  * Double buffered (two frames in PSRAM): all drawing goes to the hidden
  * buffer; lcdUpdate() sends only the pixels that differ from what is on the
  * panel, then swaps. By default lcdUpdate() runs after every command.
  *
  * Commands registered by lcdInit():
- *   CLS colour  clear to colour (r,g,b or RRGGBB), show dimensions
+ *   CLS colour  clear to colour (r,g,b, RRGGBB or @h,s,l), show dimensions
  *   ROT n       rotation n mod 4 (0/2 portrait, 1/3 landscape) for new drawing;
  *               screen content is left as it is; replies W/H
  *   BL pct      backlight 0..100

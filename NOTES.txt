@@ -142,6 +142,10 @@ conversation context. Keep it current, like the README.
   Colours are one word: r,g,b or RRGGBB (cmd.c cmdParseColour, shared by
     LED CLS PLOT..FCIRC TINK TCLS and NV colour keys, kept as typed).
     Old "r g b" removed; sd/ scripts, tests, docs converted.
+    Then @h,s,l (exact integer HSL -> RGB888, .5 rounds up; checked on the
+    PC against an exact Fraction reference, 158760 values) and lcdRgb()
+    rounds to the nearest 565 level ((x*249+1014)>>11, (x*253+505)>>10;
+    = round(x*31/255), round(x*63/255) for all 256 inputs).
 
 
 5. SCRIPTING - IMPLEMENTATION PLAN (agreed)
