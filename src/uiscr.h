@@ -21,6 +21,7 @@
  *                WiFi: Waiting... | Link Active (white: a station has an IP)
  *   BLE:         UI  : BLE
  *                Name: <ble.name>
+ *   USB:         UI  : USB - Serial     (the interface name stays "USB")
  *   MSC:         UI  : MSC - Flash Drive
  *                BOOT: hold to start    (BOOT held: USB disk mode, as FILES)
  *   RESET!:      UI  : RESET!

@@ -9,6 +9,8 @@
 #include <sys/stat.h>
 #include "esp_log.h"
 #include "esp_attr.h"
+#include "esp_mac.h"
+#include "esp_random.h"
 #include "nvs.h"
 
 #include "cmd.h"
@@ -22,7 +24,8 @@ static const char *TAG = "nv";
 #define NV_DIR		SD_MOUNT_POINT "/sys"
 #define NV_EXT		".nvram"
 #define NV_FILE_LINE	160
-#define NV_FILE_PAIRS	48
+#define NV_FILE_PAIRS	64
+#define NV_CMD_ARGS	12		/* NV SET btn.gpio + 10 GPIOs */
 
 /* Checker: validate 'in' against the key's limits, write the normalised value to out. */
 typedef const char *(*nvCheck_t)(const char *in, int min, int max, char *out);
@@ -37,6 +40,7 @@ typedef struct {
 
 #define NV_RO		1	/* firmware-owned: no NV SET / RESET key; IMPORT skips it; kept by NV RESET */
 #define NV_SECRET	2	/* EXPORT writes "!key=value" (FCAT shows [redacted]) */
+#define NV_GEN		4	/* default made per board by nvDefault() (def = a description) */
 
 static const char *nvChkText(const char *in, int min, int max, char *out);
 static const char *nvChkInt(const char *in, int min, int max, char *out);
@@ -50,20 +54,27 @@ static const char *nvChkDbl(const char *in, int min, int max, char *out);
 static const char *nvChkTenth(const char *in, int min, int max, char *out);
 static const char *nvChkBaud(const char *in, int min, int max, char *out);
 static const char *nvChkBlePwr(const char *in, int min, int max, char *out);
+static const char *nvChkPin(const char *in, int min, int max, char *out);
+static const char *nvChkBtnGpio(const char *in, int min, int max, char *out);
+static bool        nvPinOk(int g);
+static const char *nvCrossIp(char (*vals)[NV_VAL_MAX]);
+static const char *nvCrossPins(char (*vals)[NV_VAL_MAX]);
 
 static const nvKey_t s_keys[] = {
 	/* key               default          check       min  max    flags */
-	{ "wifi.ssid",        "wavedemo",      nvChkText,  1,   32,    0 },
-	{ "wifi.pwd",         "waveP@55word",  nvChkText,  8,   63,    NV_SECRET },
+	{ "wifi.ssid",        "CS_wave_xx-yy-zz", nvChkText, 1, 32,    NV_GEN },
+	{ "wifi.pwd",         "ChangeMe_xxxx", nvChkText,  8,   63,    NV_SECRET | NV_GEN },
 	{ "wifi.ip",          "192.168.4.1",   nvChkIp,    0,   0,     0 },
 	{ "wifi.cidr",        "/24",           nvChkMask,  8,   30,    0 },
 	{ "wifi.pwr",         "8.5",           nvChkPwr,   2,   20,    0 },
 	{ "wifi.gw",          "1",             nvChkInt,   0,   1,     0 },
 	{ "wifi.maxconn",     "1",             nvChkInt,   1,   4,     0 },
-	{ "ble.name",         "ESP32-S3-Demo", nvChkText,  1,   29,    0 },
+	{ "ble.name",         "CS_wave_xx-yy-zz", nvChkText, 1, 29,    NV_GEN },
 	{ "ble.pwr",          "9",             nvChkBlePwr, -24, 20,   0 },
 	{ "sys.ui",           "BLE",          nvChkUi,    0,   0,     0 },
-	{ "ser.baud",         "115200",        nvChkBaud,  0,   0,     0 },
+	{ "uart.baud",        "115200",        nvChkBaud,  0,   0,     0 },
+	{ "uart.tx",          "43",            nvChkPin,   0,   0,     0 },
+	{ "uart.rx",          "44",            nvChkPin,   0,   0,     0 },
 	{ "ser.echo",         "1",             nvChkInt,   0,   1,     0 },
 	{ "web.name",         "",              nvChkText,  0,   32,    0 },
 	{ "web.port",         "80",            nvChkInt,   1,   65535, 0 },
@@ -77,6 +88,7 @@ static const nvKey_t s_keys[] = {
 	{ "btn.dbl",          "300",           nvChkInt,   50,  5000,  0 },
 	{ "btn.rpt",          "0",             nvChkInt,   0,   5000,  0 },
 	{ "btn.touch",        "0.015",         nvChkRatio, 0,   0,     0 },
+	{ "btn.gpio",         "0 2 4 5 6 7 8 9 10 11", nvChkBtnGpio, 1, 10, 0 },
 	{ "web.hist",         "50",            nvChkInt,   10,  500,   0 },
 	{ "disk.read",        "0 255 0",       nvChkRgb,   0,   255,   0 },
 	{ "disk.write",       "255 0 0",       nvChkRgb,   0,   255,   0 },
@@ -111,6 +123,7 @@ static const char   s_noSet[] = "no settings in file";
 static nvs_handle_t s_nvs;
 
 static int         nvFind(const char *key);
+static void        nvDefault(int i, char *out);
 static const char *nvCross(char (*vals)[NV_VAL_MAX]);
 static bool        nvParseIp(const char *s, uint32_t *ip);
 static const char *nvFilePath(const char *name, char *path, size_t n);
@@ -127,25 +140,41 @@ esp_err_t nvInit(void)
 		return err;
 	}
 
+	bool gen = false;
 	for (int i = 0; i < NV_COUNT; i++) {
 		char   raw[NV_VAL_MAX];
 		size_t len = sizeof(raw);
-		strcpy(s_val[i], s_keys[i].def);
+		bool   ok  = false;
 		if (nvs_get_str(s_nvs, s_keys[i].key, raw, &len) == ESP_OK) {
-			if (s_keys[i].check(raw, s_keys[i].min, s_keys[i].max, s_val[i]) != NULL) {
+			ok = (s_keys[i].check(raw, s_keys[i].min, s_keys[i].max, s_val[i]) == NULL);
+			if (!ok) {
 				ESP_LOGW(TAG, "%s: stored value invalid, using default", s_keys[i].key);
-				strcpy(s_val[i], s_keys[i].def);
+			}
+		}
+		if (!ok) {
+			nvDefault(i, s_val[i]);
+			if ((s_keys[i].flags & NV_GEN) && nvs_set_str(s_nvs, s_keys[i].key, s_val[i]) == ESP_OK) {
+				gen = true;			/* kept: the random password must not change */
 			}
 		}
 	}
-	if (nvCross(s_val) != NULL) {				/* ip/mask pair unusable */
+	if (gen) {
+		nvs_commit(s_nvs);
+	}
+	if (nvCrossIp(s_val) != NULL) {				/* ip/mask pair unusable */
 		ESP_LOGW(TAG, "wifi.ip/wifi.cidr invalid together, using defaults");
 		strcpy(s_val[nvFind("wifi.ip")], "192.168.4.1");
 		strcpy(s_val[nvFind("wifi.cidr")], "/24");
 	}
+	if (nvCrossPins(s_val) != NULL) {			/* UART / button pins clash */
+		ESP_LOGW(TAG, "uart.tx/uart.rx/btn.gpio clash, using defaults");
+		strcpy(s_val[nvFind("uart.tx")], "43");
+		strcpy(s_val[nvFind("uart.rx")], "44");
+		strcpy(s_val[nvFind("btn.gpio")], "0 2 4 5 6 7 8 9 10 11");
+	}
 
-	return cmdRegister("NV", 1, 5, nvCmd,
-	                   "NV SET key value|r g b | GET [key] | RESET [key] | EXPORT name | IMPORT name");
+	return cmdRegister("NV", 1, NV_CMD_ARGS, nvCmd,
+	                   "NV SET key value|r g b|g1 g2 .. | GET [key] | RESET [key] | EXPORT name | IMPORT name");
 }
 
 const char *nvGet(const char *key)
@@ -182,7 +211,13 @@ const char *nvSetMany(int n, const char *keys[], const char *vals[], int *badInd
 			snprintf(s_err, sizeof(s_err), "unknown key %s", keys[k]);
 			return s_err;
 		}
-		const char *e = s_keys[i].check(vals[k], s_keys[i].min, s_keys[i].max, s_stage[i]);
+		const char *in = vals[k];
+		char        def[NV_VAL_MAX];
+		if (strcmp(in, "*") == 0) {			/* "*" = the key's default */
+			nvDefault(i, def);
+			in = def;
+		}
+		const char *e = s_keys[i].check(in, s_keys[i].min, s_keys[i].max, s_stage[i]);
 		if (e) {
 			snprintf(s_err, sizeof(s_err), "%s %s", s_keys[i].key, e);
 			return s_err;
@@ -230,12 +265,12 @@ const char *nvResetAll(void)
 		return "NV write failed";
 	}
 	for (int i = 0; i < NV_COUNT; i++) {
-		if ((s_keys[i].flags & NV_RO)) {				/* firmware-owned: keep */
-			if (nvs_set_str(s_nvs, s_keys[i].key, s_val[i]) != ESP_OK) {
-				return "NV write failed";
-			}
-		} else {
-			strcpy(s_val[i], s_keys[i].def);
+		if (!(s_keys[i].flags & NV_RO)) {				/* firmware-owned: keep */
+			nvDefault(i, s_val[i]);
+		}
+		if ((s_keys[i].flags & (NV_RO | NV_GEN)) &&			/* kept / per board: stored */
+		    nvs_set_str(s_nvs, s_keys[i].key, s_val[i]) != ESP_OK) {
+			return "NV write failed";
 		}
 	}
 	return (nvs_commit(s_nvs) == ESP_OK) ? NULL : "NV write failed";
@@ -263,7 +298,7 @@ const char *nvResetImport(const char *name)
 	memcpy(s_save, s_val, sizeof(s_save));
 	for (int i = 0; i < NV_COUNT; i++) {
 		if (!(s_keys[i].flags & NV_RO)) {
-			strcpy(s_val[i], s_keys[i].def);
+			nvDefault(i, s_val[i]);
 		}
 	}
 	s_dry = true;
@@ -316,6 +351,56 @@ static const char *nvChkBlePwr(const char *in, int min, int max, char *out)
 		}
 	}
 	sprintf(out, "%d", best);
+	return NULL;
+}
+
+/* Header pins a button may use: 0, 2..11, 43, 44 (a UART line: not 0). */
+static bool nvPinOk(int g)
+{
+	return g == 0 || (g >= 2 && g <= 11) || g == 43 || g == 44;
+}
+
+static const char *nvChkPin(const char *in, int min, int max, char *out)
+{
+	int g;
+	if (!cmdParseInt(in, 0, 48, &g) || !nvPinOk(g) || g == 0) {	/* 0 = BOOT = button 1 */
+		return "must be a header GPIO: 2..11, 43, 44";
+	}
+	snprintf(out, NV_VAL_MAX, "%d", g);
+	return NULL;
+}
+
+/* "0 g2 .. gN": min..max GPIOs, the first 0 (BOOT = button 1), no repeats. */
+static const char *nvChkBtnGpio(const char *in, int min, int max, char *out)
+{
+	int         g[16], n = 0, len = 0;
+	const char *p = in;
+	for (;;) {
+		while (*p == ' ') {
+			p++;
+		}
+		if (!*p) {
+			break;
+		}
+		char *end;
+		long v = strtol(p, &end, 10);
+		if (end == p || (*end && *end != ' ') || n >= max || !nvPinOk((int)v)) {
+			return "must be 1..10 header GPIOs (0, 2..11, 43, 44), the first 0";
+		}
+		for (int i = 0; i < n; i++) {
+			if (g[i] == v) {
+				return "has a GPIO twice";
+			}
+		}
+		g[n++] = (int)v;
+		p = end;
+	}
+	if (n < min || g[0] != 0) {
+		return "must be 1..10 header GPIOs (0, 2..11, 43, 44), the first 0";
+	}
+	for (int i = 0; i < n; i++) {
+		len += snprintf(out + len, NV_VAL_MAX - len, "%s%d", i ? " " : "", g[i]);
+	}
 	return NULL;
 }
 
@@ -470,6 +555,22 @@ static const char *nvChkTenth(const char *in, int min, int max, char *out)
 
 /* ================= Internals ================= */
 
+/* Default of key i: the table's, or per board (NV_GEN): wifi.ssid / ble.name
+ * "CS_wave_" + the last 3 octets of the Wi-Fi AP / BT MAC (lower-case hex),
+ * wifi.pwd "ChangeMe_" + a new random 1000..9999. */
+static void nvDefault(int i, char *out)
+{
+	if (!(s_keys[i].flags & NV_GEN)) {
+		strcpy(out, s_keys[i].def);
+	} else if (strcmp(s_keys[i].key, "wifi.pwd") == 0) {
+		snprintf(out, NV_VAL_MAX, "ChangeMe_%u", (unsigned)(1000 + esp_random() % 9000));
+	} else {
+		uint8_t mac[6] = { 0 };
+		esp_read_mac(mac, strcmp(s_keys[i].key, "ble.name") == 0 ? ESP_MAC_BT : ESP_MAC_WIFI_SOFTAP);
+		snprintf(out, NV_VAL_MAX, "CS_wave_%02x-%02x-%02x", mac[3], mac[4], mac[5]);
+	}
+}
+
 static int nvFind(const char *key)
 {
 	for (int i = 0; i < NV_COUNT; i++) {
@@ -482,6 +583,35 @@ static int nvFind(const char *key)
 
 /* Checks across keys: wifi.ip must be a host address in its wifi.cidr network. */
 static const char *nvCross(char (*vals)[NV_VAL_MAX])
+{
+	const char *e = nvCrossIp(vals);
+	return e ? e : nvCrossPins(vals);
+}
+
+/* uart.tx != uart.rx, and neither in btn.gpio. */
+static const char *nvCrossPins(char (*vals)[NV_VAL_MAX])
+{
+	int tx = atoi(vals[nvFind("uart.tx")]), rx = atoi(vals[nvFind("uart.rx")]);
+	if (tx == rx) {
+		return "uart.tx and uart.rx must differ";
+	}
+	const char *p = vals[nvFind("btn.gpio")];
+	while (*p) {
+		char *end;
+		long g = strtol(p, &end, 10);
+		if (end == p) {
+			break;
+		}
+		if (g == tx || g == rx) {
+			snprintf(s_err, sizeof(s_err), "GPIO%ld is in btn.gpio and is a UART pin", g);
+			return s_err;
+		}
+		p = end;
+	}
+	return NULL;
+}
+
+static const char *nvCrossIp(char (*vals)[NV_VAL_MAX])
 {
 	uint32_t ip;
 	int      bits = atoi(vals[nvFind("wifi.cidr")] + 1);
@@ -657,13 +787,16 @@ static const char *nvCmd(int argc, char *argv[], cmdReply_t reply)
 	const char *sub = argv[0];
 	char        text[NV_VAL_MAX + 24];
 
-	if (strcasecmp(sub, "SET") == 0 && (argc == 3 || argc == 5)) {
-		char joined[NV_VAL_MAX];
-		if (argc == 5) {				/* r g b */
-			snprintf(joined, sizeof(joined), "%.15s %.15s %.15s", argv[2], argv[3], argv[4]);
-		} else {
-			nvUnescape(argv[2]);
-			snprintf(joined, sizeof(joined), "%s", argv[2]);
+	if (strcasecmp(sub, "SET") == 0 && argc >= 3) {
+		char joined[NV_VAL_MAX];			/* several words (r g b, btn.gpio): one value */
+		int  len = 0;
+		for (int a = 2; a < argc; a++) {
+			nvUnescape(argv[a]);
+			int w = snprintf(joined + len, sizeof(joined) - len, "%s%s", a > 2 ? " " : "", argv[a]);
+			if (w < 0 || w >= (int)sizeof(joined) - len) {
+				return "value too long";
+			}
+			len += w;
 		}
 		int i = nvFind(argv[1]);
 		if (i >= 0 && (s_keys[i].flags & NV_RO)) {
@@ -698,7 +831,7 @@ static const char *nvCmd(int argc, char *argv[], cmdReply_t reply)
 			if ((s_keys[i].flags & NV_RO)) {
 				return "read-only key";
 			}
-			const char *k[] = { s_keys[i].key }, *v[] = { s_keys[i].def };
+			const char *k[] = { s_keys[i].key }, *v[] = { "*" };
 			return nvSetMany(1, k, v, NULL);
 		}
 		return nvResetAll();

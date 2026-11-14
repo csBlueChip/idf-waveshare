@@ -3,13 +3,18 @@
 #include "esp_err.h"
 
 /*
- * Buttons 1..10: tact switches (to GND, pull-up) or capacitive touch pads.
+ * Buttons 1..n (n <= 10): tact switches (to GND, pull-up) or capacitive touch
+ * pads. Button n -> GPIO from NV btn.gpio at boot (one GPIO per button, in
+ * order; the first is always 0 = BOOT). Default:
  *
  *   button  1  2  3  4  5  6  7  8  9  10
  *   GPIO    0  2  4  5  6  7  8  9  10 11      (button 1 = BOOT, tact only)
  *
+ * Allowed GPIOs: 0, 2..11, 43, 44 (not the UART pins, NV uart.tx / uart.rx).
+ * TOUCH only on GPIO1..14 (43 / 44: TACT only). BTN n beyond the list: ERR.
+ *
  * Commands registered by btnInit():
- *   BTN                               list buttons and global timings
+ *   BTN                               list buttons (n GPn ...) and global timings
  *   BTN n short long double [TACT|TOUCH]
  *                                     enable button n with these gestures (0|1);
  *                                     copies the global timings. BTN n 0 0 0 = off

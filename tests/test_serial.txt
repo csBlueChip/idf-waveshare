@@ -18,12 +18,12 @@ Setup
 A. NV SETTINGS
 --------------
 
-A1  > NV GET ser.baud
-    = ser.baud=115200
+A1  > NV GET uart.baud
+    = uart.baud=115200
 A2  > NV GET ser.echo
     = ser.echo=1
-A3  > NV SET ser.baud 12345
-    = ERR ser.baud must be 9600|19200|38400|57600|115200|230400|460800|921600
+A3  > NV SET uart.baud 12345
+    = ERR uart.baud must be 9600|19200|38400|57600|115200|230400|460800|921600
 A4  > NV SET ser.echo 2
     = ERR ser.echo must be 0..1
 A5  > NV SET sys.ui XYZ
@@ -44,7 +44,7 @@ C. USB UI
 
 C1  > UI USB
     = OK on the control console; the client drops; glass: fade to black,
-      Wait screen "UI  : USB"
+      Wait screen "UI  : USB - Serial"
 C2  * watch terminal B (UART) while switching
     = log lines continue on B; nothing new on A until you type
 C3  * terminal A: type   INFO   then Enter
@@ -74,8 +74,8 @@ C13 * terminal A: type   +++   wait 1 s (debug on), then
     > NV SET ser.echo 0
     = OK
 C14 > UI UART
-    = BAUD:115200, PINS:TX43 RX44, OK on A; glass Wait "UI  : UART",
-      "Baud: 115200", "Pins: TX43 RX44". A is now the log port (logs
+    = BAUD:115200, PINS:Tx:43 Rx:44, OK on A; glass Wait "UI  : UART",
+      "Baud: 115200 @8N1", "Pins: Tx:43 Rx:44". A is now the log port (logs
       keep coming there); debug ended with the UI switch
 
 
@@ -104,7 +104,7 @@ D8  > IMU REC 3001
 E. BAUD RATE
 ------------
 
-E1  > NV SET ser.baud 921600
+E1  > NV SET uart.baud 921600
     = OK
 E2  * terminal B:   UI USB
     * terminal A:   UI UART
@@ -118,7 +118,7 @@ E4a * terminal B:   IMU REC 3000
 E5  > UI USB   (from B)
     * terminal B back to 115200
     = log lines on B readable again (UART back at 115200 when not the UI)
-E6  > NV SET ser.baud 115200   (from A)
+E6  > NV SET uart.baud 115200   (from A)
     = OK
 
 

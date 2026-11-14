@@ -12,9 +12,13 @@
 #include "driver/usb_serial_jtag.h"
 #include "driver/usb_serial_jtag_vfs.h"
 
+#include "nv.h"
+
 static const char *TAG = "ser";
 
 #define SER_UART_NUM		UART_NUM_0
+#define SER_ROM_TX_GPIO		43	/* UART0 pins the chip boots with */
+#define SER_ROM_RX_GPIO		44
 #define SER_UART_RX_BUF		1024
 #define SER_UART_TX_BUF		4096
 #define SER_USB_RX_BUF		512
@@ -27,6 +31,7 @@ static const char *TAG = "ser";
 
 static SemaphoreHandle_t s_lock[SER_COUNT];	/* recursive: a log line from inside a write */
 static serRx_t           s_rx;
+static int               s_txPin, s_rxPin;	/* NV uart.tx / uart.rx at boot */
 
 static void serTask(void *arg);
 static bool serPut(serPort_t port, const char *data, size_t len);
@@ -43,9 +48,17 @@ esp_err_t serInit(serRx_t rx)
 
 	ESP_RETURN_ON_ERROR(uart_driver_install(SER_UART_NUM, SER_UART_RX_BUF, SER_UART_TX_BUF, 0, NULL, 0),
 	                    TAG, "uart");
-	ESP_RETURN_ON_ERROR(uart_set_pin(SER_UART_NUM, SER_UART_TX_GPIO, SER_UART_RX_GPIO,
+	s_txPin = nvGetInt("uart.tx");
+	s_rxPin = nvGetInt("uart.rx");
+	if (s_txPin != SER_ROM_TX_GPIO) {
+		gpio_reset_pin(SER_ROM_TX_GPIO);		/* moved: free the ROM console pins */
+	}
+	if (s_rxPin != SER_ROM_RX_GPIO) {
+		gpio_reset_pin(SER_ROM_RX_GPIO);
+	}
+	ESP_RETURN_ON_ERROR(uart_set_pin(SER_UART_NUM, s_txPin, s_rxPin,
 	                                 UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE), TAG, "uart pins");
-	gpio_pullup_en(SER_UART_RX_GPIO);			/* idle high when nothing is plugged in */
+	gpio_pullup_en(s_rxPin);				/* idle high when nothing is plugged in */
 	uart_vfs_dev_use_driver(SER_UART_NUM);			/* console through the driver */
 
 	usb_serial_jtag_driver_config_t usb = {
@@ -58,6 +71,12 @@ esp_err_t serInit(serRx_t rx)
 	ESP_RETURN_ON_FALSE(xTaskCreate(serTask, "ser", SER_TASK_STACK, NULL, SER_TASK_PRIO, NULL) == pdPASS,
 	                    ESP_ERR_NO_MEM, TAG, "task");
 	return ESP_OK;
+}
+
+void serUartPins(int *tx, int *rx)
+{
+	*tx = s_txPin;
+	*rx = s_rxPin;
 }
 
 void serWrite(serPort_t port, const char *data, size_t len, bool crlf)

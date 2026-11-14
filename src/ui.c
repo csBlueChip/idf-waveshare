@@ -463,7 +463,7 @@ static esp_err_t uiStart(uiIf_t ifc)
 		}
 		break;
 	case UI_UART:
-		err = serSetBaud(nvGetInt("ser.baud"));
+		err = serSetBaud(nvGetInt("uart.baud"));
 		break;
 	case UI_RESET:
 		s_rstMode = RESET_NV;				/* each visit starts at NVRAM */
@@ -721,9 +721,12 @@ static void uiWaitDetails(char *out, size_t n)
 	case UI_BLE:
 		snprintf(out, n, "UI:BLE|Name:%s", nvGet("ble.name"));
 		break;
-	case UI_UART:
-		snprintf(out, n, "UI:UART|Baud:%s|Pins:TX%d RX%d", nvGet("ser.baud"), SER_UART_TX_GPIO, SER_UART_RX_GPIO);
+	case UI_UART: {
+		int tx, rx;
+		serUartPins(&tx, &rx);
+		snprintf(out, n, "UI:UART|Baud:%s|Pins:Tx:%d Rx:%d", nvGet("uart.baud"), tx, rx);
 		break;
+	}
 	default:
 		snprintf(out, n, "UI:%s", uiName(s_active));
 		break;
@@ -1025,8 +1028,9 @@ static const char *uiCmd(int argc, char *argv[], cmdReply_t reply)
 		reply(text);
 	} else if (target == UI_UART) {
 		char text[48];
-		snprintf(text, sizeof(text), "BAUD:%s\nPINS:TX%d RX%d\n", nvGet("ser.baud"),
-		         SER_UART_TX_GPIO, SER_UART_RX_GPIO);
+		int  tx, rx;
+		serUartPins(&tx, &rx);
+		snprintf(text, sizeof(text), "BAUD:%s\nPINS:Tx:%d Rx:%d\n", nvGet("uart.baud"), tx, rx);
 		reply(text);
 	}
 

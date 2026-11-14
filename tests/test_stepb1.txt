@@ -261,8 +261,8 @@ I4  > NV SET wifi.pwd abcd|efgh
     = ERR wifi.pwd must be 8..63 chars, no spaces, ':' or '|'
 I5  > NV SET ble.name my:dev
     = ERR ble.name must be 1..29 chars, no spaces, ':' or '|'
-I6  > NV SET ble.name ESP32-S3-Demo
-    = OK
+I6  > NV SET ble.name *
+    = OK (NV GET ble.name: CS_wave_xx-yy-zz, BT MAC)
 
 
 J. WEB HEARTBEAT

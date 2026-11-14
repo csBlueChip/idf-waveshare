@@ -13,7 +13,8 @@ Interfaces (one active at a time, boot choice in NV sys.ui):
   TELNET   Wi-Fi AP, telnet port NV telnet.port (23)
   WEB      Wi-Fi AP, web console at http://<wifi.ip>/ (port NV web.port,
            80; captive portal unless NV web.captive 0)
-  UART     UART0 on the header (TX GPIO43, RX GPIO44), 8N1, NV ser.baud
+  UART     UART0 on the header (NV uart.tx / uart.rx, default TX GPIO43,
+           RX GPIO44), 8N1, NV uart.baud
   USB      USB-C port (the chip's USB-Serial/JTAG)
 
 At start-up the LED flashes for 100 ms: sys.aron colour if sys.autorun is 1,
@@ -250,9 +251,10 @@ IMU (QMI8658A; see section 8)
     <<IMU SIGMO>> <<IMU ORIENT 0..3>> <<IMU ORIENT FLAT>>
     <<IMU WAKE>>
 
-Buttons (n = 1..10 on GPIO 0 2 4 5 6 7 8 9 10 11; 1 = BOOT, tact only)
+Buttons (n = 1..count of NV btn.gpio, default 10 on GPIO 0 2 4 5 6 7 8 9
+10 11; 1 = BOOT, tact only; TOUCH only on GPIO1..14)
 
-  BTN                           list buttons and global timings
+  BTN                           list buttons (n GPn ...) and global timings
   BTN n s l d                   enable tact button n: short/long/double 0|1
   BTN n s l d TACT|TOUCH        same, choose switch or touch pad
   BTN n 0 0 0                   disable button n
@@ -277,9 +279,11 @@ Settings (stored in flash, used at the next boot)
   NV GET key                    show one setting
                                 (NV is privileged: GET shows secrets such
                                 as wifi.pwd in clear)
-  NV SET key value              check and store
+  NV SET key value              check and store; value * = the key's
+                                default (also in .nvram files)
   NV SET key r g b              same, for colour keys (disk.*, sys.aron,
                                 sys.aroff)
+  NV SET btn.gpio 0 2 4 ...     same, for the button GPIO list
   NV RESET                      all settings to defaults (except sys.bootcnt)
   NV RESET key                  one setting to default
   NV EXPORT name                write /sys/name.nvram (wifi.pwd is written
@@ -392,21 +396,33 @@ Scripts (SD:/scripts/name.s; language: SCRIPTING.txt, section 9 here)
 
   key          default         range / meaning
   -----------  --------------  ------------------------------------------
-  wifi.ssid    wavedemo        Wi-Fi SSID, 1..32 chars, no spaces, ':', '|'
-  wifi.pwd     waveP@55word    Wi-Fi password, 8..63 chars, no spaces, ':', '|'
+  wifi.ssid    CS_wave_xx-yy-zz  Wi-Fi SSID, 1..32 chars, no spaces, ':', '|';
+                               default: last 3 octets of the Wi-Fi AP MAC
+                               (lower-case hex, as INFO "MAC: Wi-Fi")
+  wifi.pwd     ChangeMe_nnnn   Wi-Fi password, 8..63 chars, no spaces, ':', '|';
+                               default: nnnn random 1000..9999, made and
+                               stored each time the default is set (first
+                               boot, NV RESET, RESET!, reset.nvram, "*")
   wifi.ip      192.168.4.1     AP address, must be a host in wifi.cidr
   wifi.cidr    /24             AP netmask /8../30
   wifi.pwr     8.5             Wi-Fi TX power 2..20 dBm (0.25 steps; not BLE)
   wifi.gw      1               1 = DHCP offers a gateway (phones then open
                                the captive portal); 0 = none (engineering)
   wifi.maxconn 1               Wi-Fi clients at a time 1..4
-  ble.name     ESP32-S3-Demo   BLE device name, 1..29 chars, no spaces, ':', '|'
+  ble.name     CS_wave_xx-yy-zz  BLE device name, 1..29 chars, no spaces, ':', '|';
+                               default: last 3 octets of the BT MAC (INFO
+                               "BT"; usually one more than the SSID's)
   ble.pwr      9               BLE TX power -24..20 dBm, rounded to a step:
                                -24 -21 -18 .. 15 18 20 (not Wi-Fi)
   sys.ui       BLE             interface at boot: BLE|TELNET|WEB|UART|USB|MSC
                                (RESET! cannot be a boot choice)
-  ser.baud     115200          UART UI speed: 9600|19200|38400|57600|115200|
+  uart.baud    115200          UART UI speed: 9600|19200|38400|57600|115200|
                                230400|460800|921600 (read when UART UI starts)
+  uart.tx      43              UART TX GPIO (next boot): 2..11, 43, 44 (not
+                               0: BOOT, always button 1);
+                               not in btn.gpio, not uart.rx. The chip's own
+                               start-up messages always use GPIO43
+  uart.rx      44              UART RX GPIO (next boot), same rules
   ser.echo     1               1 = serial UIs echo what you type
   web.name     (empty)         web page title, 0..32 chars, no spaces;
                                empty: "wavedemo". SD:/sys/uiname.txt (first
@@ -424,6 +440,11 @@ Scripts (SD:/scripts/name.s; language: SCRIPTING.txt, section 9 here)
   btn.dbl    300             global double-click window 50..5000 ms
   btn.rpt    0               global repeat 0..5000 ms
   btn.touch  0.015           touch threshold ratio 0.001..0.5
+  btn.gpio   0 2 4 5 6 7 8 9 10 11
+                             button n -> GPIO (next boot): 1..10 GPIOs from
+                             0, 2..11, 43, 44, the first 0 (BOOT); no
+                             repeats, no UART pin. GP3 is allowed (a
+                             strapping pin: don't hold it at reset)
   web.hist   50              web console history entries 10..500
   disk.read  0 255 0         LED colour for USB disk reads (r g b)
   disk.write 255 0 0         LED colour for USB disk writes (r g b)
@@ -539,9 +560,9 @@ Create /images/ and /www/ yourself (missing = none).
     WiFi: Waiting... | Link Active
 
     UART                      USB
-    UI  : UART                UI  : USB
-    Baud: <ser.baud>
-    Pins: TX43 RX44
+    UI  : UART                UI  : USB - Serial
+    Baud: <uart.baud> @8N1
+    Pins: Tx:43 Rx:44
 
     MSC
     UI  : MSC - Flash Drive
@@ -601,6 +622,10 @@ Create /images/ and /www/ yourself (missing = none).
     taller than the window, so it (and the "^" list) can scroll even
     when empty. While the "^" list is open the page is kept at least 1 px
     off the top, so Android doesn't take a downward swipe as pull-to-refresh.
+  - Replies start at the bottom of the reply area, just above the input
+    line; older lines move up and the page scrolls once it is full.
+  - The input text is 16 px (smaller makes iOS zoom the page in when the
+    input gets the focus); the page never scrolls sideways.
   - Sent commands are echoed as "$ cmd".
   - Enter sends; Up/Down recall history; "^" (left of the input) lists
     history - tap a command to put it in the input.
@@ -631,7 +656,7 @@ Create /images/ and /www/ yourself (missing = none).
 7. SERIAL CONSOLE (UART / USB) AND LOGS
 ---------------------------------------
 
-  Terminal: 8N1 at ser.baud (UART) or any speed (USB). Replies end in CR LF.
+  Terminal: 8N1 at uart.baud (UART) or any speed (USB). Replies end in CR LF.
   Input lines end on CR, LF or CR LF. Typed characters are echoed when
   ser.echo is 1 (turn the terminal's local echo off, or ser.echo 0);
   Backspace / DEL erases. Control and non-ASCII characters are ignored.

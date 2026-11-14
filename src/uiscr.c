@@ -227,14 +227,17 @@ static void uiUartOnStart(void)
 {
 	char text[24];
 	uiScrLine(0, "UI  : ", "UART", UISCR_LINK_INK);
-	uiScrLine(1, "Baud: ", nvGet("ser.baud"), UISCR_INK);
-	snprintf(text, sizeof(text), "TX%d RX%d", SER_UART_TX_GPIO, SER_UART_RX_GPIO);
+	snprintf(text, sizeof(text), "%s @8N1", nvGet("uart.baud"));
+	uiScrLine(1, "Baud: ", text, UISCR_INK);
+	int tx, rx;
+	serUartPins(&tx, &rx);
+	snprintf(text, sizeof(text), "Tx:%d Rx:%d", tx, rx);
 	uiScrLine(2, "Pins: ", text, UISCR_INK);
 }
 
 static void uiUsbOnStart(void)
 {
-	uiScrLine(0, "UI  : ", "USB", UISCR_LINK_INK);
+	uiScrLine(0, "UI  : ", "USB - Serial", UISCR_LINK_INK);
 }
 
 static void uiMscOnStart(void)

@@ -632,7 +632,7 @@ implementation:
       INPUT "name? " $name 30000
 
   Event list (after the renames in section 14)
-    BTN n SHORT | DOUBLE | DOWN | UP | REPEAT        n = 1..10
+    BTN n SHORT | DOUBLE | DOWN | UP | REPEAT        n = 1..10 (NV btn.gpio)
     IMU TAP | 2TAP | 3TAP | MOTION | STILL | SIGMO
     IMU STEP n          (never sent while IMU STEP is not implemented)
     IMU ORIENT 0..3 | ORIENT FLAT
@@ -712,8 +712,8 @@ implementation:
                 fields always split correctly)
                   UI:WEB:80|SSID:xxx|Pwd:secret|IP:1.2.3.4|Mask:/24|Link:Waiting
                   UI:TELNET:23|SSID:...|Pwd:...|IP:...|Mask:...|Link:Active
-                  UI:BLE|Name:ESP32-S3-Demo
-                  UI:UART|Baud:115200|Pins:TX43 RX44
+                  UI:BLE|Name:CS_wave_3c-84-1e
+                  UI:UART|Baud:115200|Pins:Tx:43 Rx:44
                   UI:USB
     onConnect: UI:name   (e.g. UI:WEB)
   While onConnect runs the new client's commands get ERR script running;

@@ -125,6 +125,9 @@ NV SET nope 1                          # ERR unknown key nope
 NV SET web.hist 5                      # ERR web.hist must be 10..500
 NV SET wifi.ssid labnet
 NV SET wifi.pwd secret123
+NV SET wifi.pwd *                      # new ChangeMe_nnnn
+NV GET wifi.pwd
+NV GET wifi.ssid                       # CS_wave_xx-yy-zz (INFO MAC: Wi-Fi)
 NV SET ble.pwr 10                      # stored as 9
 NV GET ble.pwr
 NV SET ble.pwr 25                      # ERR ble.pwr must be -24..20 dBm (steps of 3, top step 20)
@@ -133,6 +136,14 @@ NV SET web.port 0                      # ERR web.port must be 1..65535
 NV SET telnet.port 2323
 NV SET web.captive 2                   # ERR web.captive must be 0..1
 NV SET sys.ui RESET!                   # ERR sys.ui must be BLE|TELNET|WEB|UART|USB|MSC
+NV SET uart.tx 12                      # ERR uart.tx must be a header GPIO: 2..11, 43, 44
+NV SET uart.rx 0                       # ERR uart.rx must be a header GPIO: 2..11, 43, 44
+NV SET uart.tx 44                      # ERR uart.tx and uart.rx must differ
+NV SET uart.tx 5                       # ERR GPIO5 is in btn.gpio and is a UART pin
+NV SET btn.gpio 2 4                    # ERR btn.gpio must be 1..10 header GPIOs (...), the first 0
+NV SET btn.gpio 0 4 4                  # ERR btn.gpio has a GPIO twice
+NV SET btn.gpio 0 2 3 4                # 4 buttons (GP3 allowed, not in the default)
+NV GET btn.gpio
 NV SET wifi.ip 192.168.4.255           # ERR wifi.ip is not a host address for wifi.cidr
 NV GET wifi.ssid
 NV RESET scr.bl
@@ -205,6 +216,7 @@ BTN 3 0 1 0 TOUCH                      # GP4 touch pad (hands off while it calib
 BTN 3 SET rpt 100                      # ...REPEAT every 100 ms while held
 BTN CAL                                # BTN 3 CAL <benchmark>
 BTN 1 1 0 0 TOUCH                      # ERR button 1 is TACT only
+BTN 11 1 0 0                           # ERR button must be 1..10
 BTN 2 1 2 0                            # ERR short long double must be 0|1
 BTN                                    # shows the settings above
 # now press the buttons: <<BTN n ...>> messages arrive between replies

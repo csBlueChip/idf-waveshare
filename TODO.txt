@@ -53,8 +53,23 @@ To do
      settings, bad -> reset.bad); timestamps YYYYMMDD-HHMMSS after a
      browser connects (SCR SHOT, INFO, $.time); SD manager ".." needs a
      double-click.
+ 19. Board test - per-board defaults: erase NV (esptool erase_region
+     0x9000 0x10000): wifi.ssid CS_wave_<AP MAC>, ble.name CS_wave_<BT MAC>
+     (lower case, match INFO), wifi.pwd ChangeMe_nnnn kept across reboots;
+     NV RESET / NV RESET wifi.pwd / NV SET wifi.pwd * give a new number;
+     NV IMPORT default ("*" lines); Wait screen and UI WEB show them.
+
+ 21. Board test - pins: NV SET btn.gpio 0 2 6 7 first, then NV SET
+     uart.tx 4 and uart.rx 5, reboot: UART console on GP4/5
+     (Wait screen, UI UART reply, onWait show Tx:4 Rx:5); boot messages
+     still on 43; buttons 1..4 only (BTN 5 = ERR); a button on 43/44
+     (TACT works, TOUCH = ERR); clash rules (selftest); uart.baud rename.
 
 On hold
+ 20. iPhone test - web console in the captive-portal window: page not too
+     wide, no zoom-in when the input gets the focus or after the "^"
+     history list; first reply lines at the bottom, above the input.
+     (No iPhone at hand; Chromium iPhone 13 emulation looked right.)
  10. Further RAM saving (now 97 KB free on Wi-Fi): stack trims, Wi-Fi /
      lwIP / FreeRTOS code to flash, fewer Wi-Fi RX buffers, BLE release.
      Details in NOTES.txt ("RAM measured").

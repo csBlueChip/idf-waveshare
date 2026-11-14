@@ -11,22 +11,27 @@
  * to flash at once (no commit step).
  *
  *   key          default          rule
- *   wifi.ssid    wavedemo         1..32 chars, no spaces, ':' or '|'
- *   wifi.pwd     waveP@55word     8..63 chars, no spaces, ':' or '|' (secret)
+ *   wifi.ssid    CS_wave_xx-yy-zz 1..32 chars, no spaces, ':' or '|' (xx-yy-zz:
+ *                                 last 3 octets of the Wi-Fi AP MAC, lower case)
+ *   wifi.pwd     ChangeMe_nnnn    8..63 chars, no spaces, ':' or '|' (secret;
+ *                                 nnnn random 1000..9999, made and stored
+ *                                 whenever the default is set)
  *   wifi.ip      192.168.4.1      a.b.c.d, host address valid for wifi.cidr
  *   wifi.cidr    /24              /8../30
  *   wifi.pwr     8.5              2..20 dBm, rounded to 0.25 (Wi-Fi only)
  *   wifi.gw      1                1 = DHCP offers a gateway (phones open the
  *                                 captive portal); 0 = none (engineering)
  *   wifi.maxconn 1                1..4 Wi-Fi clients at a time
- *   ble.name     ESP32-S3-Demo    1..29 chars, no spaces, ':' or '|'
+ *   ble.name     CS_wave_xx-yy-zz 1..29 chars, no spaces, ':' or '|' (BT MAC)
  *   ble.pwr      9                -24..20 dBm, rounded to a step:
  *                                 -24 -21 .. 15 18 20 (BLE only)
  *   sys.ui       BLE              BLE|TELNET|WEB|UART|USB|MSC (MSC: hold BOOT
  *                                 on its Wait screen for USB disk mode;
  *                                 RESET! is not a boot choice)
- *   ser.baud     115200           9600|19200|38400|57600|115200|230400|460800|921600
+ *   uart.baud    115200           9600|19200|38400|57600|115200|230400|460800|921600
  *                                 (UART UI speed; read when the UART UI starts)
+ *   uart.tx      43               UART TX GPIO: 2..11, 43, 44 (next boot; not 0 = BOOT)
+ *   uart.rx      44               UART RX GPIO, same set; tx != rx, neither in btn.gpio
  *   ser.echo     1                1 = serial UIs echo typed characters
  *   web.name     (empty)          web page title, 0..32 chars, no spaces (empty:
  *                                 the default "wavedemo"; SD:/sys/uiname.txt wins)
@@ -42,6 +47,8 @@
  *   btn.dbl    300              50..5000 ms   (double-click window)
  *   btn.rpt    0                0..5000 ms    (repeat)
  *   btn.touch  0.015            0.001..0.5    (touch threshold ratio)
+ *   btn.gpio   0 2 4 5 6 7 8 9 10 11  button n -> GPIO (next boot): 1..10 of
+ *                               0, 2..11, 43, 44; first 0 (BOOT); no repeats
  *   web.hist   50               10..500       (web page command history entries)
  *   disk.read  0 255 0          r g b 0..255  (LED during USB disk reads)
  *   disk.write 255 0 0          r g b 0..255  (LED during USB disk writes)
@@ -71,8 +78,11 @@
  *                                             kept by NV RESET)
  *
  * Commands registered by nvInit():
- *   NV SET key value      check and store
+ *   NV SET key value      check and store; "*" = the key's default (also in
+ *                         .nvram files: default.nvram uses it for the
+ *                         per-board keys; wifi.pwd gets a new number)
  *   NV SET key r g b      same, for colour keys (disk.*, sys.aron, sys.aroff)
+ *   NV SET btn.gpio 0 2 4 ..   same, the GPIO list (several words = one value)
  *   NV GET [key]          show one or all (key=value); secrets (wifi.pwd) are
  *                         shown in clear - NV is a privileged command
  *   NV RESET [key]        back to default (all if no key; sys.bootcnt is kept)

@@ -106,7 +106,7 @@ conversation context. Keep it current, like the README.
   NV renames (pre-production, no migration; old .nvram files now ERR):
     rad.ssid/pwd/ip/mask/pwr/maxcli -> wifi.ssid/pwd/ip/cidr/pwr/maxconn;
     rad.nogw -> wifi.gw (inverted, default 1); rad.ble -> ble.name;
-    ui.baud/echo -> ser.baud/echo; ui.name -> web.name. New: web.port 80,
+    ui.baud/echo -> ser.baud/echo (ser.baud later uart.baud); ui.name -> web.name. New: web.port 80,
     telnet.port 23, web.captive 1, ble.pwr 9 (BLE steps -24..18, 20 -
     IDF v6.1 top level is +20). RAD command removed (rad.c/h deleted).
     ELIF condition errors now report the ELIF's line (runLoop ONE_ERR uses
@@ -120,6 +120,25 @@ conversation context. Keep it current, like the README.
     YYYYMMDD-HHMMSS when time() >= 2020 (set by POST /time), else
     b<boot>_<uptime>. fm.html: ".." double-click. MODE line shows only the
     selected mode; a failed backup never stops a reset (screen or boot).
+  Per-board defaults (nv.c NV_GEN, nvDefault): wifi.ssid / ble.name
+    CS_wave_ + last 3 octets of the AP / BT MAC (lower case: 8 vs B);
+    wifi.pwd ChangeMe_ + esp_random 1000..9999, stored whenever set to
+    default (nvInit when missing, nvResetAll, NV RESET key, "*"). Value "*"
+    = default in NV SET and .nvram files; default.nvram uses it.
+  BLE flaky on Android (connects, no MTU / subscribe, phone ends 0x213 after
+    ~8 s): skipping bleSetPower() at ble.pwr 9 did not fix it (undone) -
+    not the power code. Next: nRF Connect, NimBLE debug log.
+    Found: the phone's / Windows' Bluetooth settings menu pairs and drops
+    (no profile it knows); clients must connect from an app (Serial
+    Bluetooth Terminal works). Forget stale pairings on phone / PC.
+  Console page (index.html): input 16 px (iOS auto-zoom), overflow-x
+    hidden, replies in #log at the bottom of #out (flex-end). iPhone test
+    on hold (TODO 20).
+  Pins in NV: uart.tx / uart.rx (43 / 44) and btn.gpio "0 2 4 .. 11" (1..10
+    GPIOs, first 0, from 0, 2..11, 43, 44; GP3 allowed, not default); read
+    at boot (ser.c serUartPins, btn.c s_gpio/s_count). nvCrossPins: tx != rx,
+    neither in btn.gpio, neither 0 (bad stored set -> defaults at boot). ser.baud ->
+    uart.baud. NV SET joins several words (NV_CMD_ARGS 12); NV_FILE_PAIRS 64.
 
 
 5. SCRIPTING - IMPLEMENTATION PLAN (agreed)

@@ -16,7 +16,7 @@
  *   TELNET   Wi-Fi access point (wifi_ap) + telnet on NV telnet.port (telnet)
  *   WEB      Wi-Fi access point + web console on NV web.port; captive portal
  *            (DNS + DHCP URI) unless NV web.captive 0 (web)
- *   UART     UART0 on the header (TX GPIO43, RX GPIO44), 8N1, NV ser.baud
+ *   UART     UART0 on the header (TX GPIO43, RX GPIO44), 8N1, NV uart.baud
  *   USB      the chip's USB-Serial/JTAG port (USB-C)
  *
  * Serial UIs (UART, USB): replies end in "\r\n"; input lines end on CR, LF

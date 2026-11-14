@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
+#include <stdlib.h>
 #include "esp_check.h"
 #include "esp_log.h"
 #include "esp_timer.h"
@@ -28,10 +29,14 @@ static const char *TAG = "btn";
 
 #define BTN_TOUCH_INIT_SCANS	3
 
-/* Button n -> GPIO. Button 1 must always be the BOOT pin (GPIO0): the Wait
- * screen and IMU SLEEP read BOOT directly, scripts use BTN 1 for it, and it is
- * TACT only (GPIO0 is a strapping pin, not a touch channel). Do not move it. */
-static const gpio_num_t s_gpio[BTN_COUNT + 1] = { -1, 0, 2, 4, 5, 6, 7, 8, 9, 10, 11 };
+/* Button n -> GPIO, from NV btn.gpio at boot. Button 1 is always the BOOT pin
+ * (GPIO0; NV enforces it): the Wait screen and IMU SLEEP read BOOT directly,
+ * scripts use BTN 1 for it, and it is TACT only (not a touch channel). */
+static gpio_num_t s_gpio[BTN_COUNT + 1];	/* DRAM: read from the touch ISR */
+static int        s_count;			/* buttons 1..s_count exist */
+
+#define BTN_TOUCH_MIN_GPIO	1		/* touch channels: GPIO1..14 */
+#define BTN_TOUCH_MAX_GPIO	14
 
 typedef enum { BTN_OFF = 0, BTN_TACT, BTN_TOUCH } btnType_t;
 
@@ -94,6 +99,21 @@ esp_err_t btnInit(void)
 	};
 	s_touchRatio = nvGetFloat("btn.touch");
 
+	const char *p = nvGet("btn.gpio");		/* "0 g2 .. gN", checked by NV */
+	s_gpio[0] = GPIO_NUM_NC;
+	while (*p && s_count < BTN_COUNT) {
+		char *end;
+		long  g = strtol(p, &end, 10);
+		if (end == p) {
+			break;
+		}
+		s_gpio[++s_count] = (gpio_num_t)g;
+		p = end;
+	}
+	if (s_count == 0) {
+		s_gpio[s_count = 1] = GPIO_NUM_0;
+	}
+
 	s_queue = xQueueCreate(BTN_QUEUE_DEPTH, sizeof(btnEvent_t));
 	s_lock  = xSemaphoreCreateMutex();
 	if (!s_queue || !s_lock) {
@@ -120,7 +140,7 @@ static void IRAM_ATTR btnIsr(void *arg)
 
 static bool btnTouchEvent(int chanId, int8_t active)
 {
-	for (int n = 2; n <= BTN_COUNT; n++) {		/* touch channel id == GPIO number */
+	for (int n = 2; n <= s_count; n++) {		/* touch channel id == GPIO number */
 		if (s_gpio[n] == chanId) {
 			btnEvent_t ev = { .n = n, .raw = active };
 			BaseType_t woken = pdFALSE;
@@ -209,7 +229,7 @@ static void btnTask(void *arg)
 		int64_t now  = btnNowMs();
 		int64_t next = INT64_MAX;
 		xSemaphoreTake(s_lock, portMAX_DELAY);
-		for (int n = 1; n <= BTN_COUNT; n++) {
+		for (int n = 1; n <= s_count; n++) {
 			btn_t *b = &s_btn[n];
 			if (b->type == BTN_OFF) {
 				continue;
@@ -239,7 +259,7 @@ static void btnTask(void *arg)
 		xSemaphoreTake(s_lock, portMAX_DELAY);
 		now = btnNowMs();
 
-		if (got && ev.n >= 1 && ev.n <= BTN_COUNT && s_btn[ev.n].type != BTN_OFF) {
+		if (got && ev.n >= 1 && ev.n <= s_count && s_btn[ev.n].type != BTN_OFF) {
 			btn_t *b    = &s_btn[ev.n];
 			b->raw      = ev.raw;
 			b->bounceAt = now + b->t.b;
@@ -248,7 +268,7 @@ static void btnTask(void *arg)
 			}
 		}
 
-		for (int n = 1; n <= BTN_COUNT; n++) {
+		for (int n = 1; n <= s_count; n++) {
 			btn_t *b = &s_btn[n];
 			if (b->type == BTN_OFF) {
 				continue;
@@ -311,7 +331,7 @@ static esp_err_t btnTouchStop(void)
 static esp_err_t btnTouchStart(cmdReply_t reply)
 {
 	bool any = false;
-	for (int n = 2; n <= BTN_COUNT; n++) {
+	for (int n = 2; n <= s_count; n++) {
 		any |= (s_btn[n].type == BTN_TOUCH);
 	}
 	if (!s_touch || !any) {
@@ -324,7 +344,7 @@ static esp_err_t btnTouchStart(cmdReply_t reply)
 	}
 	ESP_RETURN_ON_ERROR(touch_sensor_disable(s_touch), TAG, "disable");
 
-	for (int n = 2; n <= BTN_COUNT; n++) {
+	for (int n = 2; n <= s_count; n++) {
 		btn_t *b = &s_btn[n];
 		if (b->type != BTN_TOUCH) {
 			continue;
@@ -477,7 +497,7 @@ static void btnList(cmdReply_t reply)
 	snprintf(line, sizeof(line), "global deb=%d long=%d dbl=%d rpt=%d\n",
 	         s_global.b, s_global.l, s_global.d, s_global.r);
 	reply(line);
-	for (int n = 1; n <= BTN_COUNT; n++) {
+	for (int n = 1; n <= s_count; n++) {
 		const btn_t *b = &s_btn[n];
 		if (b->type == BTN_OFF) {
 			snprintf(line, sizeof(line), "%d GP%d off\n", n, s_gpio[n]);
@@ -505,8 +525,10 @@ static const char *btnCmd(int argc, char *argv[], cmdReply_t reply)
 		}
 	} else if (strcasecmp(argv[0], "SET") == 0 && argc == 3) {
 		err = btnSetTiming(&s_global, argv[1], argv[2]);
-	} else if (!cmdParseInt(argv[0], 1, BTN_COUNT, &n)) {
-		err = "button must be 1..10";
+	} else if (!cmdParseInt(argv[0], 1, s_count, &n)) {
+		static char msg[32];
+		snprintf(msg, sizeof(msg), "button must be 1..%d", s_count);
+		err = msg;
 	} else if (argc == 4 && strcasecmp(argv[1], "SET") == 0) {
 		err = (s_btn[n].type == BTN_OFF) ? "button not enabled" : btnSetTiming(&s_btn[n].t, argv[2], argv[3]);
 	} else if (argc < 4) {
@@ -523,8 +545,9 @@ static const char *btnCmd(int argc, char *argv[], cmdReply_t reply)
 				err = "type must be TACT|TOUCH";
 			}
 		}
-		if (!err && type == BTN_TOUCH && n == 1) {
-			err = "button 1 is TACT only";
+		if (!err && type == BTN_TOUCH &&
+		    (s_gpio[n] < BTN_TOUCH_MIN_GPIO || s_gpio[n] > BTN_TOUCH_MAX_GPIO)) {
+			err = (n == 1) ? "button 1 is TACT only" : "no touch channel on this GPIO: TACT only";
 		}
 		if (!err) {
 			if (!s && !l && !d) {

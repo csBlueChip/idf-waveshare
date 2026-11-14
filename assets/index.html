@@ -7,14 +7,18 @@
 <style>
 	/* The page itself scrolls (not an inner box): Android's sign-in window only
 	 * lets you scroll up if the page can scroll; its pull-to-refresh takes the rest. */
-	html, body { margin: 0; background: #111; color: #ddd; }
+	html, body { margin: 0; background: #111; color: #ddd; overflow-x: hidden; }	/* never wider than the screen */
 	body { font: 14px/1.35 ui-monospace, Menlo, Consolas, "DejaVu Sans Mono", monospace; }
-	#out { margin: 0; padding: 8px; white-space: pre-wrap; word-break: break-all; }
+	/* #out is at least one window tall (fitBar); the text (#log) sits at its
+	 * bottom, so the first line appears just above the input bar */
+	#out { margin: 0; padding: 8px; display: flex; flex-direction: column; justify-content: flex-end; }
+	#log { white-space: pre-wrap; word-break: break-all; }
 	#out .cmd { color: #8cf; }
 	#out .sys { color: #f96; }
 	#bar { position: fixed; left: 0; right: 0; bottom: 0; display: flex; gap: 6px; padding: 6px;
 	       border-top: 1px solid #333; background: #1a1a1a; }
-	#in { flex: 1; min-width: 0; padding: 8px; font: inherit; color: #eee; background: #000;
+	/* 16 px: iOS zooms the page in when a smaller input gets the focus */
+	#in { flex: 1; min-width: 0; padding: 8px; font: inherit; font-size: 16px; color: #eee; background: #000;
 	      border: 1px solid #444; border-radius: 4px; }
 	#send { padding: 8px 16px; font: inherit; color: #000; background: #8cf; border: 0; border-radius: 4px; }
 	#send:disabled { background: #555; }
@@ -28,7 +32,7 @@
 </style>
 </head>
 <body>
-<pre id="out"></pre>
+<div id="out"><div id="log"></div></div>
 <div id="hlist"></div>
 <div id="bar">
 	<button id="hbtn" title="history">^</button>
@@ -39,6 +43,7 @@
 <script>
 (function () {
 	var out = document.getElementById("out");
+	var log = document.getElementById("log");
 	var inp = document.getElementById("in");
 	var btn = document.getElementById("send");
 	var hbtn = document.getElementById("hbtn");
@@ -58,7 +63,7 @@
 		var span = document.createElement("span");
 		if (cls) span.className = cls;
 		span.textContent = text;
-		out.appendChild(span);
+		log.appendChild(span);
 		if (atEnd) window.scrollTo(0, pageEnd());	/* follow new output only if already at the end */
 	}
 	/* keep the last line clear of the fixed input bar (it changes height with the keyboard etc.) */
