@@ -49,7 +49,7 @@ esp_err_t ledInit(void)
 		return err;
 	}
 
-	return cmdRegister("LED", 3, 3, ledCmd, "LED r g b  set LED colour (0..255)");
+	return cmdRegister("LED", 1, 1, ledCmd, "LED colour  set LED colour (r,g,b or RRGGBB)");
 }
 
 esp_err_t ledSetRgb(uint8_t r, uint8_t g, uint8_t b)
@@ -102,11 +102,11 @@ static esp_err_t ledShow(void)
 
 static const char *ledCmd(int argc, char *argv[], cmdReply_t reply)
 {
-	uint8_t r, g, b;
-	if (!cmdParseU8(argv[0], &r) || !cmdParseU8(argv[1], &g) || !cmdParseU8(argv[2], &b)) {
-		return "values must be 0..255";
+	uint8_t c[3];
+	if (!cmdParseColour(argv[0], c)) {
+		return CMD_COLOUR_ERR;
 	}
-	if (ledSetRgb(r, g, b) != ESP_OK) {
+	if (ledSetRgb(c[0], c[1], c[2]) != ESP_OK) {
 		return "LED write failed";
 	}
 	return NULL;

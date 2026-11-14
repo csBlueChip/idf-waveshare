@@ -23,9 +23,9 @@ FBOX ${x}mm $.w
 INSERT inc.s
 PRINT inserted: $$fromInc
 QUIET 1
-CLS 0 0 0
+CLS 0,0,0
 QUIET 0
-CLS 1 1 1
+CLS 1,1,1
 TRACE 1
 LET $y = 1 ; LET $z = 2
 TRACE 0

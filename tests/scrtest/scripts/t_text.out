@@ -20,8 +20,8 @@ CMD: LED 1 255 255 255 10
 CMD: NV SET a 42
 CMD: FBOX 42mm 172
 > inserted: yes
-CMD: CLS 0 0 0
-CMD: CLS 1 1 1
+CMD: CLS 0,0,0
+CMD: CLS 1,1,1
 > OK
 DEBUG: t_text:30 LET $y = 1 ; LET $z = 2
 DEBUG: t_text:31 TRACE 0

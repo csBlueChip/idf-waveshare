@@ -36,13 +36,13 @@ B. STOP / PAUSE / CONT
 ----------------------
 
 B1  > RUN count 20
-B2  > LED 0 255 0      (while it runs)
+B2  > LED 0,255,0      (while it runs)
     = ERR script running
 B3  > PAUSE
     = OK; counting stops; <<SCRIPT count PAUSED count:8>> (or :6)
 B4  > VARS
     = $arg = "20"  $i = ...  $n = "20", OK
-B5  > LED 0 255 0      (while paused: commands work)
+B5  > LED 0,255,0      (while paused: commands work)
     = OK, LED green
 B6  > CONT
     = OK, counting goes on
@@ -50,7 +50,7 @@ B7  > STOP
     = OK, <<SCRIPT count STOPPED>>
 B8  > STOP
     = ERR no script running
-B9  > LED 0 0 0
+B9  > LED 0,0,0
 
 
 C. DEBUGGER

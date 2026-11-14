@@ -50,8 +50,8 @@
  *   btn.gpio   0 2 4 5 6 7 8 9 10 11  button n -> GPIO (next boot): 1..10 of
  *                               0, 2..11, 43, 44; first 0 (BOOT); no repeats
  *   web.hist   50               10..500       (web page command history entries)
- *   disk.read  0 255 0          r g b 0..255  (LED during USB disk reads)
- *   disk.write 255 0 0          r g b 0..255  (LED during USB disk writes)
+ *   disk.read  0,255,0          colour: r,g,b or RRGGBB  (LED during USB disk reads)
+ *   disk.write 255,0,0          colour        (LED during USB disk writes)
  *   imu.arange 4                2|4|8|16 g            (IMU ACC; applied now)
  *   imu.arate  224              28|56|112|224|448|896 Hz
  *   imu.grange 512              16|32|..|2048 dps     (IMU GYR; applied now)
@@ -70,8 +70,8 @@
  *                                             (default when the script has no .FILES)
  *   sys.autorun 0               0|1           run system scripts (onBoot ...);
  *                                             not used yet (scripting)
- *   sys.aron   0 255 0          r g b 0..255  (LED flash at start-up, autorun 1)
- *   sys.aroff  255 0 0          r g b 0..255  (same, autorun 0; 0 0 0 = no flash)
+ *   sys.aron   0,255,0          colour        (LED flash at start-up, autorun 1)
+ *   sys.aroff  255,0,0          colour        (same, autorun 0; black = no flash)
  *   sys.bootcnt 0               0..65535      firmware-owned boot counter: read-only
  *                                             (no NV SET / RESET key; exported;
  *                                             IMPORT ignores it with a warning;
@@ -81,7 +81,6 @@
  *   NV SET key value      check and store; "*" = the key's default (also in
  *                         .nvram files: default.nvram uses it for the
  *                         per-board keys; wifi.pwd gets a new number)
- *   NV SET key r g b      same, for colour keys (disk.*, sys.aron, sys.aroff)
  *   NV SET btn.gpio 0 2 4 ..   same, the GPIO list (several words = one value)
  *   NV GET [key]          show one or all (key=value); secrets (wifi.pwd) are
  *                         shown in clear - NV is a privileged command

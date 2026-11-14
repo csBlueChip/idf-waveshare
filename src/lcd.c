@@ -197,7 +197,7 @@ esp_err_t lcdInit(void)
 	ESP_RETURN_ON_ERROR(esp_lcd_panel_disp_on_off(s_panel, true), TAG, "display on");
 	ESP_RETURN_ON_ERROR(lcdBacklight(nvGetInt("scr.bl")), TAG, "backlight");
 
-	ESP_RETURN_ON_ERROR(cmdRegister("CLS", 3, 3, lcdCmdCls, "CLS r g b  clear screen (0..255)"), TAG, "cmd");
+	ESP_RETURN_ON_ERROR(cmdRegister("CLS", 1, 1, lcdCmdCls, "CLS colour  clear screen (r,g,b or RRGGBB)"), TAG, "cmd");
 	ESP_RETURN_ON_ERROR(cmdRegister("ROT", 1, 1, lcdCmdRot, "ROT n  drawing rotation (n mod 4)"), TAG, "cmd");
 	ESP_RETURN_ON_ERROR(cmdRegister("BL", 1, 1, lcdCmdBl, "BL pct  backlight (0..100)"), TAG, "cmd");
 	ESP_RETURN_ON_ERROR(cmdRegister("SCR", 1, 4, lcdCmdScr, "SCR AUTO 0|1 | UPD | SHOT [name] [-f] | TR|TRP [name args|CUT|NONE] | FLIP [P|L|PL|NONE]"), TAG, "cmd");
@@ -795,13 +795,13 @@ static esp_err_t lcdShowScreen(cmdReply_t reply)
 
 static const char *lcdCmdCls(int argc, char *argv[], cmdReply_t reply)
 {
-	uint8_t r, g, b;
-	if (!cmdParseU8(argv[0], &r) || !cmdParseU8(argv[1], &g) || !cmdParseU8(argv[2], &b)) {
-		return "values must be 0..255";
+	uint8_t c[3];
+	if (!cmdParseColour(argv[0], c)) {
+		return CMD_COLOUR_ERR;
 	}
-	s_bgR = r;
-	s_bgG = g;
-	s_bgB = b;
+	s_bgR = c[0];
+	s_bgG = c[1];
+	s_bgB = c[2];
 	return (lcdShowScreen(reply) == ESP_OK) ? NULL : "LCD write failed";
 }
 

@@ -90,8 +90,8 @@ static const nvKey_t s_keys[] = {
 	{ "btn.touch",        "0.015",         nvChkRatio, 0,   0,     0 },
 	{ "btn.gpio",         "0 2 4 5 6 7 8 9 10 11", nvChkBtnGpio, 1, 10, 0 },
 	{ "web.hist",         "50",            nvChkInt,   10,  500,   0 },
-	{ "disk.read",        "0 255 0",       nvChkRgb,   0,   255,   0 },
-	{ "disk.write",       "255 0 0",       nvChkRgb,   0,   255,   0 },
+	{ "disk.read",        "0,255,0",       nvChkRgb,   0,   255,   0 },
+	{ "disk.write",       "255,0,0",       nvChkRgb,   0,   255,   0 },
 	{ "imu.arange",       "4",             nvChkDbl,   2,   16,    0 },
 	{ "imu.arate",        "224",           nvChkDbl,   28,  896,   0 },
 	{ "imu.grange",       "512",           nvChkDbl,   16,  2048,  0 },
@@ -107,8 +107,8 @@ static const nvKey_t s_keys[] = {
 	{ "imu.orient.flat",  "30",            nvChkInt,   5,   80,    0 },
 	{ "run.files",        "4",             nvChkInt,   1,   16,    0 },
 	{ "sys.autorun",      "0",             nvChkInt,   0,   1,     0 },
-	{ "sys.aron",         "0 255 0",       nvChkRgb,   0,   255,   0 },
-	{ "sys.aroff",        "255 0 0",       nvChkRgb,   0,   255,   0 },
+	{ "sys.aron",         "0,255,0",       nvChkRgb,   0,   255,   0 },
+	{ "sys.aroff",        "255,0,0",       nvChkRgb,   0,   255,   0 },
 	{ "sys.bootcnt",      "0",             nvChkInt,   0,   65535, NV_RO },
 };
 
@@ -174,7 +174,7 @@ esp_err_t nvInit(void)
 	}
 
 	return cmdRegister("NV", 1, NV_CMD_ARGS, nvCmd,
-	                   "NV SET key value|r g b|g1 g2 .. | GET [key] | RESET [key] | EXPORT name | IMPORT name");
+	                   "NV SET key value|g1 g2 .. | GET [key] | RESET [key] | EXPORT name | IMPORT name");
 }
 
 const char *nvGet(const char *key)
@@ -490,18 +490,14 @@ static const char *nvChkRatio(const char *in, int min, int max, char *out)
 	return NULL;
 }
 
-/* "r g b", each 0..255, separated by spaces/tabs. */
+/* A colour: r,g,b or RRGGBB (cmdParseColour); stored as typed. */
 static const char *nvChkRgb(const char *in, int min, int max, char *out)
 {
-	int  v[3];
-	char tok[3][8];
-	char extra;
-	if (sscanf(in, " %7s %7s %7s %c", tok[0], tok[1], tok[2], &extra) != 3 ||
-	    !cmdParseInt(tok[0], min, max, &v[0]) || !cmdParseInt(tok[1], min, max, &v[1]) ||
-	    !cmdParseInt(tok[2], min, max, &v[2])) {
-		return "must be r g b (0..255)";
+	uint8_t c[3];
+	if (!cmdParseColour(in, c)) {
+		return "must be r,g,b or RRGGBB";
 	}
-	snprintf(out, NV_VAL_MAX, "%d %d %d", v[0], v[1], v[2]);
+	snprintf(out, NV_VAL_MAX, "%s", in);		/* kept as typed */
 	return NULL;
 }
 
@@ -788,7 +784,7 @@ static const char *nvCmd(int argc, char *argv[], cmdReply_t reply)
 	char        text[NV_VAL_MAX + 24];
 
 	if (strcasecmp(sub, "SET") == 0 && argc >= 3) {
-		char joined[NV_VAL_MAX];			/* several words (r g b, btn.gpio): one value */
+		char joined[NV_VAL_MAX];			/* several words (btn.gpio): one value */
 		int  len = 0;
 		for (int a = 2; a < argc; a++) {
 			nvUnescape(argv[a]);
@@ -842,5 +838,5 @@ static const char *nvCmd(int argc, char *argv[], cmdReply_t reply)
 	if (strcasecmp(sub, "IMPORT") == 0 && argc == 2) {
 		return nvImport(argv[1], reply);
 	}
-	return "usage: NV SET key value|r g b | GET [key] | RESET [key] | EXPORT name | IMPORT name";
+	return "usage: NV SET key value|g1 g2 .. | GET [key] | RESET [key] | EXPORT name | IMPORT name";
 }

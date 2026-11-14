@@ -122,11 +122,16 @@ Interface
 
 LED
 
-  LED r g b                     RGB LED colour, 0..255 each
+  LED colour                    RGB LED colour
+
+  Colours are one word: r,g,b (three decimals 0..255, e.g. 255,128,127)
+  or RRGGBB (six hex digits, either case, e.g. FF807F; a 6-digit word is
+  always hex). Used by LED, CLS, the drawing commands, TINK, TCLS and the
+  NV colour keys. Anything else: "ERR colour must be r,g,b or RRGGBB".
 
 Screen
 
-  CLS r g b                     clear to colour, reply W/H
+  CLS colour                    clear to colour, reply W/H
   ROT n                         drawing rotation n mod 4 (0/2 portrait,
                                 1/3 landscape); screen unchanged; replies W/H
   BL pct                        backlight 0..100
@@ -161,14 +166,14 @@ Screen
 
 Graphics (current rotation, clipped to screen, colours 0..255)
 
-  PLOT x y r g b                pixel
-  LINE x1 y1 x2 y2 r g b        line
-  BOX x y w h r g b             rectangle outline
-  FBOX x y w h r g b            filled rectangle
-  TRI x1 y1 x2 y2 x3 y3 r g b   triangle outline
-  FTRI x1 y1 x2 y2 x3 y3 r g b  filled triangle
-  CIRC cx cy rad r g b          circle outline
-  FCIRC cx cy rad r g b         filled circle
+  PLOT x y colour               pixel
+  LINE x1 y1 x2 y2 colour       line
+  BOX x y w h colour            rectangle outline
+  FBOX x y w h colour           filled rectangle
+  TRI x1 y1 x2 y2 x3 y3 colour  triangle outline
+  FTRI x1 y1 x2 y2 x3 y3 colour filled triangle
+  CIRC cx cy rad colour         circle outline
+  FCIRC cx cy rad colour        filled circle
 
 Text boxes (n = 1..9; a box keeps the rotation it was created in)
 
@@ -181,8 +186,8 @@ Text boxes (n = 1..9; a box keeps the rotation it was created in)
   TYX n y x                     move cursor (pixels from box top-left)
   ECHO n text                   print at cursor (text rules: section 1;
                                 \1..\9 = font, this ECHO only)
-  TINK n r g b                  text colour
-  TCLS n r g b                  set background, clear box, cursor 0,0
+  TINK n colour                 text colour
+  TCLS n colour                 set background, clear box, cursor 0,0
   FONT                          list fonts: n name height fw|prop
 
 Images (PNG in /images on the SD card)
@@ -281,8 +286,6 @@ Settings (stored in flash, used at the next boot)
                                 as wifi.pwd in clear)
   NV SET key value              check and store; value * = the key's
                                 default (also in .nvram files)
-  NV SET key r g b              same, for colour keys (disk.*, sys.aron,
-                                sys.aroff)
   NV SET btn.gpio 0 2 4 ...     same, for the button GPIO list
   NV RESET                      all settings to defaults (except sys.bootcnt)
   NV RESET key                  one setting to default
@@ -446,8 +449,9 @@ Scripts (SD:/scripts/name.s; language: SCRIPTING.txt, section 9 here)
                              repeats, no UART pin. GP3 is allowed (a
                              strapping pin: don't hold it at reset)
   web.hist   50              web console history entries 10..500
-  disk.read  0 255 0         LED colour for USB disk reads (r g b)
-  disk.write 255 0 0         LED colour for USB disk writes (r g b)
+  disk.read  0,255,0         LED colour for USB disk reads
+  disk.write 255,0,0         LED colour for USB disk writes
+                             (colour keys: r,g,b or RRGGBB, kept as typed)
   imu.arange 4               accel range 2|4|8|16 g
   imu.arate  224             accel rate 28|56|112|224|448|896 Hz
   imu.grange 512             gyro range 16|32|64|128|256|512|1024|2048 dps
@@ -466,8 +470,8 @@ Scripts (SD:/scripts/name.s; language: SCRIPTING.txt, section 9 here)
                              (when the script has no .FILES n)
   sys.autorun 0              1 = run the system scripts (onBoot ...);
                              not used yet (scripting to come)
-  sys.aron   0 255 0         LED flash (100 ms) at start-up when autorun 1
-  sys.aroff  255 0 0         same when autorun 0 (0 0 0 = no flash)
+  sys.aron   0,255,0         LED flash (100 ms) at start-up when autorun 1
+  sys.aroff  255,0,0         same when autorun 0 (black = no flash)
   sys.bootcnt 0              boot counter (read-only: no NV SET / RESET key;
                              exported; NV IMPORT ignores it with a warning;
                              kept by NV RESET)
@@ -745,7 +749,7 @@ Create /images/ and /www/ yourself (missing = none).
                 connecting turns ORIENT off (each client starts clean).
   SLEEP         The IMU goes to wake-on-motion (accel only, 21 Hz).
                 SCR: backlight and LED off; commands still work (IMU
-                     commands reply ERR IMU asleep; LED r g b is stored
+                     commands reply ERR IMU asleep; LED colour is stored
                      and shown at wake).
                 RAD: as SCR, and the radio off (client dropped; it reconnects
                      after the wake, so <<IMU WAKE>> is not seen).

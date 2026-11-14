@@ -99,7 +99,7 @@ void uiScrFm(const char *url)
 
 void uiScrBoot(void)
 {
-	/* SCR AUTO 1 ; SCR TR CUT ; CLS 0 0 0 ; BL scr.bl ; boot square (instant) */
+	/* SCR AUTO 1 ; SCR TR CUT ; CLS 0,0,0 ; BL scr.bl ; boot square (instant) */
 	lcdSetAutoUpdate(true);
 	lcdCls(0, 0, 0);
 	lcdBacklight(nvGetInt("scr.bl"));
@@ -109,7 +109,7 @@ void uiScrBoot(void)
 
 void uiScrDisconnect(uiIf_t ifc)
 {
-	/* SCR AUTO 1 ; SCR TR FADE 200 ; CLS 0 0 0 ; then Wait */
+	/* SCR AUTO 1 ; SCR TR FADE 200 ; CLS 0,0,0 ; then Wait */
 	s_shown = false;
 	lcdSetAutoUpdate(true);
 	lcdCls(0, 0, 0);
@@ -120,7 +120,7 @@ void uiScrDisconnect(uiIf_t ifc)
 void uiScrConnect(void)
 {
 	/* IMU ORIENT NONE (view flip off) ; SCR AUTO 0 ; ROT 0 ; SCR TR FADE 200 ;
-	 * CLS 0 0 0 ; SCR UPD ; IMG splash ; SCR TR FADE 800 ; SCR UPD ; SCR AUTO 1 */
+	 * CLS 0,0,0 ; SCR UPD ; IMG splash ; SCR TR FADE 800 ; SCR UPD ; SCR AUTO 1 */
 	s_shown = false;
 	imuOrientSet(IMU_OR_OFF, false);
 	lcdSetAutoUpdate(false);

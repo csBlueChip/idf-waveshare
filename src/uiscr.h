@@ -7,10 +7,10 @@
  * Connection screens on the LCD (call from the main task only).
  *
  * Sequences (fades are a firmware one-off; SCR TR/TRP are never touched):
- *   boot        SCR AUTO 1 ; CLS 0 0 0 ; BL scr.bl ; boot square ; wait
+ *   boot        SCR AUTO 1 ; CLS 0,0,0 ; BL scr.bl ; boot square ; wait
  *   wait        ROT 1|3 (even ROT + 1) ; SCR AUTO 0 ; details ; fade in 500 ms
- *   connect     SCR AUTO 0 ; ROT 0 ; CLS 0 0 0 ; fade 1000 ; splash ; fade 1000 ; SCR AUTO 1
- *   disconnect  SCR AUTO 1 ; CLS 0 0 0 ; fade 1000 ; wait   (also on a UI switch)
+ *   connect     SCR AUTO 0 ; ROT 0 ; CLS 0,0,0 ; fade 1000 ; splash ; fade 1000 ; SCR AUTO 1
+ *   disconnect  SCR AUTO 1 ; CLS 0,0,0 ; fade 1000 ; wait   (also on a UI switch)
  *
  * Details screen ("onStart"), font 1, ink 220 110 20 on black, 10 px side margins;
  * the interface (after "UI  : ") in white:

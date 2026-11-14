@@ -3,7 +3,7 @@ ON BTN onBtn
 ON IMU onImu
 BTN 1 1 0 1
 IMU TAP 1 1 0
-CLS 0 0 0
+CLS 0,0,0
 PRINT "demo: BOOT short = hexagon, BOOT double = end, tap the board"
 LET $$run = 1
 LOOP WHILE $$run
@@ -23,7 +23,7 @@ END
 FN onImu
   SWITCH $arg[1]
   TAP)   PRINT "tap - ax=$.ax"
-  2TAP)  CLS 0 0 0
+  2TAP)  CLS 0,0,0
   *)     DEBUG ignored $arg
   END
 END

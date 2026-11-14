@@ -221,6 +221,47 @@ bool cmdParseU8(const char *str, uint8_t *out)
 	return true;
 }
 
+bool cmdParseColour(const char *str, uint8_t rgb[3])
+{
+	if (!str) {
+		return false;
+	}
+	if (!strchr(str, ',')) {				/* RRGGBB */
+		if (strlen(str) != 6) {
+			return false;
+		}
+		for (int i = 0; i < 3; i++) {
+			unsigned v = 0;
+			for (int k = 0; k < 2; k++) {
+				char c = str[i * 2 + k];
+				int  d = (c >= '0' && c <= '9') ? c - '0' : (c >= 'a' && c <= 'f') ? c - 'a' + 10 :
+				         (c >= 'A' && c <= 'F') ? c - 'A' + 10 : -1;
+				if (d < 0) {
+					return false;
+				}
+				v = v * 16 + (unsigned)d;
+			}
+			rgb[i] = (uint8_t)v;
+		}
+		return true;
+	}
+	char        part[4];
+	const char *p = str;
+	for (int i = 0; i < 3; i++) {				/* r,g,b */
+		const char *e = (i < 2) ? strchr(p, ',') : p + strlen(p);
+		if (!e || e - p < 1 || e - p > 3) {
+			return false;
+		}
+		memcpy(part, p, e - p);
+		part[e - p] = '\0';
+		if (!cmdParseU8(part, &rgb[i])) {
+			return false;
+		}
+		p = e + 1;
+	}
+	return true;
+}
+
 bool cmdParseInt(const char *str, int min, int max, int *out)
 {
 	if (!str) {

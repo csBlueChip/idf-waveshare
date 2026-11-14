@@ -28,7 +28,7 @@ typedef const char *(*cmdHandler_t)(int argc, char *argv[], cmdReply_t reply);
 /* Clear registry and register built-in commands (HELP). */
 esp_err_t cmdInit(void);
 
-/* Register a command. help = usage line shown by HELP, e.g. "LED r g b  set LED colour". */
+/* Register a command. help = usage line shown by HELP, e.g. "LED colour  set LED colour". */
 esp_err_t cmdRegister(const char *name, int minArgs, int maxArgs,
                       cmdHandler_t handler, const char *help);
 
@@ -65,6 +65,11 @@ void cmdExecute(const char *line, cmdReply_t reply);
 
 /* Strict 0..255 decimal parse. Rejects empty, sign, non-digits, overflow. */
 bool cmdParseU8(const char *str, uint8_t *out);
+
+/* A colour as one word: "r,g,b" (three 0..255 decimals) or "RRGGBB" (exactly
+ * six hex digits, either case; a 6-digit word is always hex). */
+bool cmdParseColour(const char *str, uint8_t rgb[3]);
+#define CMD_COLOUR_ERR	"colour must be r,g,b or RRGGBB"
 
 /* Strict signed decimal parse within min..max. Optional leading '-'. */
 bool cmdParseInt(const char *str, int min, int max, int *out);

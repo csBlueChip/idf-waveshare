@@ -126,9 +126,9 @@ implementation:
   - Blank lines and comment-only lines are ignored.
   - Keywords and command names are case-insensitive.
   - Any line that is not a script statement is a console command
-    (CLS 0 0 0, IMU TAP 1 0 0, ...). Before it runs, every $variable in
+    (CLS 0,0,0, IMU TAP 1 0 0, ...). Before it runs, every $variable in
     it is replaced by its value; "\$" is a literal '$'.
-      FBOX $x $y 10 10 255 0 0
+      FBOX $x $y 10 10 255,0,0
   - Order: a line is split into statements at ';' and its comment is
     removed FIRST, then variables are substituted (one pass) - a ';', '#'
     or '$' inside a variable's value is never re-read.
@@ -544,8 +544,10 @@ implementation:
                      statement; elsewhere they are a load error.
 
   .CONST NAME value...   a named constant (top of the script, like .STACK)
-                     .CONST WHITE 0xFF 0xFF 0xFF
-                     LED WHITE              -> LED 255 255 255
+                     .CONST WHITE FFFFFF
+                     LED WHITE              -> LED FFFFFF
+                     .CONST CENTRE 86 160
+                     FCIRC CENTRE 20 WHITE  -> FCIRC 86 160 20 FFFFFF
                      IF $n > MAXN ...
     - In a command line, an argument word equal to a constant name is
       replaced by its value; numbers in the value are written in decimal
@@ -739,7 +741,7 @@ implementation:
   shows the password.
 
   Start-up LED: 100 ms flash in NV sys.aron (autorun 1, default green) or
-  sys.aroff (autorun 0, default red); 0 0 0 = no flash.
+  sys.aroff (autorun 0, default red); black (0,0,0) = no flash.
 
   onWait cannot start until onBoot has exited.
 
@@ -834,7 +836,7 @@ implementation:
       LET $a = 360 * $i / $n
       LET $x2 = ROUND($cx + $r * COS($a))
       LET $y2 = ROUND($cy + $r * SIN($a))
-      LINE $x1 $y1 $x2 $y2 255 255 255
+      LINE $x1 $y1 $x2 $y2 255,255,255
       LET $x1 = $x2 ; LET $y1 = $y2
     END
   END
@@ -860,7 +862,7 @@ implementation:
   FN onImu
     SWITCH $arg[1]
     TAP)   PRINT "tap - ax=$.ax"
-    2TAP)  CLS 0 0 0
+    2TAP)  CLS 0,0,0
     *)     DEBUG ignored $arg
     END
   END

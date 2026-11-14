@@ -341,12 +341,10 @@ esp_err_t __wrap_sdmmc_write_sectors(sdmmc_card_t *card, const void *src, size_t
 	return err;
 }
 
-/* NV "r g b" -> rgb[3] (the value is already checked by NV). */
+/* NV colour (r,g,b or RRGGBB, already checked by NV) -> rgb[3]. */
 static void usbDiskLoadColour(const char *key, uint8_t rgb[3])
 {
-	int r = 0, g = 0, b = 0;
-	sscanf(nvGet(key), "%d %d %d", &r, &g, &b);
-	rgb[0] = r;
-	rgb[1] = g;
-	rgb[2] = b;
+	if (!cmdParseColour(nvGet(key), rgb)) {
+		rgb[0] = rgb[1] = rgb[2] = 0;
+	}
 }

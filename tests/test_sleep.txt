@@ -15,7 +15,7 @@ A. PREPARATION
 
 A1  > IMU WOM 100
     = OK
-A2  > LED 0 255 0
+A2  > LED 0,255,0
     = OK, LED green
 A3  > BL 60
     = OK, backlight 60 %
@@ -50,7 +50,7 @@ B3  > IMU
     = ERR IMU asleep
 B4  > ACC
     = ERR IMU asleep
-B5  > LED 0 0 255
+B5  > LED 0,0,255
     = OK; LED stays dark (colour stored)
 B6  * lift / move the board
     = <<IMU WAKE>> (a <<IMU MOTION>> may follow); backlight back at
@@ -197,5 +197,5 @@ CLEAN UP
 --------
 
 > IMU MOTION 0
-> LED 0 0 0
+> LED 0,0,0
 > BL 100

@@ -77,8 +77,8 @@ esp_err_t textInit(void)
 	ESP_RETURN_ON_ERROR(cmdRegister("TSCRL", 2, 2, textCmdScrl, "TSCRL n 0|1  auto-scroll"), TAG, "cmd");
 	ESP_RETURN_ON_ERROR(cmdRegister("TYX", 3, 3, textCmdYx, "TYX n y x  move cursor (pixels)"), TAG, "cmd");
 	ESP_RETURN_ON_ERROR(cmdRegisterRaw("ECHO", textCmdEcho, "ECHO n text  {\\n, \\\\, \\#, \\$, \\1..9=font}"), TAG, "cmd");
-	ESP_RETURN_ON_ERROR(cmdRegister("TINK", 4, 4, textCmdInk, "TINK n r g b  text colour"), TAG, "cmd");
-	ESP_RETURN_ON_ERROR(cmdRegister("TCLS", 4, 4, textCmdCls, "TCLS n r g b  clear box"), TAG, "cmd");
+	ESP_RETURN_ON_ERROR(cmdRegister("TINK", 2, 2, textCmdInk, "TINK n colour  text colour (r,g,b or RRGGBB)"), TAG, "cmd");
+	ESP_RETURN_ON_ERROR(cmdRegister("TCLS", 2, 2, textCmdCls, "TCLS n colour  clear box"), TAG, "cmd");
 	return ESP_OK;
 }
 
@@ -233,11 +233,11 @@ static esp_err_t textPrint(textBox_t *b, const textChar_t *chars, int n)
 
 static bool textParseRgb(char *argv[], uint16_t *colour)
 {
-	uint8_t r, g, b;
-	if (!cmdParseU8(argv[0], &r) || !cmdParseU8(argv[1], &g) || !cmdParseU8(argv[2], &b)) {
+	uint8_t c[3];
+	if (!cmdParseColour(argv[0], c)) {
 		return false;
 	}
-	*colour = lcdRgb(r, g, b);
+	*colour = lcdRgb(c[0], c[1], c[2]);
 	return true;
 }
 
@@ -403,7 +403,7 @@ static const char *textCmdInk(int argc, char *argv[], cmdReply_t reply)
 		return TEXT_BOX_ERR;
 	}
 	if (!textParseRgb(&argv[1], &c)) {
-		return "colour must be 0..255";
+		return CMD_COLOUR_ERR;
 	}
 	textBox_t *b = textGet(n);
 	if (!b) {
@@ -422,7 +422,7 @@ static const char *textCmdCls(int argc, char *argv[], cmdReply_t reply)
 		return TEXT_BOX_ERR;
 	}
 	if (!textParseRgb(&argv[1], &c)) {
-		return "colour must be 0..255";
+		return CMD_COLOUR_ERR;
 	}
 	textBox_t *b = textGet(n);
 	if (!b) {

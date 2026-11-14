@@ -8,12 +8,13 @@
  * Colours are RGB565 (lcdRgb()). Anything off-screen is clipped.
  *
  * Commands registered by gfxInit():
- *   PLOT  x y r g b
- *   LINE  x1 y1 x2 y2 r g b
- *   BOX   x y w h r g b        FBOX  x y w h r g b
- *   TRI   x1 y1 x2 y2 x3 y3 r g b
- *   FTRI  x1 y1 x2 y2 x3 y3 r g b
- *   CIRC  cx cy rad r g b      FCIRC cx cy rad r g b
+ *   PLOT  x y colour
+ *   LINE  x1 y1 x2 y2 colour
+ *   BOX   x y w h colour       FBOX  x y w h colour
+ *   TRI   x1 y1 x2 y2 x3 y3 colour
+ *   FTRI  x1 y1 x2 y2 x3 y3 colour
+ *   CIRC  cx cy rad colour     FCIRC cx cy rad colour
+ * colour = r,g,b or RRGGBB (cmdParseColour)
  */
 
 #define GFX_COORD_MAX	1000	/* coordinates -1000..1000 */

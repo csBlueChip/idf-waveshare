@@ -24,7 +24,7 @@ END
 FN onImu
   SWITCH $arg[1]
   TAP)   PRINT "tap - ax=$.ax"
-  2TAP)  CLS 0 0 0
+  2TAP)  CLS 0,0,0
   *)     DEBUG ignored $arg
   END
 END

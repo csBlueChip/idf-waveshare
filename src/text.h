@@ -22,8 +22,8 @@
  *   ECHO n text       print at the cursor; spaces kept. Text rules: see textUnquote().
  *                     Escapes: \n new line, \\ backslash, \# hash, \$ dollar,
  *                     \1..\9 font (this ECHO only)
- *   TINK n r g b      text colour (default: black/white contrast with CLS colour)
- *   TCLS n r g b      set box background, clear box, cursor 0,0 (default: CLS colour)
+ *   TINK n colour     text colour (default: black/white contrast with CLS colour)
+ *   TCLS n colour     set box background, clear box, cursor 0,0 (default: CLS colour)
  *
  * Typing effect (speed > 0): after each drawn character (including spaces) the
  * screen is updated and the next waits 'speed' ms (FreeRTOS tick resolution);

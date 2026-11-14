@@ -139,6 +139,9 @@ conversation context. Keep it current, like the README.
     at boot (ser.c serUartPins, btn.c s_gpio/s_count). nvCrossPins: tx != rx,
     neither in btn.gpio, neither 0 (bad stored set -> defaults at boot). ser.baud ->
     uart.baud. NV SET joins several words (NV_CMD_ARGS 12); NV_FILE_PAIRS 64.
+  Colours are one word: r,g,b or RRGGBB (cmd.c cmdParseColour, shared by
+    LED CLS PLOT..FCIRC TINK TCLS and NV colour keys, kept as typed).
+    Old "r g b" removed; sd/ scripts, tests, docs converted.
 
 
 5. SCRIPTING - IMPLEMENTATION PLAN (agreed)

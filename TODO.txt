@@ -65,6 +65,11 @@ To do
      still on 43; buttons 1..4 only (BTN 5 = ERR); a button on 43/44
      (TACT works, TOUCH = ERR); clash rules (selftest); uart.baud rename.
 
+ 22. Board test - colours: LED / CLS / drawing / TINK / TCLS with r,g,b
+     and RRGGBB (ff807f = FF807F); old "r g b" = ERR colour must be ...;
+     NV SET disk.read 00ff00 kept as typed (NV GET); sys.aron/aroff flash;
+     USB disk LED colours; selftest.txt.
+
 On hold
  20. iPhone test - web console in the captive-portal window: page not too
      wide, no zoom-in when the input gets the focus or after the "^"

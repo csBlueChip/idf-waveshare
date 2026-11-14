@@ -33,14 +33,14 @@ esp_err_t gfxInit(void)
 		cmdHandler_t  handler;
 		const char   *help;
 	} cmds[] = {
-		{ "PLOT",  5, gfxCmdPlot,       "PLOT x y r g b" },
-		{ "LINE",  7, gfxCmdLine,       "LINE x1 y1 x2 y2 r g b" },
-		{ "BOX",   7, gfxCmdBox,        "BOX x y w h r g b" },
-		{ "FBOX",  7, gfxCmdFillBox,    "FBOX x y w h r g b" },
-		{ "TRI",   9, gfxCmdTri,        "TRI x1 y1 x2 y2 x3 y3 r g b" },
-		{ "FTRI",  9, gfxCmdFillTri,    "FTRI x1 y1 x2 y2 x3 y3 r g b" },
-		{ "CIRC",  6, gfxCmdCircle,     "CIRC cx cy rad r g b" },
-		{ "FCIRC", 6, gfxCmdFillCircle, "FCIRC cx cy rad r g b" },
+		{ "PLOT",  3, gfxCmdPlot,       "PLOT x y colour" },
+		{ "LINE",  5, gfxCmdLine,       "LINE x1 y1 x2 y2 colour" },
+		{ "BOX",   5, gfxCmdBox,        "BOX x y w h colour" },
+		{ "FBOX",  5, gfxCmdFillBox,    "FBOX x y w h colour" },
+		{ "TRI",   7, gfxCmdTri,        "TRI x1 y1 x2 y2 x3 y3 colour" },
+		{ "FTRI",  7, gfxCmdFillTri,    "FTRI x1 y1 x2 y2 x3 y3 colour" },
+		{ "CIRC",  4, gfxCmdCircle,     "CIRC cx cy rad colour" },
+		{ "FCIRC", 4, gfxCmdFillCircle, "FCIRC cx cy rad colour" },
 	};
 
 	for (size_t i = 0; i < sizeof(cmds) / sizeof(cmds[0]); i++) {
@@ -217,7 +217,7 @@ static esp_err_t gfxRun(int x0, int y0, int x1, int y1, uint16_t colour)
 	return lcdFillRect(x0, y0, x1 - x0 + 1, y1 - y0 + 1, colour);
 }
 
-/* Parse nCoords ints (-GFX_COORD_MAX..GFX_COORD_MAX) into v[], then "r g b". */
+/* Parse nCoords ints (-GFX_COORD_MAX..GFX_COORD_MAX) into v[], then a colour. */
 static const char *gfxParse(char *argv[], int nCoords, int *v, uint16_t *colour)
 {
 	for (int i = 0; i < nCoords; i++) {
@@ -226,12 +226,11 @@ static const char *gfxParse(char *argv[], int nCoords, int *v, uint16_t *colour)
 		}
 	}
 
-	uint8_t r, g, b;
-	if (!cmdParseU8(argv[nCoords], &r) || !cmdParseU8(argv[nCoords + 1], &g) ||
-	    !cmdParseU8(argv[nCoords + 2], &b)) {
-		return "colour must be 0..255";
+	uint8_t c[3];
+	if (!cmdParseColour(argv[nCoords], c)) {
+		return CMD_COLOUR_ERR;
 	}
-	*colour = lcdRgb(r, g, b);
+	*colour = lcdRgb(c[0], c[1], c[2]);
 	return NULL;
 }
 

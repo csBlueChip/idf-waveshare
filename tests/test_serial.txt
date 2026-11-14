@@ -52,7 +52,7 @@ C3  * terminal A: type   INFO   then Enter
       and OK come back on A, each line ending CR LF (no stair-stepping)
 C4  * terminal A: type   LEDX, Backspace, then Enter
     = "LEDX" then the X is erased on screen; reply: ERR ... (LED needs
-      r g b) - shows the line was "LED"
+      a colour) - shows the line was "LED"
 C5  * terminal A: Enter three times on an empty line
     = [Startup Complete - USB UI active]
 C6  * terminal A: Enter twice, type   UI   Enter, then Enter once

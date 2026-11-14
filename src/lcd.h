@@ -14,7 +14,7 @@
  * panel, then swaps. By default lcdUpdate() runs after every command.
  *
  * Commands registered by lcdInit():
- *   CLS r g b   clear to colour, show dimensions
+ *   CLS colour  clear to colour (r,g,b or RRGGBB), show dimensions
  *   ROT n       rotation n mod 4 (0/2 portrait, 1/3 landscape) for new drawing;
  *               screen content is left as it is; replies W/H
  *   BL pct      backlight 0..100

@@ -54,13 +54,13 @@ static void appRun(void)
 #define MAIN_AR_FLASH_MS	100
 
 /* Start-up LED flash: NV sys.aron if sys.autorun is 1, else sys.aroff;
- * 0 0 0 = no flash (and no delay). */
+ * 0,0,0 / 000000 = no flash (and no delay). */
 static void mainAutorunFlash(void)
 {
-	int r = 0, g = 0, b = 0;
-	sscanf(nvGet(nvGetInt("sys.autorun") ? "sys.aron" : "sys.aroff"), "%d %d %d", &r, &g, &b);
-	if (r || g || b) {
-		ledSetRgb(r, g, b);
+	uint8_t c[3] = { 0, 0, 0 };
+	cmdParseColour(nvGet(nvGetInt("sys.autorun") ? "sys.aron" : "sys.aroff"), c);
+	if (c[0] || c[1] || c[2]) {
+		ledSetRgb(c[0], c[1], c[2]);
 		vTaskDelay(pdMS_TO_TICKS(MAIN_AR_FLASH_MS));
 		ledOff();
 	}
