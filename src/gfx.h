@@ -15,6 +15,8 @@
  *   FTRI  x1 y1 x2 y2 x3 y3 colour
  *   CIRC  cx cy rad colour     FCIRC cx cy rad colour
  * colour = r,g,b, RRGGBB or @h,s,l (cmdParseColour)
+ * LINE (and TRI's sides): Bresenham, drawn from the end with the smaller y
+ * (then x), so a line and its reverse set exactly the same pixels.
  */
 
 #define GFX_COORD_MAX	1000	/* coordinates -1000..1000 */

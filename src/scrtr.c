@@ -151,7 +151,7 @@ static const char *scrtrUsage(void)
 		int n = snprintf(buf, sizeof(buf), "usage: SCR TR|TRP");
 		for (int i = 0; i < SCRTR_COUNT && n < (int)sizeof(buf); i++) {
 			n += snprintf(buf + n, sizeof(buf) - n, " %s %s |", s_table[i].name,
-			              s_table[i].args == SCRTR_ARGS_MS_DIR ? "ms T|B|L|R" : "ms");
+			              s_table[i].args == SCRTR_ARGS_MS_DIR ? "ms T|B|L|R (or v ^ > <)" : "ms");
 		}
 		if (n < (int)sizeof(buf)) {
 			snprintf(buf + n, sizeof(buf) - n, " CUT | NONE");
@@ -187,10 +187,12 @@ static bool scrtrParse(int argc, char *argv[], scrtrSet_t *s)
 
 	char dir = 0;
 	if (def->args == SCRTR_ARGS_MS_DIR) {
-		if (strlen(argv[2]) != 1 || !strchr("TBLRtblr", argv[2][0])) {
+		static const char from[] = "TBLRtblrvV^><", to[] = "TBLRTBLRTTBLR";	/* arrows: the way the new image moves */
+		const char *f = (strlen(argv[2]) == 1) ? strchr(from, argv[2][0]) : NULL;
+		if (!f || !argv[2][0]) {
 			return false;
 		}
-		dir = argv[2][0] & ~0x20;			/* upper case */
+		dir = to[f - from];
 	}
 
 	s->def = def;

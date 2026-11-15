@@ -208,7 +208,7 @@ scrVal_t scrEval(const char **pp, const char *stopWords);
 scrVal_t scrEvalAll(const char *s);			/* whole string, error if extra */
 const char *scrSubst(const char *s, int mode, char quote);	/* arena */
 /* substitution modes: CMD '#' -> "\#", "\$" -> '$'; TEXT '\' -> "\\" (an escape step
- * follows); PLAIN values as they are; RAW (ECHO / FLOG) '\' '#' and the quote
+ * follows); PLAIN values as they are; RAW (TEXT / TLEN / FLOG) '\' '#' and the quote
  * escaped, "\$" kept (the command does quotes and escapes) */
 enum { SUB_CMD, SUB_TEXT, SUB_PLAIN, SUB_RAW };
 const char *scrUnquote(const char *in);		/* arena; fails on bad quotes */

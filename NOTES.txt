@@ -146,6 +146,16 @@ conversation context. Keep it current, like the README.
     PC against an exact Fraction reference, 158760 values) and lcdRgb()
     rounds to the nearest 565 level ((x*249+1014)>>11, (x*253+505)>>10;
     = round(x*31/255), round(x*63/255) for all 256 inputs).
+  SCR TR/TRP PUSH|WIPE direction also as arrows: v=T ^=B >=L <=R (scrtr.c).
+  Text boxes: 1..32 (TEXT_BOXES in text.h; messages built from it). TBOX
+    n x y w lines [speed] [font] [lead] (font 0 = 1); TBOX n reports
+    name:value words (colours auto|none|RRGGBB, 565 widened by bit
+    replication). ECHO renamed TEXT (also scr_exec.c raw quoting, host.c);
+    TLEN n text = widest line in pixels. Ink / paper modes AUTO | SET | NONE
+    (inkMode/paperMode); NONE drawn by lcdDrawCharT() blending with the back
+    buffer; TCLS / scroll use the AUTO colour when paper is NONE.
+  gfxLine: endpoints ordered (smaller y, then x) before Bresenham, so a line
+    and its reverse are identical (38/144 differed before; checked on PC).
 
 
 5. SCRIPTING - IMPLEMENTATION PLAN (agreed)
@@ -177,10 +187,10 @@ conversation context. Keep it current, like the README.
             UP|LINK DOWN>>; UI NEXT; uiBegin() replaces uiStartupDone():
             the interface starts at the end of main() (later: after onBoot)
     log.c   LOG [UART|USB|BOTH|AUTO] (logSetMode / logGetMode)
-    text.c  textUnquote() + textUnescape() (shared text rules); ECHO uses
+    text.c  textUnquote() + textUnescape() (shared text rules); TEXT uses
             them, adds \$
     cmd.c   raw commands now get the text after ONE separator (extra
-            spaces kept for PRINT); ECHO skips its own leading blanks
+            spaces kept for PRINT); TEXT skips its own leading blanks
     sys.c   PRINT, DEBUG, APPEND (SD:/scripts/data/x.txt), WAIT on a
             one-shot esp_timer + semaphore (per call)
     nv.c    sys.autorun 0|1 (unused yet); wifi.ssid/pwd/ble refuse ':' '|'
@@ -196,7 +206,7 @@ conversation context. Keep it current, like the README.
             (autorun 0); 0 0 0 = none. Right after ledInit().
     RAM     (user: minimise internal RAM) statics marked EXT_RAM_BSS_ATTR
             (nv s_val s_stage lines, sys/script names + buffers, cmd table,
-            text boxes/ECHO, web chunk, dns, ble tmp, ui lines, script
+            text boxes/TEXT, web chunk, dns, ble tmp, ui lines, script
             queue); sdkconfig.defaults: SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY,
             SPIRAM_TRY_ALLOCATE_WIFI_LWIP, NIMBLE_MEM_ALLOC_MODE_EXTERNAL,
             SPIRAM_MALLOC_ALWAYSINTERNAL 4096, FREERTOS_USE_TRACE_FACILITY

@@ -56,9 +56,16 @@ esp_err_t gfxPlot(int x, int y, uint16_t colour)
 	return lcdFillRect(x, y, 1, 1, colour);
 }
 
-/* Bresenham, emitted as straight runs (one SPI transfer per run, not per pixel). */
+/* Bresenham, emitted as straight runs (one SPI transfer per run, not per pixel).
+ * Always drawn from the end with the smaller y (then smaller x), so a line and
+ * its reverse cover exactly the same pixels (Bresenham's tie-break depends on
+ * the direction). */
 esp_err_t gfxLine(int x0, int y0, int x1, int y1, uint16_t colour)
 {
+	if (y0 > y1 || (y0 == y1 && x0 > x1)) {
+		int t = x0; x0 = x1; x1 = t;
+		t = y0; y0 = y1; y1 = t;
+	}
 	int  dx    = abs(x1 - x0), sx = (x0 < x1) ? 1 : -1;
 	int  dy    = -abs(y1 - y0), sy = (y0 < y1) ? 1 : -1;
 	int  err   = dx + dy;

@@ -26,7 +26,7 @@ EXPR      ( )  ! - ~  * / %  + -  << >>  &  ^  |
 FUNCTIONS INT ROUND ABS MIN MAX SQRT SIN COS ATAN2 (degrees) LEN UPPER
           LOWER MID(t,s,n) FIND(t,p) RND(a,b)
 
-OUTPUT    ECHO n text  PRINT text  DEBUG text  FLOG file text
+OUTPUT    TEXT n text  TLEN n text  PRINT text  DEBUG text  FLOG file text
 FILES     SD:/scripts/data/file.txt, positions from 1 (end = size + 1)
           FLOG FCAT file [start,count] [>DEBUG]  FDIR [txt|var|nvram|*]
           FSTAT file ($.ret)  (FCAT/FSTAT/FDELETE: name, name.var, name.nvram)

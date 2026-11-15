@@ -75,7 +75,7 @@ t_sysfn.opt extra arguments for t_sysfn.s
 t_sysfn.out expected output of t_sysfn.s
 t_sysfn.s running one function (system scripts)
 t_text.out expected output of t_text.s
-t_text.s PRINT/DEBUG/ECHO text rules, .CONST, INSERT, TRACE
+t_text.s PRINT/DEBUG/TEXT/TLEN text rules, .CONST, INSERT, TRACE
 t_vars.out expected output of t_vars.s
 t_vars.s variables, words, NV read, built-ins, GET, ACC/GYR
 inc.s INSERTed by t_text

@@ -382,6 +382,44 @@ static int lcdPutGlyph(const font_t *f, int x, int y, char c, const uint16_t pal
 	return w;
 }
 
+/* Blend two RGB565 colours: a = 0 -> bg, 15 -> fg. */
+static inline uint16_t lcdBlend565(uint16_t fg, uint16_t bg, int a)
+{
+	int fr = fg >> 11, fgn = (fg >> 5) & 0x3F, fb = fg & 0x1F;
+	int br = bg >> 11, bgn = (bg >> 5) & 0x3F, bb = bg & 0x1F;
+	return (uint16_t)(((br + (fr - br) * a / 15) << 11) | ((bgn + (fgn - bgn) * a / 15) << 5) |
+	                  (bb + (fb - bb) * a / 15));
+}
+
+esp_err_t lcdDrawCharT(const font_t *f, int x, int y, char c, uint16_t fg, uint16_t bg, bool fgNone, bool bgNone)
+{
+	if (!fgNone && !bgNone) {
+		return lcdDrawChar(f, x, y, c, fg, bg);
+	}
+	if (!f) {
+		f = fontGet(FONT_DEFAULT);
+	}
+	if (fgNone && bgNone) {
+		return ESP_OK;					/* nothing to draw */
+	}
+	int            w;
+	const uint8_t *glyph = fontGlyph(f, c, &w);
+	if (x < 0 || y < 0 || x + w > s_w || y + f->height > s_h) {
+		return ESP_OK;					/* off-screen: skip (as lcdPutGlyph) */
+	}
+	uint16_t *back = LCD_BACK;
+	for (int py = 0; py < f->height; py++) {
+		uint16_t *d = back + s_base + x * s_sx + (y + py) * s_sy;
+		for (int px = 0; px < w; px++, d += s_sx) {
+			int a = fontAlpha(glyph, w, px, py);
+			*d = bgNone ? lcdBlend565(fg, *d, a)	/* glyph over what is there */
+			            : lcdBlend565(*d, bg, a);	/* paper around a see-through glyph */
+		}
+	}
+	lcdMarkDirty(x, y, w, f->height);
+	return ESP_OK;
+}
+
 esp_err_t lcdDrawChar(const font_t *f, int x, int y, char c, uint16_t fg, uint16_t bg)
 {
 	uint16_t pal[16];

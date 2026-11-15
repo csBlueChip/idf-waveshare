@@ -28,9 +28,11 @@ typedef struct {
 	int      cx, cy;	/* cursor, relative to box */
 	bool     scroll;
 	bool     full;		/* scroll off and a new line didn't fit: discard until cursor moves */
-	bool     inkSet, paperSet;
-	uint16_t ink, paper;
+	uint8_t  inkMode, paperMode;	/* TEXT_AUTO | TEXT_SET | TEXT_NONE */
+	uint16_t ink, paper;		/* used when ..Mode == TEXT_SET */
 } textBox_t;
+
+enum { TEXT_AUTO = 0, TEXT_SET, TEXT_NONE };
 
 /* One character to print, with the font it uses */
 typedef struct {
@@ -38,47 +40,57 @@ typedef struct {
 	const font_t *f;
 } textChar_t;
 
-/* Drawing context for one ECHO */
+/* Drawing context for one TEXT */
 typedef struct {
 	textBox_t *b;
 	int        lineH;	/* base font height + lead */
 	int        fontH;	/* base font height */
 	uint16_t   ink, paper;
+	bool       inkNone, paperNone;
+	uint16_t   fill;	/* scroll / TCLS fill: paper, or the AUTO paper when NONE */
 } textCtx_t;
 
-static EXT_RAM_BSS_ATTR textBox_t s_box[TEXT_BOXES + 1];	/* index 1..9 */
+static EXT_RAM_BSS_ATTR textBox_t s_box[TEXT_BOXES + 1];	/* index 1..TEXT_BOXES */
 static uint8_t   s_savedRot;
 static char      s_err[40];			/* for formatted error replies */
 
 static textBox_t  *textGet(int n);
 static void        textEnter(const textBox_t *b);
 static void        textLeave(void);
-static void        textColours(const textBox_t *b, uint16_t *ink, uint16_t *paper);
+static void        textColours(const textBox_t *b, textCtx_t *t);
 static int         textHeight(int lines, int lead, const font_t *f);
 static void        textClampCursor(textBox_t *b);
 static void        textLineBreak(textCtx_t *t);
 static esp_err_t   textPut(textCtx_t *t, const textChar_t *ch);
 static esp_err_t   textPrint(textBox_t *b, const textChar_t *chars, int n);
 static bool        textParseRgb(char *argv[], uint16_t *colour);
+static const char *textParseMode(const char *arg, uint8_t *mode, uint16_t *colour);
+static const char *textParseText(const char *args, textBox_t **pb, textChar_t *chars, int *count,
+                                 const char **warn);
 static const char *textCmdBox(int argc, char *argv[], cmdReply_t reply);
 static const char *textCmdSet(textBox_t *b, const char *key, const char *val);
 static const char *textCmdScrl(int argc, char *argv[], cmdReply_t reply);
 static const char *textCmdYx(int argc, char *argv[], cmdReply_t reply);
 static const char *textCmdInk(int argc, char *argv[], cmdReply_t reply);
+static const char *textCmdPaper(int argc, char *argv[], cmdReply_t reply);
 static const char *textCmdCls(int argc, char *argv[], cmdReply_t reply);
-static const char *textCmdEcho(const char *args, cmdReply_t reply);
+static const char *textCmdText(const char *args, cmdReply_t reply);
+static const char *textCmdLen(const char *args, cmdReply_t reply);
+static void        textReport(int n, const textBox_t *b, cmdReply_t reply);
 
 /* ================= Public API ================= */
 
 esp_err_t textInit(void)
 {
-	ESP_RETURN_ON_ERROR(cmdRegister("TBOX", 4, 8, textCmdBox,
-	                    "TBOX n x y w lines [speed] [lead] [font] | TBOX n SET x|y|w|h|s|l|f v"), TAG, "cmd");
+	ESP_RETURN_ON_ERROR(cmdRegister("TBOX", 1, 8, textCmdBox,
+	                    "TBOX n [x y w lines [speed] [font] [lead]] | TBOX n SET x|y|w|h|s|l|f v"), TAG, "cmd");
 	ESP_RETURN_ON_ERROR(cmdRegister("TSCRL", 2, 2, textCmdScrl, "TSCRL n 0|1  auto-scroll"), TAG, "cmd");
 	ESP_RETURN_ON_ERROR(cmdRegister("TYX", 3, 3, textCmdYx, "TYX n y x  move cursor (pixels)"), TAG, "cmd");
-	ESP_RETURN_ON_ERROR(cmdRegisterRaw("ECHO", textCmdEcho, "ECHO n text  {\\n, \\\\, \\#, \\$, \\1..9=font}"), TAG, "cmd");
-	ESP_RETURN_ON_ERROR(cmdRegister("TINK", 2, 2, textCmdInk, "TINK n colour  text colour (r,g,b or RRGGBB)"), TAG, "cmd");
-	ESP_RETURN_ON_ERROR(cmdRegister("TCLS", 2, 2, textCmdCls, "TCLS n colour  clear box"), TAG, "cmd");
+	ESP_RETURN_ON_ERROR(cmdRegisterRaw("TEXT", textCmdText, "TEXT n text  {\\n, \\\\, \\#, \\$, \\1..9=font}"), TAG, "cmd");
+	ESP_RETURN_ON_ERROR(cmdRegisterRaw("TLEN", textCmdLen, "TLEN n text  width in pixels (widest line)"), TAG, "cmd");
+	ESP_RETURN_ON_ERROR(cmdRegister("TINK", 2, 2, textCmdInk, "TINK n colour|AUTO|NONE  text colour"), TAG, "cmd");
+	ESP_RETURN_ON_ERROR(cmdRegister("TPAPER", 2, 2, textCmdPaper, "TPAPER n colour|AUTO|NONE  background colour"), TAG, "cmd");
+	ESP_RETURN_ON_ERROR(cmdRegister("TCLS", 1, 2, textCmdCls, "TCLS n [colour|AUTO]  clear box"), TAG, "cmd");
 	return ESP_OK;
 }
 
@@ -101,13 +113,16 @@ static void textLeave(void)
 	lcdSetRotation(s_savedRot);
 }
 
-/* Box colours, falling back to the CLS defaults. */
-static void textColours(const textBox_t *b, uint16_t *ink, uint16_t *paper)
+/* Box colours: AUTO = the CLS defaults (ink contrasting, paper = CLS colour). */
+static void textColours(const textBox_t *b, textCtx_t *t)
 {
 	uint16_t fg, bg;
 	lcdGetTextColours(&fg, &bg);
-	*ink   = b->inkSet   ? b->ink   : fg;
-	*paper = b->paperSet ? b->paper : bg;
+	t->ink       = (b->inkMode == TEXT_SET) ? b->ink : fg;
+	t->paper     = (b->paperMode == TEXT_SET) ? b->paper : bg;
+	t->inkNone   = (b->inkMode == TEXT_NONE);
+	t->paperNone = (b->paperMode == TEXT_NONE);
+	t->fill      = t->paperNone ? bg : t->paper;
 }
 
 static int textHeight(int lines, int lead, const font_t *f)
@@ -162,12 +177,12 @@ static esp_err_t textPut(textCtx_t *t, const textChar_t *ch)
 			return ESP_OK;
 		}
 		int dy = b->cy + t->fontH - b->h;
-		ESP_RETURN_ON_ERROR(lcdScrollUp(b->x, b->y, b->w, b->h, dy, t->paper), TAG, "scroll");
+		ESP_RETURN_ON_ERROR(lcdScrollUp(b->x, b->y, b->w, b->h, dy, t->fill), TAG, "scroll");
 		b->cy -= dy;
 	}
 
-	ESP_RETURN_ON_ERROR(lcdDrawChar(ch->f, b->x + b->cx, b->y + b->cy, ch->c, t->ink, t->paper),
-	                    TAG, "char");
+	ESP_RETURN_ON_ERROR(lcdDrawCharT(ch->f, b->x + b->cx, b->y + b->cy, ch->c, t->ink, t->paper,
+	                                 t->inkNone, t->paperNone), TAG, "char");
 	b->cx += fontCharWidth(ch->f, ch->c);
 
 	/* typing effect: show each character, then pause. SCR AUTO 0 disables it. */
@@ -185,7 +200,7 @@ static esp_err_t textPrint(textBox_t *b, const textChar_t *chars, int n)
 	textCtx_t t = { .b = b };
 	t.fontH = fontGet(b->font)->height;
 	t.lineH = t.fontH + b->lead;
-	textColours(b, &t.ink, &t.paper);
+	textColours(b, &t);
 
 	esp_err_t err = ESP_OK;
 	textEnter(b);
@@ -243,14 +258,55 @@ static bool textParseRgb(char *argv[], uint16_t *colour)
 
 /* ================= Commands ================= */
 
-#define TEXT_BOX_ERR	"box must be 1..9"
+#define TEXT_STR_(x)	#x
+#define TEXT_STR(x)	TEXT_STR_(x)
+#define TEXT_BOX_ERR	"box must be 1.." TEXT_STR(TEXT_BOXES)
 #define TEXT_UNDEF_ERR	"box not defined (TBOX)"
+
+/* 565 -> RRGGBB, each channel widened by bit replication (31 -> FF). */
+static void textHex(uint16_t c, char out[7])
+{
+	int r = c >> 11, g = (c >> 5) & 0x3F, b = c & 0x1F;
+	snprintf(out, 7, "%02X%02X%02X", (r << 3) | (r >> 2), (g << 2) | (g >> 4), (b << 3) | (b >> 2));
+}
+
+/* TBOX n: "n:1 rot:0 x:.. y:.. w:.. lines:.. speed:.. font:.. lead:.. h:.. cx:.. cy:..
+ * scroll:0|1 ink:auto|none|RRGGBB paper:auto|none|RRGGBB" (':' splits words in scripts). */
+static void textReport(int n, const textBox_t *b, cmdReply_t reply)
+{
+	char ink[8], paper[8], line[200];
+	if (b->inkMode == TEXT_SET) {
+		textHex(b->ink, ink);
+	} else {
+		strcpy(ink, b->inkMode == TEXT_NONE ? "none" : "auto");
+	}
+	if (b->paperMode == TEXT_SET) {
+		textHex(b->paper, paper);
+	} else {
+		strcpy(paper, b->paperMode == TEXT_NONE ? "none" : "auto");
+	}
+	snprintf(line, sizeof(line),
+	         "n:%d rot:%d x:%d y:%d w:%d lines:%d speed:%d font:%d lead:%d h:%d cx:%d cy:%d scroll:%d ink:%s paper:%s\n",
+	         n, b->rot, b->x, b->y, b->w, b->lines, b->speed, b->font, b->lead, b->h, b->cx, b->cy,
+	         b->scroll ? 1 : 0, ink, paper);
+	reply(line);
+}
 
 static const char *textCmdBox(int argc, char *argv[], cmdReply_t reply)
 {
 	int n;
 	if (!cmdParseInt(argv[0], 1, TEXT_BOXES, &n)) {
 		return TEXT_BOX_ERR;
+	}
+
+	/* TBOX n: report */
+	if (argc == 1) {
+		textBox_t *b = textGet(n);
+		if (!b) {
+			return TEXT_UNDEF_ERR;
+		}
+		textReport(n, b, reply);
+		return NULL;
 	}
 
 	/* TBOX n SET key value */
@@ -262,18 +318,26 @@ static const char *textCmdBox(int argc, char *argv[], cmdReply_t reply)
 		return b ? textCmdSet(b, argv[2], argv[3]) : TEXT_UNDEF_ERR;
 	}
 
-	/* TBOX n x y w lines [lead] [font] */
+	/* TBOX n x y w lines [speed] [font] [lead] */
 	if (argc < 5) {
-		return "usage: TBOX n x y w lines [speed] [lead] [font]";
+		return "usage: TBOX n [x y w lines [speed] [font] [lead]]";
 	}
 	int x, y, w, lines, lead, speed = 0, font = FONT_DEFAULT;
 	if (!cmdParseInt(argv[1], -TEXT_COORD_MAX, TEXT_COORD_MAX, &x) ||
 	    !cmdParseInt(argv[2], -TEXT_COORD_MAX, TEXT_COORD_MAX, &y)) {
 		return "x and y must be -1000..1000";
 	}
-	if (argc >= 8 && !cmdParseInt(argv[7], 1, fontCount(), &font)) {
-		snprintf(s_err, sizeof(s_err), "font must be 1..%d", fontCount());
-		return s_err;
+	if (argc >= 6 && !cmdParseInt(argv[5], 0, TEXT_SPEED_MAX, &speed)) {
+		return "speed must be 0..1000";
+	}
+	if (argc >= 7) {
+		if (!cmdParseInt(argv[6], 0, fontCount(), &font)) {
+			snprintf(s_err, sizeof(s_err), "font must be 0..%d", fontCount());
+			return s_err;
+		}
+		if (font == 0) {
+			font = 1;				/* 0 = font 1 */
+		}
 	}
 	const font_t *f = fontGet(font);
 	if (!cmdParseInt(argv[3], 1, TEXT_COORD_MAX, &w) || w < f->maxWidth) {
@@ -283,11 +347,8 @@ static const char *textCmdBox(int argc, char *argv[], cmdReply_t reply)
 	if (!cmdParseInt(argv[4], 1, TEXT_LINES_MAX, &lines)) {
 		return "lines must be 1..100";
 	}
-	if (argc >= 6 && !cmdParseInt(argv[5], 0, TEXT_SPEED_MAX, &speed)) {
-		return "speed must be 0..1000";
-	}
-	lead = f->lead;
-	if (argc >= 7 && !cmdParseInt(argv[6], 0, TEXT_LEAD_MAX, &lead)) {
+	lead = f->lead;					/* the font's own unless given */
+	if (argc >= 8 && !cmdParseInt(argv[7], 0, TEXT_LEAD_MAX, &lead)) {
 		return "lead must be 0..100";
 	}
 
@@ -341,9 +402,12 @@ static const char *textCmdSet(textBox_t *b, const char *key, const char *val)
 		b->lead = v;				/* box size unchanged */
 		break;
 	case 'f':
-		if (!cmdParseInt(val, 1, FONT_MAX, &v) || !fontGet(v)) {
+		if (!cmdParseInt(val, 0, FONT_MAX, &v) || !fontGet(v ? v : 1)) {
 			snprintf(s_err, sizeof(s_err), "font %s not available", val);
 			return s_err;
+		}
+		if (v == 0) {
+			v = 1;					/* 0 = font 1 */
 		}
 		if (fontGet(v)->maxWidth > b->w) {
 			snprintf(s_err, sizeof(s_err), "font %d too wide for box", v);
@@ -395,111 +459,206 @@ static const char *textCmdYx(int argc, char *argv[], cmdReply_t reply)
 	return NULL;
 }
 
-static const char *textCmdInk(int argc, char *argv[], cmdReply_t reply)
+/* colour | AUTO | NONE -> mode (+ colour for TEXT_SET). */
+static const char *textParseMode(const char *arg, uint8_t *mode, uint16_t *colour)
 {
-	int      n;
-	uint16_t c;
-	if (!cmdParseInt(argv[0], 1, TEXT_BOXES, &n)) {
-		return TEXT_BOX_ERR;
+	if (strcasecmp(arg, "AUTO") == 0) {
+		*mode = TEXT_AUTO;
+	} else if (strcasecmp(arg, "NONE") == 0) {
+		*mode = TEXT_NONE;
+	} else if (textParseRgb((char **)&arg, colour)) {
+		*mode = TEXT_SET;
+	} else {
+		return "colour must be r,g,b, RRGGBB, @h,s,l, AUTO or NONE";
 	}
-	if (!textParseRgb(&argv[1], &c)) {
-		return CMD_COLOUR_ERR;
-	}
-	textBox_t *b = textGet(n);
-	if (!b) {
-		return TEXT_UNDEF_ERR;
-	}
-	b->ink    = c;
-	b->inkSet = true;
 	return NULL;
 }
 
-static const char *textCmdCls(int argc, char *argv[], cmdReply_t reply)
+/* TINK n / TPAPER n colour|AUTO|NONE */
+static const char *textCmdColour(int argc, char *argv[], bool paper)
 {
 	int      n;
-	uint16_t c;
+	uint8_t  mode;
+	uint16_t c = 0;
 	if (!cmdParseInt(argv[0], 1, TEXT_BOXES, &n)) {
 		return TEXT_BOX_ERR;
 	}
-	if (!textParseRgb(&argv[1], &c)) {
-		return CMD_COLOUR_ERR;
+	const char *e = textParseMode(argv[1], &mode, &c);
+	if (e) {
+		return e;
 	}
 	textBox_t *b = textGet(n);
 	if (!b) {
 		return TEXT_UNDEF_ERR;
 	}
-	b->paper    = c;
-	b->paperSet = true;
-	b->cx       = 0;
-	b->cy       = 0;
-	b->full     = false;
+	if (paper) {
+		b->paperMode = mode;
+		b->paper     = c;
+	} else {
+		b->inkMode = mode;
+		b->ink     = c;
+	}
+	return NULL;
+}
 
+static const char *textCmdInk(int argc, char *argv[], cmdReply_t reply)
+{
+	return textCmdColour(argc, argv, false);
+}
+
+static const char *textCmdPaper(int argc, char *argv[], cmdReply_t reply)
+{
+	return textCmdColour(argc, argv, true);
+}
+
+/* TCLS n [colour|AUTO]: set the paper (if given), fill the box, cursor 0,0.
+ * Paper NONE: filled with the AUTO paper (CLS colour), paper stays NONE. */
+static const char *textCmdCls(int argc, char *argv[], cmdReply_t reply)
+{
+	int      n;
+	uint8_t  mode = TEXT_AUTO;
+	uint16_t c    = 0;
+	if (!cmdParseInt(argv[0], 1, TEXT_BOXES, &n)) {
+		return TEXT_BOX_ERR;
+	}
+	if (argc == 2) {
+		const char *e = textParseMode(argv[1], &mode, &c);
+		if (e) {
+			return e;
+		}
+		if (mode == TEXT_NONE) {
+			return "TCLS takes a colour or AUTO, not NONE";
+		}
+	}
+	textBox_t *b = textGet(n);
+	if (!b) {
+		return TEXT_UNDEF_ERR;
+	}
+	if (argc == 2) {
+		b->paperMode = mode;
+		b->paper     = c;
+	}
+	b->cx   = 0;
+	b->cy   = 0;
+	b->full = false;
+
+	textCtx_t t;
+	textColours(b, &t);
 	textEnter(b);
-	esp_err_t err = lcdFillRect(b->x, b->y, b->w, b->h, c);
+	esp_err_t err = lcdFillRect(b->x, b->y, b->w, b->h, t.fill);
 	textLeave();
 	return (err == ESP_OK) ? NULL : "LCD write failed";
 }
 
-/* ECHO n text: text rules as textUnquote(), then the escapes \n new line,
- * \\ backslash, \# hash, \$ dollar, \1..\9 font for the rest of this ECHO;
- * any other \x is kept literally. A bad font is reported but printing goes on
- * in the current font (formatting lost, not information). */
-static const char *textCmdEcho(const char *args, cmdReply_t reply)
+/* "n text" for TEXT / TLEN: box n (any number of digits), then the text rules
+ * of textUnquote(), then the escapes \n new line, \\ backslash, \# hash,
+ * \$ dollar, \1..\9 font for the rest of this line; any other \x is kept.
+ * A bad font goes to *warn (printing goes on in the current font). */
+static const char *textParseText(const char *args, textBox_t **pb, textChar_t *chars, int *count,
+                                 const char **warn)
 {
+	static EXT_RAM_BSS_ATTR char text[CMD_LINE_MAX + 1];
+
 	while (*args == ' ' || *args == '\t') {
 		args++;
 	}
-	if (args[0] < '1' || args[0] > '9' || (args[1] != ' ' && args[1] != '\t' && args[1] != '\0')) {
-		return "usage: ECHO n text  (n 1..9)";
+	int n = 0, digits = 0;
+	while (*args >= '0' && *args <= '9' && digits < 4) {
+		n = n * 10 + (*args++ - '0');
+		digits++;
 	}
-	int        n = args[0] - '0';
+	if (!digits || (*args != ' ' && *args != '\t' && *args != '\0') || n < 1 || n > TEXT_BOXES) {
+		return TEXT_BOX_ERR;
+	}
 	textBox_t *b = textGet(n);
 	if (!b) {
 		return TEXT_UNDEF_ERR;
 	}
-
-	static EXT_RAM_BSS_ATTR char text[CMD_LINE_MAX + 1];
-	static EXT_RAM_BSS_ATTR textChar_t chars[CMD_LINE_MAX];
-	const char       *err = textUnquote(args[1] ? args + 2 : args + 1, text, sizeof(text));
+	const char *err = textUnquote(*args ? args + 1 : args, text, sizeof(text));
 	if (err) {
 		return err;
 	}
-	int           count = 0;
-	const font_t *cur   = fontGet(b->font);
+	const font_t *cur = fontGet(b->font);
+	int           cnt = 0;
+	*warn = NULL;
 
-	for (const char *p = text; *p && count < CMD_LINE_MAX; p++) {
+	for (const char *p = text; *p && cnt < CMD_LINE_MAX; p++) {
 		if (p[0] == '\\' && p[1] == 'n') {
-			chars[count++] = (textChar_t) { '\n', cur };
+			chars[cnt++] = (textChar_t) { '\n', cur };
 			p++;
 		} else if (p[0] == '\\' && (p[1] == '\\' || p[1] == '#' || p[1] == '$')) {
-			chars[count++] = (textChar_t) { p[1], cur };
+			chars[cnt++] = (textChar_t) { p[1], cur };
 			p++;
 		} else if (p[0] == '\\' && p[1] >= '1' && p[1] <= '9') {
 			int           id = p[1] - '0';
 			const font_t *f  = fontGet(id);
 			if (!f) {
-				if (!err) {
+				if (!*warn) {
 					snprintf(s_err, sizeof(s_err), "font %d not available", id);
-					err = s_err;
+					*warn = s_err;
 				}
 			} else if (f->maxWidth > b->w) {
-				if (!err) {
+				if (!*warn) {
 					snprintf(s_err, sizeof(s_err), "font %d too wide for box", id);
-					err = s_err;
+					*warn = s_err;
 				}
 			} else {
 				cur = f;
 			}
 			p++;
 		} else {
-			chars[count++] = (textChar_t) { *p, cur };
+			chars[cnt++] = (textChar_t) { *p, cur };
 		}
 	}
+	*pb    = b;
+	*count = cnt;
+	return NULL;
+}
 
-	if (textPrint(b, chars, count) != ESP_OK) {
+static EXT_RAM_BSS_ATTR textChar_t s_chars[CMD_LINE_MAX];
+
+/* TEXT n text */
+static const char *textCmdText(const char *args, cmdReply_t reply)
+{
+	textBox_t  *b;
+	int         count;
+	const char *warn;
+	const char *err = textParseText(args, &b, s_chars, &count, &warn);
+	if (err) {
+		return err;
+	}
+	if (textPrint(b, s_chars, count) != ESP_OK) {
 		return "LCD write failed";
 	}
-	return err;
+	return warn;
+}
+
+/* TLEN n text: width in pixels as TEXT would draw it on an endless line
+ * (widest line when there is a \n). Nothing drawn, cursor unchanged. */
+static const char *textCmdLen(const char *args, cmdReply_t reply)
+{
+	textBox_t  *b;
+	int         count;
+	const char *warn;
+	const char *err = textParseText(args, &b, s_chars, &count, &warn);
+	if (err) {
+		return err;
+	}
+	int w = 0, best = 0;
+	for (int i = 0; i < count; i++) {
+		if (s_chars[i].c == '\n') {
+			w = 0;
+			continue;
+		}
+		w += fontCharWidth(s_chars[i].f, s_chars[i].c);
+		if (w > best) {
+			best = w;
+		}
+	}
+	char line[16];
+	snprintf(line, sizeof(line), "%d\n", best);
+	reply(line);
+	return warn;
 }
 
 /* ================= Text argument rules ================= */
@@ -573,7 +732,7 @@ void textUnescape(const char *in, char *out, size_t n)
 			out[o++] = p[1];
 			p++;
 		} else if (p[0] == '\\' && p[1] >= '1' && p[1] <= '9') {
-			p++;					/* font: ECHO only */
+			p++;					/* font: TEXT only */
 		} else {
 			out[o++] = *p;
 		}

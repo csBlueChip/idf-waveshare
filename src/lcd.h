@@ -72,6 +72,11 @@ esp_err_t lcdDrawText(const font_t *f, int x, int y, const char *str, uint16_t f
 /* Draw one character (width: fontCharWidth()). */
 esp_err_t lcdDrawChar(const font_t *f, int x, int y, char c, uint16_t fg, uint16_t bg);
 
+/* Same, with transparency: fgNone = the glyph shows what is under it (paper
+ * drawn around it), bgNone = only the glyph is drawn, blended onto what is
+ * there; both = nothing drawn. */
+esp_err_t lcdDrawCharT(const font_t *f, int x, int y, char c, uint16_t fg, uint16_t bg, bool fgNone, bool bgNone);
+
 /* Text grid (font 1 cells) inside a margin. Depends on rotation. */
 int lcdTextCols(void);
 int lcdTextRows(void);

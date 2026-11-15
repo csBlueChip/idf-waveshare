@@ -18,6 +18,8 @@
  *   CUT     no transition (instant). As a one-shot it overrides the persistent one.
  *   NONE    one-shot not armed: the persistent transition is used.
  *   ms      10..10000, duration of the whole transition
+ *   T|B|L|R (either case) may be written as the arrow the new image moves
+ *           along: v = T, ^ = B, > = L, < = R.
  *   PUSH    old image slides out while the new one slides in; T|B|L|R is the
  *           side the new image enters from (R: enters right, old pushed left),
  *           relative to the current ROT. Always full screen.

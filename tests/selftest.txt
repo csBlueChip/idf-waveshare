@@ -60,7 +60,7 @@ SCR TR PUSH 600 R                      # direction follows ROT
 CLS 0,80,0                             # enters from the logical right (glass bottom)
 ROT 0
 TBOX 1 6 6 160 2 40
-ECHO 1 typing skips transitions        # types normally, no fades
+TEXT 1 typing skips transitions        # types normally, no fades
 SCR TR FADE 5                          # ERR usage
 SCR TR PUSH 300                        # ERR usage (direction required)
 SCR TR NONE NONE                       # one-shot disarmed, persistent CUT
@@ -165,25 +165,25 @@ IMG 1 5                                # ERR usage
 CLS 0,40,90
 TBOX 1 6 6 160 4
 TINK 1 255,255,255
-ECHO 1 his name is \2Rupert\1 today
-ECHO 1  -- one space skipped, one kept
-ECHO 1 \na\\b \x literal, price \#5
-TBOX 2 6 120 160 3 0 2 2                # speed 0, lead 2, font 2
+TEXT 1 his name is \2Rupert\1 today
+TEXT 1  -- one space skipped, one kept
+TEXT 1 \na\\b \x literal, price \#5
+TBOX 2 6 120 160 3 0 2 2                # speed 0, font 2, lead 2
 TCLS 2 230,230,230
 TINK 2 0,0,0
-ECHO 2 Word wrap keeps words whole in the serif font.
+TEXT 2 Word wrap keeps words whole in the serif font.
 TSCRL 2 1
-ECHO 2 \nScrolled line one\nScrolled line two
+TEXT 2 \nScrolled line one\nScrolled line two
 TYX 2 0 80
-ECHO 2 X
+TEXT 2 X
 TBOX 3 6 210 136 3 40                  # typing effect, 40 ms per character
 TCLS 3 40,40,40
 TINK 3 255,200,0
-ECHO 3 Supercalifragilisticexpialidocious!   # types out
+TEXT 3 Supercalifragilisticexpialidocious!   # types out
 TBOX 3 SET s 0
 SCR AUTO 0
 TBOX 3 SET s 80
-ECHO 3 \ninstant                         # SCR AUTO 0: no typing
+TEXT 3 \ninstant                         # SCR AUTO 0: no typing
 SCR AUTO 1
 TBOX 3 SET s 0
 
@@ -192,20 +192,39 @@ ROT 1
 TBOX 4 20 0 200 1
 TCLS 4 120,0,0
 ROT 0
-ECHO 4 Y axis label                    # still sideways
+TEXT 4 Y axis label                    # still sideways
 
 # ---------- SET and errors ----------
 TBOX 3 SET h 2
 TBOX 3 SET f 2
-ECHO 3 \n now serif
+TEXT 3 \n now serif
 TBOX 3 SET w 10                        # ERR w must be at least 20 for font 2
 TBOX 3 SET f 7                         # ERR font 7 not available
 TBOX 5 0 0 10 1                        # ERR w must be at least 12 for font 1
 TBOX 5 0 0 15 4
-ECHO 5 a\2bcd                          # ERR font 2 too wide for box (bcd printed)
-ECHO 1 \7oops                          # ERR font 7 not available (text printed)
-ECHO 6 x                               # ERR box not defined (TBOX)
+TEXT 5 a\2bcd                          # ERR font 2 too wide for box (bcd printed)
+TEXT 1 \7oops                          # ERR font 7 not available (text printed)
+TEXT 6 x                               # ERR box not defined (TBOX)
 TYX 1 500 0                            # ERR y x must be inside the box
+TBOX 1                                 # n:1 rot:0 x:6 y:6 w:160 lines:4 ... ink:FFFFFF paper:auto
+TBOX 33                                # ERR box must be 1..32
+TBOX 32 0 0 100 1 0 0 4                # font 0 = 1, lead 4
+TBOX 32                                # ... font:1 lead:4 ...
+TLEN 1 hello                           # 60 (font 1: 12 px per character)
+TLEN 1 ab\nabcd                        # 48 (widest line)
+TLEN 1 \2hello                          # serif width
+TPAPER 1 NONE                          # letters only, over what is there
+TEXT 1 \nover
+TINK 1 NONE
+TPAPER 1 255,255,0                     # yellow paper, see-through letters
+TEXT 1 \ncut out
+TINK 1 AUTO
+TPAPER 1 AUTO
+TCLS 1 NONE                            # ERR TCLS takes a colour or AUTO, not NONE
+TPAPER 1 NONE
+TCLS 1                                 # filled with the CLS colour, paper stays NONE
+TBOX 1                                 # ... ink:auto paper:none
+TPAPER 1 AUTO
 
 # ---------- buttons ----------
 BTN                                    # all off, global deb=30 long=600 dbl=300 rpt=0

@@ -1,4 +1,4 @@
-# PRINT / DEBUG / ECHO text rules, substitution, .CONST, INSERT
+# PRINT / DEBUG / TEXT / TLEN text rules, substitution, .CONST, INSERT
 .CONST WHITE 0xFF 0xFF 0xFF
 .CONST MAXN 10
 LET $x = 42
@@ -11,8 +11,11 @@ PRINT \"lead" quote $x
 PRINT a\nb \\ \# \$x \5gone
 PRINT value kept: $q
 DEBUG debug $x
-ECHO 1 x=$x value=$q
-ECHO 1 "q=$q"
+TEXT 1 x=$x value=$q
+TEXT 1 "q=$q"
+TLEN 1 "q=$q"
+GET $w = TLEN 1 x=$x
+PRINT tlen ok=$.ok
 FLOG log $x and \$
 FCAT log
 LED WHITE

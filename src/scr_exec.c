@@ -326,7 +326,7 @@ static const char *constWords(const char *line)
 	return o;
 }
 
-/* quote char of a raw-text command (ECHO n "..." / FLOG f '...') */
+/* quote char of a raw-text command (TEXT n "..." / TLEN n "..." / FLOG f '...') */
 static char rawQuote(const char *line, int skipWords)
 {
 	const char *p = scrSkip(line);
@@ -344,7 +344,7 @@ static bool runCmd(const char *text, cmdCtx_t *c)
 {
 	const char *t = constWords(text);
 	const char *line;
-	if (scrWordIs(t, "ECHO") || scrWordIs(t, "FLOG")) {
+	if (scrWordIs(t, "TEXT") || scrWordIs(t, "TLEN") || scrWordIs(t, "FLOG")) {
 		line = scrSubst(t, SUB_RAW, rawQuote(t, 2));	/* the command does quotes / escapes */
 	} else {
 		line = scrSubst(t, SUB_CMD, 0);

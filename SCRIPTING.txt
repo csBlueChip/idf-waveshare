@@ -355,27 +355,32 @@ implementation:
 7. OUTPUT
 ---------
 
-  ECHO n text      to text box n on the glass (existing command)
+  TEXT n text      to text box n on the glass (existing command)
   PRINT text       to the UI (the console client)
   DEBUG text       to the log port(s), as dbgf()
 
+  TLEN n text takes the text as TEXT does and replies its width in pixels
+  (nothing drawn):  GET $w = TLEN 1 "Score: $s"  -> $w = 132
+  TBOX n replies the box settings as name:value words, so after
+  GET $t = TBOX 1 the values are $t[2] (n), $t[4] (rot), $t[6] (x) ...
+
   All three take the text the same way, with $variable substitution:
     - text starts after the separating space; further spaces are kept:
-        ECHO 1  foo        -> " foo"
+        TEXT 1  foo        -> " foo"
     - if the first non-space character is " or ', the text is a quoted
       string up to the matching quote:
-        ECHO 1     "foo"   -> "foo"
+        TEXT 1     "foo"   -> "foo"
       inside "...": \" is a literal "      inside '...': \' is a literal '
       text after the closing quote is an error
     - a leading \" or \' means "not quoted, starts with a quote"; no
       further quotes need escaping:
         PRINT \"hi" there  -> "hi" there
-    - escapes (as ECHO today, plus \$):
+    - escapes:
         \n        new line
         \\        a literal \
         \#        a literal #
         \$        a literal $
-        \1..\9    font 1..9 for the rest of this ECHO (ECHO only;
+        \1..\9    font 1..9 for the rest of this TEXT (TEXT / TLEN only;
                   PRINT and DEBUG drop them)
 
   FLOG file text   add text plus a new line at the end of
@@ -560,7 +565,7 @@ implementation:
     - A value that is one quoted string is text, without the quotes:
         .CONST FN_BOAST "boast"     FSEEK FN_BOAST START
         .CONST ID "007"             LET $i = ID   -> 007 (kept exactly)
-        .CONST MSG "hello there"    ECHO 1 MSG    -> ECHO 1 "hello there"
+        .CONST MSG "hello there"    TEXT 1 MSG    -> TEXT 1 "hello there"
       (in a command line text with spaces goes in quotes, so it stays one
       argument).
     - Constants also work as data file names (section 7a).
@@ -782,7 +787,7 @@ implementation:
     the README notes that a long press is reported as DOWN ... UP.
   - New UI events (also sent to clients, like BTN / IMU events):
       <<UI CONNECT>> <<UI DISCONNECT>> <<UI LINK UP>> <<UI LINK DOWN>>
-  - ECHO: $variable substitution, \$, and the quoting rules (section 7).
+  - TEXT: $variable substitution, \$, and the quoting rules (section 7).
   - New commands: RUN STOP PAUSE CONT LOAD STEP BPT VARS LIST STACK PRINT DEBUG
     RNG EVENTS LOG.
   - UI NEXT: switch to the next interface in the BOOT double-press order

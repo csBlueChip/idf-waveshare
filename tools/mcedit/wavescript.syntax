@@ -122,7 +122,6 @@ context default
     keyword whole BTN cyan
     keyword whole CIRC cyan
     keyword whole CLS cyan
-    keyword whole ECHO cyan
     keyword whole EVENTS cyan
     keyword whole FBOX cyan
     keyword whole FCAT cyan
@@ -153,6 +152,9 @@ context default
     keyword whole SCR cyan
     keyword whole STACK cyan
     keyword whole TBOX cyan
+    keyword whole TEXT cyan
+    keyword whole TLEN cyan
+    keyword whole TPAPER cyan
     keyword whole TCLS cyan
     keyword whole TEMP cyan
     keyword whole TINK cyan

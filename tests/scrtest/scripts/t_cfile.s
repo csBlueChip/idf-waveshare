@@ -19,7 +19,7 @@ FTELL $p FN_PLAIN
 PRINT "plain constant + global: $p"
 LET $i = ID
 PRINT "text constant kept exactly: $i"
-ECHO 1 MSG
+TEXT 1 MSG
 FLOG FN_BOAST appended
 GET $s = FSTAT FN_BOAST
 PRINT "command line: $s"

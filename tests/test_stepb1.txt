@@ -117,11 +117,11 @@ D10 > PRINT
       OK
 D11 > TBOX 1 0 0 172 3
     = OK
-D12 > ECHO 1 "  spaced"
+D12 > TEXT 1 "  spaced"
     = OK; box 1 shows "  spaced"
-D13 > ECHO 1 \n\2big \$5
+D13 > TEXT 1 \n\2big \$5
     = OK; new line, "big $5" in font 2
-D14 > ECHO 1 "x" y
+D14 > TEXT 1 "x" y
     = ERR text after closing quote
 D15 > DEBUG test "a b"
     = OK on the console; the log port shows: test "a b"

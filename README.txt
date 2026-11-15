@@ -29,14 +29,14 @@ Rules:
   - Unknown commands reply: unknown |<line>|
   - '#' starts a comment; "\#" is a literal '#'.
   - Blank and comment-only lines are ignored silently.
-  - Text arguments (ECHO, PRINT, DEBUG, FLOG; FWRITE in scripts):
+  - Text arguments (TEXT, TLEN, PRINT, DEBUG, FLOG; FWRITE in scripts):
       text starts after one separating space; further spaces are kept
       "text" or 'text'   quoted (leading spaces before the quote dropped);
                          \" inside "..." / \' inside '...' = the quote;
                          anything but blanks after the closing quote = ERR
       \"text / \'text    not quoted, starts with a quote
       escapes            \n new line, \\ \# \$ literal; \1..\9 font
-                         (ECHO only, dropped elsewhere)
+                         (TEXT / TLEN only, dropped elsewhere)
     '#' starts a comment even inside quotes: write \#.
   - Max line 200 chars, max 18 arguments.
   - All I/O is ASCII ('^' is used for degrees).
@@ -162,7 +162,8 @@ Screen
                                 (same as SCR TRP NONE NONE)
 
   Transitions (ms = 10..10000, T|B|L|R = side the new image enters from,
-  relative to ROT):
+  relative to ROT; either case, or as arrows for the way it moves:
+  v = T (moves down), ^ = B, > = L, < = R):
 
     PUSH ms T|B|L|R             old slides out, new slides in (full screen)
     FADE ms                     colour blend (changed area only)
@@ -174,7 +175,8 @@ Screen
 Graphics (current rotation, clipped to screen, colours 0..255)
 
   PLOT x y colour               pixel
-  LINE x1 y1 x2 y2 colour       line
+  LINE x1 y1 x2 y2 colour       line (Bresenham; the same pixels whichever
+                                end comes first)
   BOX x y w h colour            rectangle outline
   FBOX x y w h colour           filled rectangle
   TRI x1 y1 x2 y2 x3 y3 colour  triangle outline
@@ -182,19 +184,39 @@ Graphics (current rotation, clipped to screen, colours 0..255)
   CIRC cx cy rad colour         circle outline
   FCIRC cx cy rad colour        filled circle
 
-Text boxes (n = 1..9; a box keeps the rotation it was created in)
+Text boxes (n = 1..32; a box keeps the rotation it was created in)
 
-  TBOX n x y w lines [speed] [lead] [font]
+  TBOX n x y w lines [speed] [font] [lead]
                                 define box: pixels, height in lines;
-                                speed = typing ms/char (0 = off)
+                                speed = typing ms/char (0 = off); font
+                                default 1 (0 = 1); lead default = the
+                                font's own. Ink and paper AUTO, scroll off
+  TBOX n                        report the box, e.g.
+                                n:1 rot:0 x:10 y:10 w:150 lines:2 speed:0
+                                font:1 lead:2 h:50 cx:0 cy:0 scroll:0
+                                ink:auto paper:auto
+                                (':' splits words in scripts: after
+                                GET $t = TBOX 1 the values are $t[2],
+                                $t[4] ...; colours auto | none | RRGGBB)
   TBOX n SET x|y|w|h|s|l|f v    change one property (h in lines, s speed,
-                                l lead, f font)
+                                l lead, f font, 0 = 1)
   TSCRL n 0|1                   auto-scroll at the bottom (default 0)
   TYX n y x                     move cursor (pixels from box top-left)
-  ECHO n text                   print at cursor (text rules: section 1;
-                                \1..\9 = font, this ECHO only)
-  TINK n colour                 text colour
-  TCLS n colour                 set background, clear box, cursor 0,0
+  TEXT n text                   print at cursor (text rules: section 1;
+                                \1..\9 = font, this TEXT only)
+  TLEN n text                   width in pixels TEXT n text would take on
+                                an endless line (widest line if \n);
+                                nothing drawn
+  TINK n colour|AUTO|NONE       text colour. AUTO (default): black or white,
+                                contrasting with the CLS colour. NONE: the
+                                letters show what is under them
+  TPAPER n colour|AUTO|NONE     background for text drawn from now on.
+                                AUTO (default): the CLS colour. NONE: only
+                                the letters are drawn, over what is there
+                                (both NONE: nothing drawn)
+  TCLS n [colour|AUTO]          set the paper (if given), fill the box
+                                with it, cursor 0,0; paper NONE: filled
+                                with the AUTO colour (NONE is an ERR)
   FONT                          list fonts: n name height fw|prop
 
 Images (PNG in /images on the SD card)

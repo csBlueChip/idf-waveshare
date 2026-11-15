@@ -360,7 +360,7 @@ void scrHostCmd(const char *line, void (*cb)(void *ctx, const char *text), void 
 
 bool scrHostIsCommand(const char *name)
 {
-	static const char *c[] = { "ECHO", "CLS", "LED", "UI", "NV", "IMU", "BTN", "FAIL", "REPLY", "EVT",
+	static const char *c[] = { "TEXT", "TLEN", "TPAPER", "CLS", "LED", "UI", "NV", "IMU", "BTN", "FAIL", "REPLY", "EVT",
 	                           "ACC", "GYR", "FBOX", "LINE", "FLOG", "FCAT", "FDIR", "FSTAT", "FDELETE", NULL };
 	for (int i = 0; c[i]; i++) {
 		if (!strcasecmp(c[i], name)) {

@@ -7,7 +7,7 @@
 /*
  * Command parser - transport independent.
  *   - '#' starts a comment to end of line ("\#" is not a comment; it is passed
- *     on for the command, e.g. ECHO prints '#'). Blank/comment-only lines are
+ *     on for the command, e.g. TEXT prints '#'). Blank/comment-only lines are
  *     ignored silently.
  *   - Line is split on spaces/tabs.
  *   - Command names are case-insensitive.
@@ -37,7 +37,7 @@ esp_err_t cmdRegister(const char *name, int minArgs, int maxArgs,
  * and the comment are already removed). Same return rules. */
 typedef const char *(*cmdRawHandler_t)(const char *args, cmdReply_t reply);
 
-/* Register a raw command (no tokenising, e.g. ECHO). */
+/* Register a raw command (no tokenising, e.g. TEXT). */
 esp_err_t cmdRegisterRaw(const char *name, cmdRawHandler_t handler, const char *help);
 
 /* Optional function run after every executed command (e.g. screen update). */

@@ -53,7 +53,7 @@ sys.c INFO MEM WAIT REBOOT PRINT DEBUG FLOG FCAT FDIR FSTAT FDELETE, boot counte
 sys.h system commands API
 telnet.c telnet console server
 telnet.h telnet API
-text.c text boxes (TBOX, ECHO ...), text argument rules
+text.c text boxes (TBOX, TEXT ...), text argument rules
 text.h text boxes API
 ui.c user interfaces (BLE TELNET WEB UART USB), events, Wait screen logic
 ui.h user interface API
