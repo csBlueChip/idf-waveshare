@@ -11,6 +11,11 @@
  *   Service : 6E400001-B5A3-F393-E0A9-E50E24DCCA9E
  *   RX      : 6E400002-...  (Write / Write-No-Rsp, client -> device)
  *   TX      : 6E400003-...  (Notify,              device -> client)
+ *
+ * No pairing / bonding: NimBLE security is off (sdkconfig.defaults
+ * CONFIG_BT_NIMBLE_SECURITY_ENABLE=n), so a pairing request from a phone's or
+ * PC's Bluetooth menu is refused at once ("pairing not supported") and no
+ * stale bond is left behind. Apps connect without pairing.
  */
 
 #define BLE_RX_BUF_SIZE   1024   /* bytes buffered between BLE host and reader */
@@ -21,7 +26,9 @@ typedef void (*bleConnCb_t)(bool connected);
 
 /* Init NimBLE, register NUS, start host task. Advertising starts automatically on sync.
  * onRxCb: received bytes go here (if NULL they are buffered for bleReceive()).
- * onConnCb: optional connect/disconnect notification. */
+ * onConnCb: optional connect/disconnect notification. connected = true only
+ * once the client subscribes to TX (a real terminal); a link that never
+ * subscribes is not reported at all (log: "client never subscribed to TX"). */
 esp_err_t bleInit(bleRxCb_t onRxCb, bleConnCb_t onConnCb);
 
 /* (Re)start advertising. Called internally on sync / disconnect. */

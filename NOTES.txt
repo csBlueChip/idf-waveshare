@@ -128,6 +128,8 @@ conversation context. Keep it current, like the README.
   BLE flaky on Android (connects, no MTU / subscribe, phone ends 0x213 after
     ~8 s): skipping bleSetPower() at ble.pwr 9 did not fix it (undone) -
     not the power code. Next: nRF Connect, NimBLE debug log.
+    Then: NimBLE security off (sdkconfig.defaults) - pairing refused; connect
+    reported to the UI only on the first TX subscribe; peer address logged.
     Found: the phone's / Windows' Bluetooth settings menu pairs and drops
     (no profile it knows); clients must connect from an app (Serial
     Bluetooth Terminal works). Forget stale pairings on phone / PC.
@@ -154,6 +156,9 @@ conversation context. Keep it current, like the README.
     TLEN n text = widest line in pixels. Ink / paper modes AUTO | SET | NONE
     (inkMode/paperMode); NONE drawn by lcdDrawCharT() blending with the back
     buffer; TCLS / scroll use the AUTO colour when paper is NONE.
+    Then: TBOX SET keys l = lines, d = leading (h gone); TYX n line x (line
+    1..lines, cy = (line-1)*(font height + lead)); report cy as line from 1
+    (rounded down). FONT n: name:value details (name spaces -> '_').
   gfxLine: endpoints ordered (smaller y, then x) before Bresenham, so a line
     and its reverse are identical (38/144 differed before; checked on PC).
 

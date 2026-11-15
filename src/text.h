@@ -16,14 +16,16 @@
  *        font default 1 (0 = 1); lead defaults to the font's own.
  *        Cursor 0,0, nothing drawn, ink and paper AUTO, scroll off.
  *   TBOX n            report: n:1 rot:0 x:10 y:10 w:150 lines:2 speed:0 font:1
- *                     lead:2 h:50 cx:0 cy:0 scroll:0 ink:auto paper:auto
+ *                     lead:2 h:50 cx:0 cy:1 scroll:0 ink:auto paper:auto
+ *                     (cx pixels; cy = the cursor's line from 1, rounded down)
  *                     (':' splits words in scripts: GET $t = TBOX 1 -> $t[2k]
  *                     values; colours auto | none | RRGGBB widened from 565)
- *   TBOX n SET x|y|w|h|s|l|f value
- *        change one property, no redraw. x,y,w pixels; h lines (recomputes the
- *        height); s speed; l leading and f font (0 = 1) do NOT resize the box.
+ *   TBOX n SET x|y|w|l|s|d|f value
+ *        change one property, no redraw. x,y,w pixels; l lines (recomputes the
+ *        height); s speed; d leading and f font (0 = 1) do NOT resize the box.
  *   TSCRL n 0|1       auto-scroll when text runs past the bottom (default 0)
- *   TYX n y x         move cursor to pixel y,x from the box top-left
+ *   TYX n line x      move cursor to line 1..lines (top of the line at
+ *                     (line-1) * (font height + lead)), x pixels from the left
  *   TEXT n text       print at the cursor; spaces kept. Text rules: see textUnquote().
  *                     Escapes: \n new line, \\ backslash, \# hash, \$ dollar,
  *                     \1..\9 font (this TEXT only)

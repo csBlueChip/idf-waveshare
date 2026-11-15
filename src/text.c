@@ -83,9 +83,9 @@ static void        textReport(int n, const textBox_t *b, cmdReply_t reply);
 esp_err_t textInit(void)
 {
 	ESP_RETURN_ON_ERROR(cmdRegister("TBOX", 1, 8, textCmdBox,
-	                    "TBOX n [x y w lines [speed] [font] [lead]] | TBOX n SET x|y|w|h|s|l|f v"), TAG, "cmd");
+	                    "TBOX n [x y w lines [speed] [font] [lead]] | TBOX n SET x|y|w|l|s|d|f v"), TAG, "cmd");
 	ESP_RETURN_ON_ERROR(cmdRegister("TSCRL", 2, 2, textCmdScrl, "TSCRL n 0|1  auto-scroll"), TAG, "cmd");
-	ESP_RETURN_ON_ERROR(cmdRegister("TYX", 3, 3, textCmdYx, "TYX n y x  move cursor (pixels)"), TAG, "cmd");
+	ESP_RETURN_ON_ERROR(cmdRegister("TYX", 3, 3, textCmdYx, "TYX n line x  move cursor (line from 1, x pixels)"), TAG, "cmd");
 	ESP_RETURN_ON_ERROR(cmdRegisterRaw("TEXT", textCmdText, "TEXT n text  {\\n, \\\\, \\#, \\$, \\1..9=font}"), TAG, "cmd");
 	ESP_RETURN_ON_ERROR(cmdRegisterRaw("TLEN", textCmdLen, "TLEN n text  width in pixels (widest line)"), TAG, "cmd");
 	ESP_RETURN_ON_ERROR(cmdRegister("TINK", 2, 2, textCmdInk, "TINK n colour|AUTO|NONE  text colour"), TAG, "cmd");
@@ -287,7 +287,8 @@ static void textReport(int n, const textBox_t *b, cmdReply_t reply)
 	}
 	snprintf(line, sizeof(line),
 	         "n:%d rot:%d x:%d y:%d w:%d lines:%d speed:%d font:%d lead:%d h:%d cx:%d cy:%d scroll:%d ink:%s paper:%s\n",
-	         n, b->rot, b->x, b->y, b->w, b->lines, b->speed, b->font, b->lead, b->h, b->cx, b->cy,
+	         n, b->rot, b->x, b->y, b->w, b->lines, b->speed, b->font, b->lead, b->h, b->cx,
+	         b->cy / (fontGet(b->font)->height + b->lead) + 1,	/* line from 1 (rounded down) */
 	         b->scroll ? 1 : 0, ink, paper);
 	reply(line);
 }
@@ -312,7 +313,7 @@ static const char *textCmdBox(int argc, char *argv[], cmdReply_t reply)
 	/* TBOX n SET key value */
 	if (strcasecmp(argv[1], "SET") == 0) {
 		if (argc != 4) {
-			return "usage: TBOX n SET x|y|w|h|s|l|f value";
+			return "usage: TBOX n SET x|y|w|l|s|d|f value";
 		}
 		textBox_t *b = textGet(n);
 		return b ? textCmdSet(b, argv[2], argv[3]) : TEXT_UNDEF_ERR;
@@ -382,7 +383,7 @@ static const char *textCmdSet(textBox_t *b, const char *key, const char *val)
 		}
 		b->w = v;
 		break;
-	case 'h':
+	case 'l':					/* lines */
 		if (!cmdParseInt(val, 1, TEXT_LINES_MAX, &v)) {
 			return "lines must be 1..100";
 		}
@@ -395,7 +396,7 @@ static const char *textCmdSet(textBox_t *b, const char *key, const char *val)
 		}
 		b->speed = v;
 		break;
-	case 'l':
+	case 'd':					/* leading */
 		if (!cmdParseInt(val, 0, TEXT_LEAD_MAX, &v)) {
 			return "lead must be 0..100";
 		}
@@ -416,7 +417,7 @@ static const char *textCmdSet(textBox_t *b, const char *key, const char *val)
 		b->font = v;				/* box size unchanged */
 		break;
 	default:
-		return "usage: TBOX n SET x|y|w|h|s|l|f value";
+		return "usage: TBOX n SET x|y|w|l|s|d|f value";
 	}
 
 	textClampCursor(b);
@@ -440,9 +441,11 @@ static const char *textCmdScrl(int argc, char *argv[], cmdReply_t reply)
 	return NULL;
 }
 
+/* TYX n line x: line 1..lines (top of that line = (line-1) * (font height +
+ * lead)), x pixels from the box's left edge. */
 static const char *textCmdYx(int argc, char *argv[], cmdReply_t reply)
 {
-	int n, y, x;
+	int n, line, x;
 	if (!cmdParseInt(argv[0], 1, TEXT_BOXES, &n)) {
 		return TEXT_BOX_ERR;
 	}
@@ -450,11 +453,14 @@ static const char *textCmdYx(int argc, char *argv[], cmdReply_t reply)
 	if (!b) {
 		return TEXT_UNDEF_ERR;
 	}
-	if (!cmdParseInt(argv[1], 0, b->h - 1, &y) || !cmdParseInt(argv[2], 0, b->w - 1, &x)) {
-		return "y x must be inside the box";
+	int lineH = fontGet(b->font)->height + b->lead;
+	if (!cmdParseInt(argv[1], 1, b->lines, &line) || !cmdParseInt(argv[2], 0, b->w - 1, &x) ||
+	    (line - 1) * lineH > b->h - 1) {
+		snprintf(s_err, sizeof(s_err), "line must be 1..%d, x 0..%d", b->lines, b->w - 1);
+		return s_err;
 	}
 	b->cx   = x;
-	b->cy   = y;
+	b->cy   = (line - 1) * lineH;
 	b->full = false;
 	return NULL;
 }

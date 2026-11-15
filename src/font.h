@@ -12,6 +12,9 @@
  *
  * Command registered by fontInit():
  *   FONT   list fonts as "n name height (fw|prop)"
+ *   FONT n details: n:1 name:DejaVu_Sans_Mono height:24 baseline:19 lead:2
+ *          maxw:12 prop:0 first:32 last:126 (spaces in the name -> '_';
+ *          ':' splits words in scripts: GET $f = FONT 1 -> values at $f[2k])
  */
 
 #define FONT_MAX	9

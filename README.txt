@@ -9,7 +9,10 @@ Firmware 0.5.0, ESP-IDF v6.1. Command console over BLE, telnet or web.
 
 Interfaces (one active at a time, boot choice in NV sys.ui):
 
-  BLE      Nordic UART Service, device name from NV ble.name
+  BLE      Nordic UART Service, device name from NV ble.name. Connect from
+           a BLE terminal app, not the phone's / PC's Bluetooth menu:
+           pairing is refused ("pairing not supported"). The client counts
+           as connected (splash, <<UI CONNECT>>) once it subscribes to TX
   TELNET   Wi-Fi AP, telnet port NV telnet.port (23)
   WEB      Wi-Fi AP, web console at http://<wifi.ip>/ (port NV web.port,
            80; captive portal unless NV web.captive 0)
@@ -193,15 +196,17 @@ Text boxes (n = 1..32; a box keeps the rotation it was created in)
                                 font's own. Ink and paper AUTO, scroll off
   TBOX n                        report the box, e.g.
                                 n:1 rot:0 x:10 y:10 w:150 lines:2 speed:0
-                                font:1 lead:2 h:50 cx:0 cy:0 scroll:0
+                                font:1 lead:2 h:50 cx:0 cy:1 scroll:0
                                 ink:auto paper:auto
                                 (':' splits words in scripts: after
                                 GET $t = TBOX 1 the values are $t[2],
                                 $t[4] ...; colours auto | none | RRGGBB)
-  TBOX n SET x|y|w|h|s|l|f v    change one property (h in lines, s speed,
-                                l lead, f font, 0 = 1)
+  TBOX n SET x|y|w|l|s|d|f v    change one property (l lines, s speed,
+                                d leading, f font 0 = 1; cy in the report
+                                is the cursor's line, from 1)
   TSCRL n 0|1                   auto-scroll at the bottom (default 0)
-  TYX n y x                     move cursor (pixels from box top-left)
+  TYX n line x                  move cursor: line 1..lines, x pixels from
+                                the box's left edge
   TEXT n text                   print at cursor (text rules: section 1;
                                 \1..\9 = font, this TEXT only)
   TLEN n text                   width in pixels TEXT n text would take on
@@ -218,6 +223,10 @@ Text boxes (n = 1..32; a box keeps the rotation it was created in)
                                 with it, cursor 0,0; paper NONE: filled
                                 with the AUTO colour (NONE is an ERR)
   FONT                          list fonts: n name height fw|prop
+  FONT n                        details of font n, e.g. n:1
+                                name:DejaVu_Sans_Mono height:24 baseline:19
+                                lead:2 maxw:12 prop:0 first:32 last:126
+                                (spaces in the name -> '_')
 
 Images (PNG in /images on the SD card)
 

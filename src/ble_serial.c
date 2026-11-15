@@ -43,6 +43,7 @@ static volatile bool        s_connected;
 static volatile bool        s_subscribed;
 static volatile bool        s_synced;
 static volatile bool        s_disabled;	/* bleDisable() called: no advertising until bleEnable() */
+static bool                 s_reported;	/* connect reported to the UI (first TX subscribe) */
 
 /* ---------- Forward decls ---------- */
 static int  bleGattAccess(uint16_t conn, uint16_t attr, struct ble_gatt_access_ctxt *ctxt, void *arg);
@@ -287,10 +288,17 @@ static int bleGapEvent(struct ble_gap_event *event, void *arg)
 		if (event->connect.status == 0) {
 			s_connHandle = event->connect.conn_handle;
 			s_connected  = true;
-			ESP_LOGI(TAG, "connected (handle %d)", s_connHandle);
-			if (s_connCb) {
-				s_connCb(true);
+			s_reported   = false;
+			struct ble_gap_conn_desc d;
+			if (ble_gap_conn_find(s_connHandle, &d) == 0) {
+				const uint8_t *a = d.peer_id_addr.val;
+				ESP_LOGI(TAG, "connected (handle %d, peer %02x:%02x:%02x:%02x:%02x:%02x) - waiting for TX subscribe",
+				         s_connHandle, a[5], a[4], a[3], a[2], a[1], a[0]);
+			} else {
+				ESP_LOGI(TAG, "connected (handle %d) - waiting for TX subscribe", s_connHandle);
 			}
+			/* the UI hears about it on the first TX subscribe: a client that never
+			 * subscribes (e.g. a phone's Bluetooth menu) gets no splash / <<UI CONNECT>> */
 		} else {
 			ESP_LOGW(TAG, "connect failed: %d", event->connect.status);
 			bleStartAdvertising();
@@ -298,13 +306,15 @@ static int bleGapEvent(struct ble_gap_event *event, void *arg)
 		break;
 
 	case BLE_GAP_EVENT_DISCONNECT:
-		ESP_LOGI(TAG, "disconnected (reason 0x%x)", event->disconnect.reason);
+		ESP_LOGI(TAG, "disconnected (reason 0x%x)%s", event->disconnect.reason,
+		         s_reported ? "" : " - client never subscribed to TX");
 		s_connected  = false;
 		s_subscribed = false;
 		s_connHandle = BLE_HS_CONN_HANDLE_NONE;
-		if (s_connCb) {
+		if (s_reported && s_connCb) {
 			s_connCb(false);
 		}
+		s_reported = false;
 		bleStartAdvertising();
 		break;
 
@@ -316,6 +326,12 @@ static int bleGapEvent(struct ble_gap_event *event, void *arg)
 		if (event->subscribe.attr_handle == s_txHandle) {
 			s_subscribed = event->subscribe.cur_notify;
 			ESP_LOGI(TAG, "TX notify %s", s_subscribed ? "on" : "off");
+			if (s_subscribed && !s_reported) {
+				s_reported = true;
+				if (s_connCb) {
+					s_connCb(true);			/* now a real client: splash, <<UI CONNECT>> */
+				}
+			}
 		}
 		break;
 

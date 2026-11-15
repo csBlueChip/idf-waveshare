@@ -20,7 +20,7 @@ static const char *fontCmd(int argc, char *argv[], cmdReply_t reply);
 
 esp_err_t fontInit(void)
 {
-	return cmdRegister("FONT", 0, 0, fontCmd, "FONT  list fonts");
+	return cmdRegister("FONT", 0, 1, fontCmd, "FONT [n]  list fonts / details of font n");
 }
 
 int fontCount(void)
@@ -52,7 +52,27 @@ int fontCharWidth(const font_t *f, char c)
 
 static const char *fontCmd(int argc, char *argv[], cmdReply_t reply)
 {
-	char line[64];
+	char line[160];
+	if (argc == 1) {				/* FONT n: name:value words (':' splits in scripts) */
+		static char err[32];
+		int         n;
+		if (!cmdParseInt(argv[0], 1, FONT_COUNT, &n)) {
+			snprintf(err, sizeof(err), "font must be 1..%d", FONT_COUNT);
+			return err;
+		}
+		const font_t *f = s_fonts[n - 1];
+		char          name[48];
+		snprintf(name, sizeof(name), "%s", f->name);
+		for (char *p = name; *p; p++) {
+			if (*p == ' ' || *p == ':' || *p == '|') {
+				*p = '_';			/* one word */
+			}
+		}
+		snprintf(line, sizeof(line), "n:%d name:%s height:%u baseline:%u lead:%u maxw:%u prop:%d first:%u last:%u\n",
+		         n, name, f->height, f->baseline, f->lead, f->maxWidth, f->prop ? 1 : 0, f->first, f->last);
+		reply(line);
+		return NULL;
+	}
 	for (int i = 0; i < FONT_COUNT; i++) {
 		snprintf(line, sizeof(line), "%d %s %u (%s)\n", i + 1, s_fonts[i]->name,
 		         s_fonts[i]->height, s_fonts[i]->prop ? "prop" : "fw");

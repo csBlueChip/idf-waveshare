@@ -174,7 +174,7 @@ TINK 2 0,0,0
 TEXT 2 Word wrap keeps words whole in the serif font.
 TSCRL 2 1
 TEXT 2 \nScrolled line one\nScrolled line two
-TYX 2 0 80
+TYX 2 1 80
 TEXT 2 X
 TBOX 3 6 210 136 3 40                  # typing effect, 40 ms per character
 TCLS 3 40,40,40
@@ -195,7 +195,10 @@ ROT 0
 TEXT 4 Y axis label                    # still sideways
 
 # ---------- SET and errors ----------
-TBOX 3 SET h 2
+TBOX 3 SET l 2
+TBOX 3 SET h 2                         # ERR usage: TBOX n SET x|y|w|l|s|d|f value
+TBOX 3 SET d 4                         # leading 4 (box size unchanged)
+TBOX 3 SET d 2
 TBOX 3 SET f 2
 TEXT 3 \n now serif
 TBOX 3 SET w 10                        # ERR w must be at least 20 for font 2
@@ -205,7 +208,11 @@ TBOX 5 0 0 15 4
 TEXT 5 a\2bcd                          # ERR font 2 too wide for box (bcd printed)
 TEXT 1 \7oops                          # ERR font 7 not available (text printed)
 TEXT 6 x                               # ERR box not defined (TBOX)
-TYX 1 500 0                            # ERR y x must be inside the box
+TYX 1 5 0                              # ERR line must be 1..4, x 0..159
+TYX 1 2 10                             # cursor: line 2, 10 px in
+TBOX 1                                 # ... cx:10 cy:2 ...
+FONT 1                                 # n:1 name:DejaVu_Sans_Mono height:24 baseline:19 lead:2 maxw:12 prop:0 first:32 last:126
+FONT 3                                 # ERR font must be 1..2
 TBOX 1                                 # n:1 rot:0 x:6 y:6 w:160 lines:4 ... ink:FFFFFF paper:auto
 TBOX 33                                # ERR box must be 1..32
 TBOX 32 0 0 100 1 0 0 4                # font 0 = 1, lead 4

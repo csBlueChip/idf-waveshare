@@ -77,7 +77,15 @@ To do
      (ECHO gone = unknown); TLEN (selftest values); TPAPER / TINK colour,
      AUTO, NONE (letters over an image, cut-out letters, both NONE = no
      drawing); TCLS n / TCLS n colour / TCLS n NONE = ERR; scrolling with
-     paper NONE fills with the CLS colour; sideways box (ROT 1).
+     paper NONE fills with the CLS colour; sideways box (ROT 1); TBOX SET
+     l (lines) / d (leading), SET h = ERR; TYX n line x (line from 1),
+     report cy as line; FONT n details.
+
+ 24. Board test - BLE: delete sdkconfig first (new default: NimBLE
+     security off). Android / Windows Bluetooth menu: pairing refused at
+     once, no bond left; Serial Bluetooth Terminal connects as before;
+     splash / <<UI CONNECT>> only after TX subscribe; log shows peer
+     address, "TX notify on", or "client never subscribed to TX".
 
 On hold
  20. iPhone test - web console in the captive-portal window: page not too

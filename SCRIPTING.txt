@@ -363,6 +363,7 @@ implementation:
   (nothing drawn):  GET $w = TLEN 1 "Score: $s"  -> $w = 132
   TBOX n replies the box settings as name:value words, so after
   GET $t = TBOX 1 the values are $t[2] (n), $t[4] (rot), $t[6] (x) ...
+  FONT n the same way: GET $f = FONT 1 -> $f[6] = height, $f[12] = maxw.
 
   All three take the text the same way, with $variable substitution:
     - text starts after the separating space; further spaces are kept:
