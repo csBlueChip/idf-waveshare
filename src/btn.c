@@ -123,7 +123,7 @@ esp_err_t btnInit(void)
 		return ESP_ERR_NO_MEM;
 	}
 	return cmdRegister("BTN", 0, 5, btnCmd,
-	                   "BTN [n s l d [TACT|TOUCH]] | BTN [n] SET deb|long|dbl|rpt ms | BTN CAL");
+	                   "BTN [n [s l d [TACT|TOUCH]]] | BTN LIST | BTN [n] SET deb|long|dbl|rpt ms | BTN CAL");
 }
 
 /* ================= Event sources (ISR context) ================= */
@@ -510,6 +510,37 @@ static void btnList(cmdReply_t reply)
 	}
 }
 
+/* BTN n: one button as field:value words (':' splits words in scripts). */
+static void btnReport(int n, cmdReply_t reply)
+{
+	const btn_t *b = &s_btn[n];
+	char         line[160];
+	if (b->type == BTN_OFF) {
+		snprintf(line, sizeof(line), "n:%d gpio:%d type:off\n", n, s_gpio[n]);
+	} else {
+		snprintf(line, sizeof(line),
+		         "n:%d gpio:%d type:%s short:%d long:%d double:%d t_deb:%d t_long:%d t_dbl:%d t_rpt:%d\n",
+		         n, s_gpio[n], b->type == BTN_TACT ? "tact" : "touch", b->eShort, b->eLong, b->eDouble,
+		         b->t.b, b->t.l, b->t.d, b->t.r);
+	}
+	reply(line);
+}
+
+/* BTN LIST: the enabled buttons, space-separated ("" if none). */
+static void btnActive(cmdReply_t reply)
+{
+	char line[64];
+	int  len = 0;
+	line[0] = '\0';
+	for (int n = 1; n <= s_count; n++) {
+		if (s_btn[n].type != BTN_OFF) {
+			len += snprintf(line + len, sizeof(line) - len, "%s%d", len ? " " : "", n);
+		}
+	}
+	snprintf(line + len, sizeof(line) - len, "\n");
+	reply(line);
+}
+
 static const char *btnCmd(int argc, char *argv[], cmdReply_t reply)
 {
 	const char *err = NULL;
@@ -519,6 +550,8 @@ static const char *btnCmd(int argc, char *argv[], cmdReply_t reply)
 
 	if (argc == 0) {
 		btnList(reply);
+	} else if (strcasecmp(argv[0], "LIST") == 0 && argc == 1) {
+		btnActive(reply);
 	} else if (strcasecmp(argv[0], "CAL") == 0 && argc == 1) {
 		if (btnTouchStop() != ESP_OK || btnTouchStart(reply) != ESP_OK) {
 			err = "touch calibration failed";
@@ -529,6 +562,8 @@ static const char *btnCmd(int argc, char *argv[], cmdReply_t reply)
 		static char msg[32];
 		snprintf(msg, sizeof(msg), "button must be 1..%d", s_count);
 		err = msg;
+	} else if (argc == 1) {
+		btnReport(n, reply);
 	} else if (argc == 4 && strcasecmp(argv[1], "SET") == 0) {
 		err = (s_btn[n].type == BTN_OFF) ? "button not enabled" : btnSetTiming(&s_btn[n].t, argv[2], argv[3]);
 	} else if (argc < 4) {

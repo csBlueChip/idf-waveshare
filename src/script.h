@@ -67,6 +67,9 @@ bool scriptHas(const char *name);
  * for it to end (RESET! screen: sys/reset). false = could not start. */
 bool scriptRunWait(const char *name, const char *args);
 
+/* INFO: "name running", "name paused" or "none". */
+void scriptState(char *out, size_t n);
+
 /* A script is running or paused. */
 bool scriptActive(void);
 

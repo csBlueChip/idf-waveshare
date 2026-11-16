@@ -15,6 +15,9 @@
  *
  * Commands registered by btnInit():
  *   BTN                               list buttons (n GPn ...) and global timings
+ *   BTN n                             one button, field:value: n gpio type (tact|touch|off)
+ *                                     short long double t_deb t_long t_dbl t_rpt
+ *   BTN LIST                          the enabled buttons, space-separated
  *   BTN n short long double [TACT|TOUCH]
  *                                     enable button n with these gestures (0|1);
  *                                     copies the global timings. BTN n 0 0 0 = off

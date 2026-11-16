@@ -17,6 +17,10 @@
 #include "script.h"
 #include "sd.h"
 #include "ui.h"
+#include "nv.h"
+#include "sys.h"
+#include "log.h"
+#include "esp_timer.h"
 
 static const char *TAG = "fm";
 
@@ -32,6 +36,9 @@ static const char *TAG = "fm";
 #define FM_UP_TMP	".upl"		/* upload goes to <name>.upl, renamed when complete */
 #define FM_UP_RETRIES	3		/* receive time-outs in a row before giving up */
 #define FM_JSON_FLUSH	1024		/* list: send when this much is buffered */
+#define FM_DEBUG_CFG	FM_SYS_DIR "/debug.cfg"	/* reloaded when changed here */
+#define FM_RUN_WAIT_MS	5000		/* RUN: start at the console's reconnect, or after this */
+#define FM_RUN_ARGS	160
 
 /* built-in page, embedded from assets/fm.html (see CMakeLists.txt) */
 extern const char fm_html_start[] asm("_binary_fm_html_start");
@@ -51,6 +58,14 @@ static esp_err_t   fmRen(httpd_req_t *req);
 static esp_err_t   fmMkdir(httpd_req_t *req);
 static esp_err_t   fmExit(httpd_req_t *req);
 static esp_err_t   fmPut(httpd_req_t *req);
+static esp_err_t   fmNvImport(httpd_req_t *req);
+static esp_err_t   fmRun(httpd_req_t *req);
+static void        fmCfgChanged(const char *path);
+static void        fmRunTimer(void *arg);
+static void        fmRunMain(int arg);
+
+static char               s_runLine[8 + SD_NAME_MAX + FM_RUN_ARGS];	/* pending "RUN name args" */
+static esp_timer_handle_t s_runTimer;
 
 /* ================= Public API ================= */
 
@@ -185,6 +200,8 @@ void fmRegister(httpd_handle_t hd)
 		{ .uri = "/fm/mkdir", .method = HTTP_POST, .handler = fmMkdir },
 		{ .uri = "/fm/exit",  .method = HTTP_POST, .handler = fmExit },
 		{ .uri = "/fm/put",   .method = HTTP_POST, .handler = fmPut },
+		{ .uri = "/fm/nvimport", .method = HTTP_POST, .handler = fmNvImport },
+		{ .uri = "/fm/run",   .method = HTTP_POST, .handler = fmRun },
 	};
 	for (int i = 0; i < FM_URI_COUNT; i++) {
 		if (httpd_register_uri_handler(hd, &uris[i]) != ESP_OK) {
@@ -663,6 +680,9 @@ static esp_err_t fmDel(httpd_req_t *req)
 		why = "delete failed";
 	}
 	sdUnlock();
+	if (!why) {
+		fmCfgChanged(path);
+	}
 	return why ? fmFail(req, "409 Conflict", why) : fmOk(req);
 }
 
@@ -698,6 +718,10 @@ static esp_err_t fmRen(httpd_req_t *req)
 		why = "rename failed (folder missing?)";
 	}
 	sdUnlock();
+	if (!why) {
+		fmCfgChanged(from);
+		fmCfgChanged(to);
+	}
 	return why ? fmFail(req, "409 Conflict", why) : fmOk(req);
 }
 
@@ -822,6 +846,7 @@ static esp_err_t fmPut(httpd_req_t *req)
 		return fmPutFail(req, "409 Conflict", why);
 	}
 	ESP_LOGI(TAG, "uploaded %s (%u bytes)", path + strlen(SD_MOUNT_POINT), (unsigned)req->content_len);
+	fmCfgChanged(path);
 	return fmOk(req);
 }
 
@@ -829,4 +854,140 @@ static esp_err_t fmExit(httpd_req_t *req)
 {
 	fmStop();
 	return fmOk(req);
+}
+
+/* /sys/debug.cfg written, deleted or renamed: reload the log volumes. */
+static void fmCfgChanged(const char *path)
+{
+	if (strcasecmp(path, FM_DEBUG_CFG) == 0) {
+		logLoadCfg();
+		ESP_LOGI(TAG, "/sys/debug.cfg reloaded");
+	}
+}
+
+static char s_capture[200];			/* nvImport() warning, for the reply */
+
+static void fmCapture(const char *text)
+{
+	strlcat(s_capture, text, sizeof(s_capture));
+}
+
+/* POST /fm/nvimport?p=/sys/name.nvram[&reboot=1]: NV IMPORT name. Reply OK
+ * (plus the warning line, if any) or 409 with the error. reboot=1: restart
+ * after a successful import. */
+static esp_err_t fmNvImport(httpd_req_t *req)
+{
+	static EXT_RAM_BSS_ATTR char q[FM_QUERY_MAX + 1];
+	char        path[FM_PATH_MAX], reboot[4] = "";
+	const char *why;
+
+	if (fmOff(req)) {
+		return ESP_OK;
+	}
+	if ((why = fmArg(req, "p", path, sizeof(path)))) {
+		return fmFail(req, "400 Bad Request", why);
+	}
+	const char *name = path + strlen(FM_SYS_DIR "/");
+	size_t      len  = strlen(path);
+	if (strncasecmp(path, FM_SYS_DIR "/", strlen(FM_SYS_DIR "/")) != 0 || strchr(name, '/') ||
+	    len < 6 || strcasecmp(path + len - 6, ".nvram") != 0) {
+		return fmFail(req, "400 Bad Request", "not a /sys/*.nvram file");
+	}
+	if (httpd_req_get_url_query_str(req, q, sizeof(q)) == ESP_OK) {
+		httpd_query_key_value(q, "reboot", reboot, sizeof(reboot));
+	}
+	s_capture[0] = '\0';
+	why = nvImport(name, fmCapture);
+	if (why) {
+		return fmFail(req, "409 Conflict", why);
+	}
+	ESP_LOGI(TAG, "imported %s", name);
+	httpd_resp_set_type(req, "text/plain");
+	httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+	char body[sizeof(s_capture) + 8];
+	snprintf(body, sizeof(body), "OK%s%s", s_capture[0] ? "\n" : "", s_capture);
+	esp_err_t err = httpd_resp_sendstr(req, body);
+	if (strcmp(reboot, "1") == 0) {
+		ESP_LOGW(TAG, "rebooting after import");
+		sysRebootLater();
+	}
+	return err;
+}
+
+/* POST /fm/run?p=/scripts/name.s|/sys/name.s[&a=args]: leave the SD manager,
+ * then RUN the script once the console page has reconnected (fmRunPending()
+ * from ui.c), or after FM_RUN_WAIT_MS. */
+static esp_err_t fmRun(httpd_req_t *req)
+{
+	static EXT_RAM_BSS_ATTR char q[FM_QUERY_MAX + 1];
+	char        path[FM_PATH_MAX], args[FM_RUN_ARGS * 3 + 1] = "";
+	const char *why;
+
+	if (fmOff(req)) {
+		return ESP_OK;
+	}
+	if ((why = fmArg(req, "p", path, sizeof(path)))) {
+		return fmFail(req, "400 Bad Request", why);
+	}
+	const char *rel = path + strlen(SD_MOUNT_POINT);	/* "/scripts/x.s" */
+	size_t      len = strlen(rel);
+	char        name[SD_NAME_MAX + 8];
+	if (len < 3 || strcasecmp(rel + len - 2, ".s") != 0) {
+		return fmFail(req, "400 Bad Request", "not a script (.s)");
+	}
+	if (strncasecmp(rel, "/scripts/", 9) == 0 && !strchr(rel + 9, '/')) {
+		snprintf(name, sizeof(name), "%.*s", (int)(len - 9 - 2), rel + 9);
+	} else if (strncasecmp(rel, "/sys/", 5) == 0 && !strchr(rel + 5, '/')) {
+		snprintf(name, sizeof(name), "sys/%.*s", (int)(len - 5 - 2), rel + 5);
+	} else {
+		return fmFail(req, "400 Bad Request", "only scripts in /scripts or /sys can be run");
+	}
+	if (httpd_req_get_url_query_str(req, q, sizeof(q)) == ESP_OK &&
+	    httpd_query_key_value(q, "a", args, sizeof(args)) == ESP_OK) {
+		if (!fmUrlDecode(args) || strlen(args) > FM_RUN_ARGS || strpbrk(args, "\r\n")) {
+			return fmFail(req, "400 Bad Request", "bad arguments");
+		}
+	}
+	if (!s_runTimer) {
+		esp_timer_create_args_t a = { .callback = fmRunTimer, .name = "fmrun" };
+		if (esp_timer_create(&a, &s_runTimer) != ESP_OK) {
+			return fmFail(req, "409 Conflict", "out of memory");
+		}
+	}
+	args[FM_RUN_ARGS] = '\0';				/* checked above; tells the compiler too */
+	int w = snprintf(s_runLine, sizeof(s_runLine), "RUN %s%s%.*s", name, args[0] ? " " : "", FM_RUN_ARGS, args);
+	if (w < 0 || w >= (int)sizeof(s_runLine)) {
+		s_runLine[0] = '\0';
+		return fmFail(req, "400 Bad Request", "name and arguments too long");
+	}
+	ESP_LOGI(TAG, "%s (after the SD manager)", s_runLine);
+	esp_err_t err = fmOk(req);
+	fmStop();					/* leave the mode; the page goes back to / */
+	esp_timer_stop(s_runTimer);
+	esp_timer_start_once(s_runTimer, FM_RUN_WAIT_MS * 1000);
+	return err;
+}
+
+static void fmRunTimer(void *arg)
+{
+	uiRunMain(fmRunMain, 0);			/* the console line runs in the main task */
+}
+
+static void fmRunMain(int arg)
+{
+	fmRunPending();
+}
+
+void fmRunPending(void)
+{
+	if (!s_runLine[0]) {
+		return;
+	}
+	char line[sizeof(s_runLine)];
+	strcpy(line, s_runLine);
+	s_runLine[0] = '\0';
+	if (s_runTimer) {
+		esp_timer_stop(s_runTimer);
+	}
+	scriptConsoleLine(line);			/* as if typed: the OK / output go to the client */
 }

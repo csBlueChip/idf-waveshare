@@ -4,7 +4,12 @@
 # ---------- basics ----------
 HELP
 FONT                                   # 1 DejaVu Sans Mono 24 (fw), 2 Liberation Serif 24 (prop)
-UI                                     # TELNET
+UI                                     # active:TELNET default:...
+UI DEFAULT                             # sys.ui=TELNET (boot default is now TELNET)
+UI TELNET DEFAULT                      # sys.ui=TELNET, no switch
+UI TELNET FOREVER                      # ERR usage: ...
+UI NEXT                                # ERR usage: ...
+UI                                     # active:TELNET default:TELNET
 LED 255,0,0
 LED 0,0,0
 foo bar                                # unknown |foo bar|
@@ -70,7 +75,7 @@ SCR TR                                 # > CUT
 CLS 0,0,0
 ACC
 GYR
-TEMP
+TEMP                                   # ^C:nn.n ^F:nn.n ^K:nnn.n
 ROT 1
 CLS 0,0,0
 ACC                                    # landscape: left column
@@ -78,7 +83,7 @@ GYR                                    # landscape: right column
 TEMP
 ROT 0
 
-BAT                                    # Vb: x.yy V, under gZ
+BAT                                    # Vb:x.yy, under gZ
 ROT 1
 CLS 0,0,0
 ACC
@@ -88,7 +93,7 @@ BAT                                    # landscape: right column, under gZ
 ROT 0
 
 # ---------- system ----------
-INFO
+INFO                                   # ... App: n KB of 4096 KB (n %), Boot: n, Clock:, Script: none
 WAIT 1500                              # OK after 1.5 s
 WAIT 60001                             # ERR ms must be 0..60000
 
@@ -147,7 +152,7 @@ NV GET btn.gpio
 NV SET wifi.ip 192.168.4.255           # ERR wifi.ip is not a host address for wifi.cidr
 NV GET wifi.ssid
 NV RESET scr.bl
-NV GET scr.bl                          # scr.bl=100
+NV GET scr.bl                          # 100
 NV IMPORT missing                      # ERR file not found
 NV RESET                               # all defaults
 NV IMPORT selftest_backup              # back to what you had
@@ -245,6 +250,11 @@ BTN 1 1 0 0 TOUCH                      # ERR button 1 is TACT only
 BTN 11 1 0 0                           # ERR button must be 1..10
 BTN 2 1 2 0                            # ERR short long double must be 0|1
 BTN                                    # shows the settings above
+BTN 2                                  # n:2 gpio:2 type:tact short:1 long:0 double:0 t_deb:30 t_long:600 t_dbl:300 t_rpt:300
+BTN LIST                               # 1 2 3
+IMU                                    # acc:4 arate:224 ... orient:.. orient_auto:..
+EVENTS                                 # BTN:1 IMU:1 UI:1 SCRIPT:1
+LOG                                    # log:AUTO debug:0
 # now press the buttons: <<BTN n ...>> messages arrive between replies
 
 # ---------- end ----------

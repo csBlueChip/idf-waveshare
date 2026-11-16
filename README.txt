@@ -53,7 +53,11 @@ General
 
   HELP                          list commands
   INFO                          chip, memory, MACs, firmware, partition,
-                                reset reason, timestamp, uptime, SD card size
+                                App (image size of the OTA slot, %), Boot
+                                (boot count), reset reason, timestamp,
+                                Clock (date and time, or "not set"),
+                                Script (name running|paused, or none),
+                                uptime, SD card size
   WAIT ms                       pause 0..60000 ms, 1 ms resolution
                                 (blocks the client's other commands)
   REBOOT                        reply OK, then restart
@@ -83,7 +87,8 @@ Data files (text files SD:/scripts/data/file.txt; file = letters, digits,
   (section 9) use .txt files only.
   No SD card, a missing file or a read-only file is an ERR.
 
-  LOG                           show where logs go (section 7)
+  LOG                           show where logs go (section 7):
+                                log:AUTO debug:0
   LOG UART|USB|BOTH|AUTO        set it (this boot only; default AUTO)
   LOG DEBUG [device]            log volume of every device / one
   LOG DEBUG device n [SAVE]     set it 0..4 (this boot; SAVE: also in
@@ -93,14 +98,15 @@ Data files (text files SD:/scripts/data/file.txt; file = letters, digits,
   LOG DEBUG ALL n [SAVE]        every device to n (SAVE: as LOG DEBUG
                                 SAVE); LOG DEBUG ALL lists them
   EVENTS                        show which events the client receives:
-                                BTN 1 IMU 1 UI 1 SCRIPT 1
+                                BTN:1 IMU:1 UI:1 SCRIPT:1
   EVENTS src 0|1                src = BTN IMU UI SCRIPT ALL; 0 = the client
                                 gets no <<src ...>> events (this boot only;
                                 scripts will always get every event)
 
 Interface
 
-  UI                            show active interface
+  UI                            show the interfaces: active:<name>
+                                default:<name> (NV sys.ui)
   UI BLE                        switch to BLE
   UI TELNET                     reply SSID/PWD/IP/PORT (telnet.port), switch
                                 to telnet
@@ -110,9 +116,12 @@ Interface
   UI USB                        switch to the USB serial console
   UI MSC                        MSC Wait screen: no console; hold BOOT
                                 to start USB disk mode (as FILES)
-  UI NEXT                       switch to the next interface: WEB ->
-                                TELNET -> BLE -> USB -> UART -> MSC -> WEB
-                                (as BOOT double press; sys.ui unchanged)
+  UI <interface> DEFAULT        the same, and make it the boot default:
+                                stores NV sys.ui, replies sys.ui=<name>
+                                (already on it: only stores)
+  UI DEFAULT                    the current interface becomes the boot
+                                default (sys.ui=<name>)
+  (The next interface in the loop: BOOT double press on the Wait screen.)
     Events (to the client):
     <<UI CONNECT>>              first message of a new session
     <<UI DISCONNECT>>           session ended (no client left to see it;
@@ -238,14 +247,19 @@ Sensors
 
   ACC                           accelerometer aX aY aZ (g)
   GYR                           gyroscope gX gY gZ (dps)
-  TEMP                          IMU temperature (^C)
-  BAT                           battery voltage "Vb: x.yy V"
+  TEMP                          IMU temperature: ^C:23.4 ^F:74.1 ^K:296.6
+  BAT                           battery voltage: Vb:4.12 (charging cannot
+                                be detected: the charger is not wired to
+                                a GPIO; no battery reads like full)
 
   Values are replied only (on-screen display is commented out in the code).
 
 IMU (QMI8658A; see section 8)
 
-  IMU                           status: ranges, rates, detectors
+  IMU                           status, one line: acc:4 arate:224 gyr:512
+                                grate:224 tap1:0 tap2:0 tap3:0 still:0
+                                motion:0 wom:100 sigmo:0 sigmo_rep:0
+                                orient:NONE orient_auto:0
   IMU ACC [range rate]          accel range 2|4|8|16 g, rate 28..896 Hz
   IMU GYR [range rate]          gyro range 16..2048 dps, rate 28..896 Hz
                                 (stored in NV, applied now)
@@ -298,6 +312,10 @@ Buttons (n = 1..count of NV btn.gpio, default 10 on GPIO 0 2 4 5 6 7 8 9
 10 11; 1 = BOOT, tact only; TOUCH only on GPIO1..14)
 
   BTN                           list buttons (n GPn ...) and global timings
+  BTN n                         one button: n:2 gpio:2 type:tact|touch|off
+                                short:1 long:0 double:0 t_deb:30
+                                t_long:600 t_dbl:300 t_rpt:0
+  BTN LIST                      the enabled buttons, e.g. 1 2 5
   BTN n s l d                   enable tact button n: short/long/double 0|1
   BTN n s l d TACT|TOUCH        same, choose switch or touch pad
   BTN n 0 0 0                   disable button n
@@ -320,6 +338,7 @@ Settings (stored in flash, used at the next boot)
 
   NV GET                        list all settings
   NV GET key                    show one setting
+                                - the value only, e.g. NV GET scr.bl -> 100
                                 (NV is privileged: GET shows secrets such
                                 as wifi.pwd in clear)
   NV SET key value              check and store; value * = the key's
@@ -400,8 +419,22 @@ SD card manager (web UI only)
   Keys (? shows them): Up/Down move (list or tree), Tab switches tree /
   list, Left/Right fold / unfold (tree), Enter open / View / Download,
   Ctrl+Enter Download, Backspace parent, F5 Refresh, + New folder,
-  Ctrl+U Upload, F2 Rename, I Info, Del Delete, Ctrl+X Exit; viewer: L lines,
-  W wrap, Ctrl+Enter Download, Esc close.
+  Ctrl+U Upload, F2 Rename, I Info, E Edit, Del Delete, Ctrl+X Exit; viewer:
+  L lines, W wrap, E Edit, Ctrl+Enter Download, Esc close; editor: Tab
+  inserts a tab, Ctrl+S Save, Esc close.
+  Edit (text and HTML files): a plain text box. Files over 256 KB or with
+  non-ASCII / NUL bytes are refused; CRLF files show a warning (saved with
+  LF). Save (Ctrl+S) always asks for the name - Enter keeps it, a new name
+  saves a copy (handy for read-only files and trial edits); an existing
+  name asks "replace?", a read-only one asks for another name. Saved like
+  an upload (name.upl, renamed when complete). Closing with unsaved
+  changes asks first.
+  Viewer extras: Import (lightbulb, /sys/*.nvram files) = NV IMPORT, with a
+  "reboot now" choice; Run (play, .s files in /scripts or /sys) asks for
+  the arguments, leaves the SD manager and runs the script once the
+  console page is back (or after 5 s), so its output shows there.
+  Saving, uploading, deleting or renaming /sys/debug.cfg reloads the log
+  volumes at once.
   FILES SYNEXPORT               write the built-in viewer colours to
                                 SD:/sys/syntax_builtin.cfg (with
                                 comments listing every highlighted word

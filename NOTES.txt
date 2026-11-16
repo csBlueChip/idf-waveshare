@@ -159,6 +159,19 @@ conversation context. Keep it current, like the README.
     Then: TBOX SET keys l = lines, d = leading (h gone); TYX n line x (line
     1..lines, cy = (line-1)*(font height + lead)); report cy as line from 1
     (rounded down). FONT n: name:value details (name spaces -> '_').
+  UI ... DEFAULT (was PERSIST) stores sys.ui (uiPersist); UI NEXT removed;
+    UI replies active:X default:Y; scr_exec: UI DEFAULT does not end a script; INFO adds App (esp_image_get_
+    metadata of the running partition; bootloader_support), Boot, Clock,
+    Script (scriptState).
+  SD manager: plain editor (textarea; /fm/get raw, saves via /fm/put; ASCII
+    only, 256 KB), Import (/fm/nvimport -> nvImport(), reboot=1 ->
+    sysRebootLater), Run (/fm/run: fmStop, pending "RUN name args" started
+    by fmRunPending() on the console's UI_EV_CONNECT or after 5 s via
+    uiRunMain). /sys/debug.cfg put/del/ren -> logLoadCfg(). FM_URI_COUNT 12.
+  Replies made script-friendly (field:value, ':' splits words): TEMP ^C ^F
+    ^K, BAT Vb:x.yy, NV GET key = value only, EVENTS, LOG, IMU status (one
+    line), BTN n, BTN LIST (enabled numbers). Lists stay for people: MEM,
+    INFO, FONT, IMG, FDIR, RUN, BTN. Charging is not detectable (no GPIO).
   gfxLine: endpoints ordered (smaller y, then x) before Bresenham, so a line
     and its reverse are identical (38/144 differed before; checked on PC).
 

@@ -19,9 +19,9 @@ A. NV SETTINGS
 --------------
 
 A1  > NV GET uart.baud
-    = uart.baud=115200
+    = 115200
 A2  > NV GET ser.echo
-    = ser.echo=1
+    = 1
 A3  > NV SET uart.baud 12345
     = ERR uart.baud must be 9600|19200|38400|57600|115200|230400|460800|921600
 A4  > NV SET ser.echo 2
@@ -35,7 +35,7 @@ B. LOG ROUTING WITH A NETWORK UI
 
 B1  * (UI is TELNET or WEB) watch terminals A and B, then
     > UI
-    = TELNET (or WEB) on the control console; log lines (e.g. "I (...) main:
+    = active:TELNET (or WEB) default:... on the control console; log lines (e.g. "I (...) main:
       rx: UI") appear on BOTH A and B
 
 
@@ -60,12 +60,12 @@ C6  * terminal A: Enter twice, type   UI   Enter, then Enter once
 C7  * terminal A: type   +++   and wait 1 s (no Enter)
     = new line, then [debug enabled, --- to stop]
 C8  > UI
-    = USB, OK on A; the log line for "rx: UI" now ALSO shows on A
+    = active:USB default:..., OK on A; the log line for "rx: UI" now ALSO shows on A
       (and still on B)
 C9  * terminal A: type   ---   and wait 1 s
     = [debug disabled]
 C10 > UI
-    = USB, OK; log line only on B, not on A
+    = active:USB default:..., OK; log line only on B, not on A
 C11 * terminal A: type   +++   then Enter at once
     = unknown |+++|   (no debug)
 C12 * terminal A: type   +++x   wait 1 s, then Enter
@@ -131,7 +131,7 @@ F2  > REBOOT
     = OK; reboot. Terminal B: boot messages, then the LAST line on B is
       [Startup Complete - UART UI active]; later logs appear on A only
 F3  * terminal B: type   UI   Enter
-    = splash; UART, OK
+    = splash; active:UART default:..., OK
 F4  > NV SET sys.ui USB
     > REBOOT
     = after the reboot (re-open terminal A if the PC dropped it):

@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include "esp_err.h"
+#include "cmd.h"
 
 /*
  * Stored settings (NVS namespace "wavedemo"). Values are read by the modules
@@ -82,7 +83,7 @@
  *                         .nvram files: default.nvram uses it for the
  *                         per-board keys; wifi.pwd gets a new number)
  *   NV SET btn.gpio 0 2 4 ..   same, the GPIO list (several words = one value)
- *   NV GET [key]          show one or all (key=value); secrets (wifi.pwd) are
+ *   NV GET [key]          all as key=value lines, or one key's value only; secrets (wifi.pwd) are
  *                         shown in clear - NV is a privileged command
  *   NV RESET [key]        back to default (all if no key; sys.bootcnt is kept)
  *   NV EXPORT name        write key=value lines to SD:/sys/name.nvram (secret keys,
@@ -117,6 +118,11 @@ const char *nvSetMany(int n, const char *keys[], const char *vals[], int *badInd
 
 /* NV EXPORT: write SD:/sys/<name>[.nvram]. NULL or an error. */
 const char *nvExport(const char *name);
+
+/* NV IMPORT: set the keys in SD:/sys/<name>[.nvram] (all checked first;
+ * nothing stored if any is bad). reply (may be NULL) gets the read-only
+ * warning line. NULL or an error. */
+const char *nvImport(const char *name, cmdReply_t reply);
 
 /* NV RESET (all): every key back to its default, except sys.bootcnt. */
 const char *nvResetAll(void);

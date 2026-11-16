@@ -32,15 +32,20 @@
  * partial line from the previous session is discarded.
  *
  * Command registered by uiInit():
- *   UI          report active interface
+ *   UI          report "active:<name> default:<sys.ui>"
  *   UI BLE      switch to BLE
  *   UI TELNET   send SSID/PWD/IP/PORT (from NV), then switch to telnet
  *   UI WEB      send SSID/PWD/URL (from NV), then switch to the web console
  *   UI UART     send BAUD (from NV), then switch to the UART console
  *   UI USB      switch to the USB serial console
  *   UI MSC      MSC Wait screen (no console): BOOT held starts USB disk mode
- *   UI NEXT     switch to the next one (WEB -> TELNET -> BLE -> USB -> UART -> MSC -> WEB)
- *   EVENTS [src 0|1]  which <<src ...>> events the client receives, src =
+ *   UI <one of the above> DEFAULT   also store it as NV sys.ui (reply
+ *               "sys.ui=<name>" first; already on it: only stores)
+ *   UI DEFAULT  store the current interface as NV sys.ui
+ * UI alone replies "active:<name> default:<NV sys.ui>". (The next interface
+ * in the loop: BOOT double press only - there is no UI NEXT.)
+ *   EVENTS [src 0|1]  which <<src ...>> events the client receives ("BTN:1
+ *               IMU:1 UI:1 SCRIPT:1"), src =
  *               BTN IMU UI SCRIPT ALL (this boot only; all on at boot)
  *
  * Events sent: <<UI CONNECT>> (the client's first message), <<UI DISCONNECT>>,

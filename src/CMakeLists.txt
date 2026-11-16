@@ -10,7 +10,7 @@ idf_component_register(
 	              fatfs sdmmc esp_driver_sdmmc
 	              esp_wifi esp_netif esp_event lwip vfs
 	              esp_driver_gpio esp_driver_touch_sens esp_timer
-	              esp_adc app_update esp_psram spi_flash esp_app_format esp_http_server
+	              esp_adc app_update esp_psram spi_flash esp_app_format esp_http_server bootloader_support
 	              esp_driver_uart esp_driver_usb_serial_jtag
 )
 

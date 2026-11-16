@@ -75,6 +75,7 @@ static EXT_RAM_BSS_ATTR scriptEv_t s_ev[SCR_EVQ];
 static int               s_nev, s_dropped;
 
 static volatile bool     s_running, s_paused, s_system;
+static char              s_curName[SCR_FNAME_MAX + 8];	/* script being run (INFO) */
 static volatile bool     s_stopReq, s_pauseReq, s_abort;
 static volatile int      s_go = -1;
 static volatile bool     s_inputWait, s_inputHave;
@@ -158,6 +159,15 @@ bool scriptRunWait(const char *name, const char *args)
 		return false;
 	}
 	return scriptStart(name, args, NULL, false, true, true, NULL);
+}
+
+void scriptState(char *out, size_t n)
+{
+	if (!s_running) {
+		snprintf(out, n, "none");
+	} else {
+		snprintf(out, n, "%s %s", s_curName[0] ? s_curName : "?", s_paused ? "paused" : "running");
+	}
 }
 
 bool scriptActive(void)
@@ -455,6 +465,7 @@ static void scriptTask(void *arg)
 			esp_timer_start_periodic(s_watch, SCRIPT_WATCH_MS * 1000);
 		}
 
+		snprintf(s_curName, sizeof(s_curName), "%s", job.name);
 		scrResult_t r = scrRun(job.name, job.args, job.fn[0] ? job.fn : NULL, job.load);
 
 		if (job.system) {

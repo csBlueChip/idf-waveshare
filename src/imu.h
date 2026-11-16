@@ -10,7 +10,10 @@
  *
  * Commands registered by imuInit():
  *   ACC | GYR | TEMP          read accel (g), gyro (dps), die temperature (^C)
- *   IMU                       status
+ *   IMU                       status, one line of field:value words: acc arate
+ *                             gyr grate tap1 tap2 tap3 still motion wom sigmo
+ *                             sigmo_rep orient orient_auto
+ *   TEMP                      ^C:23.4 ^F:74.1 ^K:296.6 (one decimal)
  *   IMU ACC|GYR [range rate]  show / store + apply range and rate
  *   IMU RESET                 chip reset, NV config, all detectors off
  *   IMU TAP [s d t | NONE]    <<IMU TAP>> <<IMU 2TAP>> <<IMU 3TAP>>

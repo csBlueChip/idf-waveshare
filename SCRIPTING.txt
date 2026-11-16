@@ -65,7 +65,7 @@ implementation:
                         the debug console before a client connects.
 
   EVENTS                list what the client receives:
-                          BTN 1 IMU 1 UI 1 SCRIPT 1
+                          BTN:1 IMU:1 UI:1 SCRIPT:1
   EVENTS src 0|1        src = BTN | IMU | UI | SCRIPT | ALL
                         0 = the client no longer receives <<src ...>>
                         events. This session only (all 1 after reboot).
@@ -671,9 +671,9 @@ implementation:
   Allowed in scripts: REBOOT, FILES, IMU SLEEP (any level).
   Not allowed (error): RUN STOP CONT LOAD STEP BPT VARS LIST STACK;
   PAUSE in a script gives the error "use BPT!".
-  A UI command that switches (UI WEB, UI NEXT, ...) in any script ends
-  the script straight after it (as UI ... ; EXIT); UI alone (show) does
-  not.
+  A UI command that switches (UI WEB, UI BLE, ...) in any script ends
+  the script straight after it (as UI ... ; EXIT), also UI WEB DEFAULT;
+  UI alone (show) and UI DEFAULT (store the current one) do not.
 
   Load errors always stop the script before it starts: unbalanced
   IF/LOOP/SWITCH/FN/END, unknown statement form, recursive INSERT,
@@ -734,8 +734,8 @@ implementation:
     - The built-in Wait screen and its BOOT handling (long press =
       password, double press = next UI) are off.
     - To see BOOT, the script enables BTN 1 (BTN 1 1 1 1) and uses ON BTN;
-      e.g. on DOUBLE it can do  UI NEXT.
-    - A UI command (UI WEB, UI NEXT, ...) ends the script straight after
+      e.g. on DOUBLE it can do  UI WEB.
+    - A UI command (UI WEB, UI BLE, ...) ends the script straight after
       it (as in every script), so the next Wait screen can run onWait.
     - To see the client, the script registers ON UI; it must exit itself
       on UI CONNECT (the firmware does not stop it).
@@ -791,8 +791,6 @@ implementation:
   - TEXT: $variable substitution, \$, and the quoting rules (section 7).
   - New commands: RUN STOP PAUSE CONT LOAD STEP BPT VARS LIST STACK PRINT DEBUG
     RNG EVENTS LOG.
-  - UI NEXT: switch to the next interface in the BOOT double-press order
-    (WEB -> TELNET -> BLE -> USB -> UART -> MSC -> WEB).
   - NV: sys.autorun; wifi.ssid, wifi.pwd, ble.name refuse ':' and '|'.
   - WAIT ms (console and scripts), WAIT EVENT ms and INPUT ms use the
     high-resolution timer: 1 ms resolution (the 200 Hz tick is unchanged).

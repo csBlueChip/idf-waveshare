@@ -365,10 +365,10 @@ static bool runCmd(const char *text, cmdCtx_t *c)
 	}
 	scr.ok     = true;
 	scr.err[0] = '\0';
-	/* UI switch ends the script */
+	/* UI switch ends the script (UI alone and UI DEFAULT don't switch) */
 	if (scrWordIs(line, "UI")) {
 		const char *a = scrSkip(line + 2);
-		if (*a) {
+		if (*a && !scrWordIs(a, "DEFAULT")) {
 			scr.exitReq = true;
 		}
 	}

@@ -87,6 +87,22 @@ To do
      splash / <<UI CONNECT>> only after TX subscribe; log shows peer
      address, "TX notify on", or "client never subscribed to TX".
 
+ 25. Board test - UI: reply active:.. default:..; UI DEFAULT, UI WEB DEFAULT
+     (reboot boots there); UI NEXT = ERR usage; UI DEFAULT in a script does
+     not end it; INFO App / Boot / Clock (before and after a
+     browser connects) / Script (while a script runs, paused).
+
+ 26. Board test - SD manager: Edit (E) a script, Ctrl+S same name / new
+     name / read-only file / existing name; CRLF warning; non-ASCII file
+     refused; discard prompt. Import /sys/default.nvram (with and without
+     "reboot now"; a bad file gives the line error). Run a script with
+     arguments: console page comes back and shows its output. Edit
+     /sys/debug.cfg and save: log volumes change without a reboot.
+
+ 27. Board test - replies: TEMP (^C ^F ^K, 1 decimal), BAT (Vb:x.yy),
+     NV GET key (value only), EVENTS / LOG / IMU field:value, BTN n,
+     BTN LIST; GET $t = TEMP -> $t[2] etc.
+
 On hold
  20. iPhone test - web console in the captive-portal window: page not too
      wide, no zoom-in when the input gets the focus or after the "^"

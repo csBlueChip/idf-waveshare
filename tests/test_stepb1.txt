@@ -45,7 +45,7 @@ C. EVENTS FILTER
 ----------------
 
 C1  > EVENTS
-    = BTN 1 IMU 1 UI 1 SCRIPT 1
+    = BTN:1 IMU:1 UI:1 SCRIPT:1
       OK
 C2  > IMU TAP 1 0 0
     = OK
@@ -77,7 +77,7 @@ C14 > REBOOT   (web console)
     = OK, then at once: [disconnected - device rebooting]; the page
       reconnects by itself once Wi-Fi is back: <<UI CONNECT>>
 C15 > EVENTS
-    = BTN 1 IMU 1 UI 1 SCRIPT 1      (filter is this boot only)
+    = BTN:1 IMU:1 UI:1 SCRIPT:1      (filter is this boot only)
       OK
 C16 > IMU TAP NONE
     = OK
@@ -197,23 +197,23 @@ F. LOG MODE
 -----------
 
 F1  > LOG
-    = LOG AUTO
+    = log:AUTO debug:0
       OK
 F2  > UI
-    = TELNET (or WEB); "rx: UI" log line on the USB terminal (and UART)
+    = active:TELNET (or WEB) default:...; "rx: UI" log line on the USB terminal (and UART)
 F3  > LOG UART
-    = LOG UART
+    = log:UART debug:0
       OK
 F4  > UI
     = log line on UART only, not on USB
 F5  > LOG USB
-    = LOG USB, OK; then > UI: log line on USB only
+    = log:USB debug:0, OK; then > UI: log line on USB only
 F6  > LOG BOTH
-    = LOG BOTH, OK; then > UI: log line on both
+    = log:BOTH debug:0, OK; then > UI: log line on both
 F7  > LOG XYZ
     = ERR usage: LOG [UART|USB|BOTH|AUTO]
 F8  > LOG AUTO
-    = LOG AUTO
+    = log:AUTO debug:0
       OK
 
 
@@ -232,10 +232,10 @@ G5  (resolution: from a PC script, time "WAIT 7" x 100; total ~700 ms
      plus link latency, not ~1000 ms as with 5 ms ticks rounding up)
 
 
-H. UI NEXT AND UI EVENTS
-------------------------
+H. UI SWITCH AND UI EVENTS
+--------------------------
 
-H1  > UI NEXT        (from WEB)
+H1  > UI TELNET      (from WEB)
     = SSID/PWD/IP/PORT reply, OK; device switches to TELNET (Wait screen)
 H2  * Connect with telnet.
     = <<UI CONNECT>>
@@ -243,16 +243,16 @@ H3  > NV SET wifi.maxconn 2   then REBOOT, reconnect telnet
     * Join the device's Wi-Fi with a second device (phone).
     = <<UI LINK UP>> on the telnet client
 H4  > NV SET wifi.maxconn 1   then REBOOT, reconnect
-H5  > UI NEXT        (from TELNET)
+H5  > UI BLE         (from TELNET)
     = OK; switches to BLE
-    (continue with UI NEXT from each interface: BLE -> USB -> UART -> WEB)
+    (UI NEXT no longer exists: = ERR usage)
 
 
 I. NV
 -----
 
 I1  > NV GET sys.autorun
-    = sys.autorun=0
+    = 0
 I2  > NV SET sys.autorun 2
     = ERR sys.autorun must be 0..1
 I3  > NV SET wifi.ssid ab:cd

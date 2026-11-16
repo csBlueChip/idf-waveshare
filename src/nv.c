@@ -127,7 +127,6 @@ static void        nvDefault(int i, char *out);
 static const char *nvCross(char (*vals)[NV_VAL_MAX]);
 static bool        nvParseIp(const char *s, uint32_t *ip);
 static const char *nvFilePath(const char *name, char *path, size_t n);
-static const char *nvImport(const char *name, cmdReply_t reply);
 static const char *nvCmd(int argc, char *argv[], cmdReply_t reply);
 
 /* ================= Public API ================= */
@@ -689,7 +688,7 @@ const char *nvExport(const char *name)
 	return ok ? NULL : "cannot write file";
 }
 
-static const char *nvImport(const char *name, cmdReply_t reply)
+const char *nvImport(const char *name, cmdReply_t reply)
 {
 	char         skipped[NV_FILE_LINE] = "";		/* read-only keys found */
 	static EXT_RAM_BSS_ATTR char lines[NV_FILE_PAIRS][NV_FILE_LINE];
@@ -804,7 +803,11 @@ static const char *nvCmd(int argc, char *argv[], cmdReply_t reply)
 	if (strcasecmp(sub, "GET") == 0 && argc <= 2) {
 		for (int i = 0; i < NV_COUNT; i++) {
 			if (argc == 1 || strcasecmp(argv[1], s_keys[i].key) == 0) {
-				snprintf(text, sizeof(text), "%s=%s\n", s_keys[i].key, s_val[i]);
+				if (argc == 1) {
+					snprintf(text, sizeof(text), "%s=%s\n", s_keys[i].key, s_val[i]);
+				} else {
+					snprintf(text, sizeof(text), "%s\n", s_val[i]);	/* NV GET key: the value only */
+				}
 				reply(text);
 				if (argc == 2) {
 					return NULL;

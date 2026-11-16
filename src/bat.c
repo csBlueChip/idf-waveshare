@@ -75,7 +75,7 @@ static const char *batCmd(int argc, char *argv[], cmdReply_t reply)
 	}
 
 	char line[16], text[20];
-	snprintf(line, sizeof(line), "Vb: %.2f V", v);
+	snprintf(line, sizeof(line), "Vb:%.2f", v);
 
 //	bool landscape = lcdWidth() > lcdHeight();
 //	int  col = landscape ? lcdTextCols() / 2 : 0;

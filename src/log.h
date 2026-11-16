@@ -24,7 +24,7 @@
  * logLoadCfg() are not filtered.
  *
  * Command registered by logInit():
- *   LOG [UART|USB|BOTH|AUTO]   set / show the mode
+ *   LOG [UART|USB|BOTH|AUTO]   set / show the mode: "log:AUTO debug:0"
  *   LOG DEBUG [device]         show the volume of all devices / one
  *   LOG DEBUG device n [SAVE]  set it (this boot; SAVE: also in debug.cfg)
  *   LOG DEBUG ALL [n [SAVE]]   all devices: list / set (SAVE: as LOG DEBUG SAVE)

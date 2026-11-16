@@ -51,7 +51,19 @@
  *   POST /fm/put?p=/dir/name[&over=1]  upload: body = the file, written to
  *                                 name.upl and renamed when complete;
  *                                 409 "exists" unless over=1 (not read-only);
- *                                 failure or mode off: name.upl deleted
+ *                                 failure or mode off: name.upl deleted.
+ *                                 The page's editor saves through this too.
+ *   POST /fm/nvimport?p=/sys/name.nvram[&reboot=1]
+ *                                 NV IMPORT name: "OK" (+ "\n" + the
+ *                                 read-only warning), or 409 with the error
+ *                                 (nothing stored). reboot=1: restart after
+ *                                 a successful import
+ *   POST /fm/run?p=/scripts/name.s|/sys/name.s[&a=args]
+ *                                 leave the mode (the page goes back to /),
+ *                                 then RUN name|sys/name args (as typed) once
+ *                                 the console page has reconnected, or after
+ *                                 5 s
+ * Writing, deleting or renaming /sys/debug.cfg reloads the log volumes.
  * Replies: 200 "OK" (or the data), else 400 / 409 with the reason as text.
  * Paths start with '/', are relative to the card, URL-encoded; "." / ".."
  * segments, '\', ':', control characters and segments starting with a space
@@ -80,8 +92,11 @@ const char *fmSynExport(size_t *bytes);
 /* Register the /fm handlers (web.c, before its catch-all). */
 void fmRegister(httpd_handle_t hd);
 
+/* Main task: a client connected - start the script left by /fm/run, if any. */
+void fmRunPending(void);
+
 /* Number of URI handlers fmRegister() adds. */
-#define FM_URI_COUNT	10
+#define FM_URI_COUNT	12
 
 /* Card-relative path p (decoded, e.g. "/a/b.txt" or "/") checked and joined
  * to root into out. false = refused or too long. Pure, host-testable. */

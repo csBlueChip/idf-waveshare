@@ -145,6 +145,7 @@ static void        uiNextIf(void);
 static void        uiWifiLink(bool up);
 static const char *uiCmd(int argc, char *argv[], cmdReply_t reply);
 static const char *uiCmdEvents(int argc, char *argv[], cmdReply_t reply);
+static const char *uiPersist(uiIf_t ifc, cmdReply_t reply);
 static uiIf_t      uiIfNext(uiIf_t ifc);
 static bool        uiEvMuted(const char *text);
 static uiIf_t      uiBootIf(void);
@@ -183,7 +184,7 @@ esp_err_t uiInit(void)
 	}
 	uiScrBoot();					/* black, backlight, boot square */
 
-	err = cmdRegister("UI", 0, 1, uiCmd, "UI [BLE|TELNET|WEB|UART|USB|NEXT]  show / switch interface");
+	err = cmdRegister("UI", 0, 2, uiCmd, "UI [BLE|TELNET|WEB|UART|USB|MSC] [DEFAULT] | UI DEFAULT  show / switch / boot default");
 	if (err == ESP_OK) {
 		err = cmdRegister("EVENTS", 0, 2, uiCmdEvents, "EVENTS [BTN|IMU|UI|SCRIPT|ALL 0|1]  events sent to the client");
 	}
@@ -621,6 +622,7 @@ static void uiEvent(uint8_t kind)
 			uiScrConnect();			/* SD manager: no onConnect script */
 		} else {
 			scriptConnect(uiName(s_active), uiScrConnect);	/* splash, or onConnect */
+			fmRunPending();				/* RUN from the SD manager */
 		}
 		break;
 	case UI_EV_FMSTOP:
@@ -977,9 +979,22 @@ static void uiResetMsg(const char *a, const char *b)
 static const char *uiCmd(int argc, char *argv[], cmdReply_t reply)
 {
 	if (argc == 0) {
-		reply(uiName(s_active));
-		reply("\n");
+		char text[48];
+		snprintf(text, sizeof(text), "active:%s default:%s\n", uiName(s_active), nvGet("sys.ui"));
+		reply(text);
 		return NULL;
+	}
+
+	/* UI DEFAULT: the current interface becomes the boot default */
+	if (argc == 1 && strcasecmp(argv[0], "DEFAULT") == 0) {
+		return uiPersist(s_active, reply);
+	}
+	bool persist = false;
+	if (argc == 2) {
+		if (strcasecmp(argv[1], "DEFAULT") != 0) {
+			return "usage: UI [BLE|TELNET|WEB|UART|USB|MSC] [DEFAULT] | UI DEFAULT";
+		}
+		persist = true;
 	}
 
 	uiIf_t target;
@@ -995,15 +1010,16 @@ static const char *uiCmd(int argc, char *argv[], cmdReply_t reply)
 		target = UI_USB;
 	} else if (strcasecmp(argv[0], "MSC") == 0) {
 		target = UI_MSC;			/* Wait screen only; hold BOOT for disk mode */
-	} else if (strcasecmp(argv[0], "NEXT") == 0) {
-		target = uiIfNext(s_active);
-		if (target == UI_NONE) {
-			return "no active interface";
-		}
 	} else {
-		return "usage: UI [BLE|TELNET|WEB|UART|USB|MSC|NEXT]";
+		return "usage: UI [BLE|TELNET|WEB|UART|USB|MSC] [DEFAULT] | UI DEFAULT";
 	}
 
+	if (persist) {
+		const char *e = uiPersist(target, reply);	/* NV sys.ui, reply sys.ui=X */
+		if (e) {
+			return e;
+		}
+	}
 	if (target == s_active) {
 		return NULL;
 	}
@@ -1040,6 +1056,23 @@ static const char *uiCmd(int argc, char *argv[], cmdReply_t reply)
 		s_switching = false;
 		return "switch failed";
 	}
+	return NULL;
+}
+
+/* NV sys.ui = ifc (BLE TELNET WEB UART USB MSC), reply "sys.ui=X". */
+static const char *uiPersist(uiIf_t ifc, cmdReply_t reply)
+{
+	if (ifc == UI_NONE || ifc == UI_RESET) {
+		return "not a boot interface";
+	}
+	const char *k[] = { "sys.ui" }, *v[] = { uiName(ifc) };
+	const char *e = nvSetMany(1, k, v, NULL);
+	if (e) {
+		return e;
+	}
+	char text[24];
+	snprintf(text, sizeof(text), "sys.ui=%s\n", uiName(ifc));
+	reply(text);
 	return NULL;
 }
 
@@ -1109,7 +1142,7 @@ static const char *uiCmdEvents(int argc, char *argv[], cmdReply_t reply)
 		char text[64];
 		int  n = 0;
 		for (int i = 0; i < UI_EV_SOURCES; i++) {
-			n += snprintf(text + n, sizeof(text) - n, "%s%s %d", i ? " " : "", s_evNames[i],
+			n += snprintf(text + n, sizeof(text) - n, "%s%s:%d", i ? " " : "", s_evNames[i],
 			              !((s_evMute >> i) & 1));
 		}
 		snprintf(text + n, sizeof(text) - n, "\n");

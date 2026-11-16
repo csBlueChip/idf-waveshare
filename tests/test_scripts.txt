@@ -147,7 +147,7 @@ H1  * copy SD:/scripts/hang.s over SD:/sys/onBoot.s; REBOOT
 H2  * hold BOOT for 3 s
     = reboot; LED flashes red; normal Wait screen
 H3  > NV GET sys.autorun
-    = sys.autorun=0
+    = 0
 
 
 I. USB CONSOLE (BPT! with no client)

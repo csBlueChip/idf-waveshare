@@ -81,7 +81,7 @@ C6  > IMU WOM
 C7  > IMU WOM 50
     = OK
 C8  > NV GET imu.wom
-    = imu.wom=50
+    = 50
 C9  > IMU SLEEP
     = OK; dark; wakes on a lighter touch than in B6
 C10 > IMU WOM 100
@@ -102,7 +102,7 @@ D4  * move the board
 D5  * reconnect the console
     = connects (no <<IMU WAKE>> - client was not there)
 D6  > IMU
-    = TAP NONE, MOTION 1 ... (detectors kept)
+    = ... tap1:0 tap2:0 tap3:0 still:.. motion:1 ... (detectors kept)
 D7  > IMU SLEEP RAD
     = OK; connection drops; dark
 D8  * press BOOT briefly (release quickly: a held BOOT on the Wait

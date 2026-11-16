@@ -1,11 +1,14 @@
 #pragma once
 
+#include <stdbool.h>
 #include <stddef.h>
 #include "esp_err.h"
 
 /*
  * System commands registered by sysInit():
- *   INFO       hardware and firmware information
+ *   INFO       hardware and firmware information; also App (running image
+ *              size of its OTA slot), Boot (count), Clock (or "not set"),
+ *              Script (name running|paused, or none)
  *   WAIT ms    pause 0..60000 ms, 1 ms resolution (esp_timer); blocks
  *              the client's other commands
  *   REBOOT     reply OK, restart ~300 ms later
@@ -25,6 +28,10 @@
 
 /* Count this boot, register the commands above. Call after cmdInit() and nvInit(). */
 esp_err_t sysInit(void);
+
+/* Restart in SYS_REBOOT_MS (300 ms), so a reply can go out first. false =
+ * no timer. */
+bool sysRebootLater(void);
 
 /* Current timestamp (n >= 16): "YYYYMMDD-HHMMSS" once a browser has set the
  * clock (POST /time), e.g. "20261113-142530"; else boot count (hex) and

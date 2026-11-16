@@ -453,7 +453,7 @@ static const char *logCmd(int argc, char *argv[], cmdReply_t reply)
 		s_mode = m;
 	}
 	char text[32];
-	snprintf(text, sizeof(text), "LOG %s%s\n", s_modeNames[s_mode], s_debug ? " (debug on)" : "");
+	snprintf(text, sizeof(text), "log:%s debug:%d\n", s_modeNames[s_mode], s_debug ? 1 : 0);
 	reply(text);
 	return NULL;
 }

@@ -8,7 +8,8 @@
      (assets/fm.html); SD:/sys/fm.html replaces it if present (FILES FMEXPORT
      writes this built-in copy to SD:/sys/fm_builtin.html to start from).
      Talks to /fm/list, /fm/get, /fm/view, /fm/syntax, /fm/put, /fm/del, /fm/ren, /fm/mkdir,
-     /fm/exit. Viewer colours: /fm/syntax (SD:/sys/syntax.cfg or the built-in). -->
+     /fm/exit, /fm/nvimport, /fm/run. Viewer colours: /fm/syntax (SD:/sys/syntax.cfg or the built-in).
+     Editor: a plain text box; loads /fm/get (raw), saves through /fm/put. -->
 <style>
 	html, body { margin: 0; height: 100%; background: #111; color: #ddd; }
 	body { font: 14px/1.35 ui-monospace, Menlo, Consolas, "DejaVu Sans Mono", monospace;
@@ -99,6 +100,24 @@
 	#vbody img { max-width: 100%; max-height: calc(100vh - 80px); image-rendering: auto; }
 	#vbody iframe { width: 100%; height: 100%; border: 0; background: #fff; }
 	#vbody .note { padding: 6px 8px; color: #f96; border-bottom: 1px solid #333; }
+	#editor { position: fixed; inset: 0; display: none; flex-direction: column; background: #111; z-index: 11; }
+	#editor.on { display: flex; }
+	#ebar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px; border-bottom: 1px solid #333; background: #1a1a1a; }
+	#ename { flex: 1; min-width: 0; color: #8cf; word-break: break-all; }
+	#einfo { color: #888; }
+	#einfo .mod { color: #fc6; }
+	#enote { padding: 6px 8px; color: #f96; border-bottom: 1px solid #333; display: none; }
+	#etext { flex: 1; min-height: 0; margin: 0; padding: 8px; border: 0; outline: none; resize: none; font: inherit;
+	         color: #ddd; background: #111; white-space: pre; overflow: auto; tab-size: 4; -moz-tab-size: 4; }
+	#dlg { position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+	       background: rgba(0, 0, 0, 0.6); z-index: 30; }
+	#dlg.on { display: flex; }
+	#dlg .box { min-width: 280px; max-width: 92vw; padding: 12px 16px; background: #1a1a1a; border: 1px solid #444;
+	            border-radius: 6px; display: flex; flex-direction: column; gap: 10px; }
+	#dmsg { white-space: pre-wrap; word-break: break-word; }
+	#dinp { padding: 6px; font: inherit; color: #eee; background: #000; border: 1px solid #444; border-radius: 4px; }
+	#dchkw { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+	#dlg .btns { display: flex; justify-content: flex-end; gap: 6px; }
 	@media (max-width: 640px) {
 		#main { flex-direction: column; }
 		#tree { width: auto; max-width: none; max-height: 30vh; border-right-color: transparent; border-bottom-color: #333; }
@@ -116,6 +135,7 @@
 	<input id="pick" type="file" multiple style="display:none">
 	<button id="dl" data-i="download" title="Download (Ctrl+Enter)" disabled>Download</button>
 	<button id="view" data-i="view" title="View (Enter)" disabled>View</button>
+	<button id="edit" data-i="edit" title="Edit a text file (E)" disabled>Edit</button>
 	<button id="ren" data-i="rename" title="Rename / move (F2)" disabled>Rename</button>
 	<button id="info" data-i="info" title="Description in DESCRIPT.ION - the selected entry, or this folder (I)">Info</button>
 	<button id="del" data-i="delete" title="Delete (Del)" disabled>Delete</button>
@@ -138,11 +158,33 @@
 		<button id="vwrap" data-i="wrap" class="tog" title="Wrap long lines (W)">Wrap</button>
 		<button id="vsrc" data-i="source" class="tog" title="Show the HTML source">Source</button>
 		<button id="vjs" class="js" title="Run the page's scripts (they could use this manager)">JS off</button>
+		<button id="vedit" data-i="edit" title="Edit (E)">Edit</button>
+		<button id="vimp" data-i="bulb" title="Import these settings into NV (NV IMPORT)">Import</button>
+		<button id="vrun" data-i="play" title="Run this script (leaves the SD manager)">Run</button>
 		<button id="vdl" data-i="download" title="Download (Ctrl+Enter)">Download</button>
 		<button id="vclose" data-i="close" class="exit" title="Close (Esc)">Close</button>
 	</div>
 	<div id="vbody"></div>
 </div>
+<div id="editor">
+	<div id="ebar">
+		<span id="ename"></span>
+		<span id="einfo"></span>
+		<button id="esave" data-i="save" title="Save - asks for the name (Ctrl+S)">Save</button>
+		<button id="eclose" data-i="close" class="exit" title="Close (Esc)">Close</button>
+	</div>
+	<div id="enote"></div>
+	<textarea id="etext" wrap="off" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
+</div>
+<div id="dlg"><div class="box">
+	<div id="dmsg"></div>
+	<input id="dinp" type="text" spellcheck="false" autocomplete="off" autocapitalize="off">
+	<label id="dchkw"><input id="dchk" type="checkbox"><span id="dchkl"></span></label>
+	<div class="btns">
+		<button id="dok" data-i="ok">OK</button>
+		<button id="dcancel" data-i="cancel">Cancel</button>
+	</div>
+</div></div>
 <div id="prog"></div>
 <div id="status"></div>
 <div id="help"><div>
@@ -153,6 +195,7 @@
 		<tr><td class="k">Tab</td><td>switch between the tree and the list</td></tr>
 		<tr><td class="k">Left / Right</td><td>tree: fold / unfold the folder</td></tr>
 		<tr><td class="k">Enter</td><td>open a folder; View a viewable file, else Download</td></tr>
+		<tr><td class="k">E</td><td>Edit a text file</td></tr>
 		<tr><td class="k">Ctrl+Enter</td><td>Download</td></tr>
 		<tr><td class="k">Backspace</td><td>parent folder</td></tr>
 		<tr><td class="k">F5</td><td>Refresh</td></tr>
@@ -168,8 +211,15 @@
 	<table>
 		<tr><td class="k">L</td><td>line numbers on / off</td></tr>
 		<tr><td class="k">W</td><td>wrap on / off</td></tr>
+		<tr><td class="k">E</td><td>Edit (text files)</td></tr>
 		<tr><td class="k">Ctrl+Enter</td><td>Download</td></tr>
 		<tr><td class="k">Esc</td><td>close</td></tr>
+	</table>
+	<h3>Editor</h3>
+	<table>
+		<tr><td class="k">Tab</td><td>insert a tab</td></tr>
+		<tr><td class="k">Ctrl+S</td><td>Save - asks for the name (Enter keeps it)</td></tr>
+		<tr><td class="k">Esc</td><td>close (asks if there are unsaved changes)</td></tr>
 	</table>
 </div></div>
 <script>
@@ -200,7 +250,13 @@
 		lines:    "M6 4h8M6 8h8M6 12h8M2.5 3v2M2 7.5h1.5L2 9.5h1.5M2 11.5h1.5v2H2",
 		wrap:     "M2 4h10a2.5 2.5 0 0 1 0 5H6M8 7l-2 2 2 2M2 12.5h4",
 		source:   "M5 4L1.5 8 5 12M11 4l3.5 4-3.5 4M9.5 2.5l-3 11",
-		close:    "M3.5 3.5l9 9M12.5 3.5l-9 9"
+		close:    "M3.5 3.5l9 9M12.5 3.5l-9 9",
+		edit:     "M3 1.5h6.5l3.5 3.5v9.5H3zM9.5 1.5V5H13M5.5 8h5M5.5 10.5h5M5.5 13h3",	/* page with lines */
+		save:     "M2.5 2.5h9l2 2v9h-11zM5 2.5v3.5h5.5V2.5M5 13.5v-4.5h6v4.5",	/* floppy disk */
+		bulb:     "M8 1.5a4.5 4.5 0 0 0-2.5 8.2V11.5h5V9.7A4.5 4.5 0 0 0 8 1.5zM6 13.5h4",
+		play:     "M5 3l8 5-8 5z",
+		ok:       "M3 8.5l3 3 7-7",
+		cancel:   "M3.5 3.5l9 9M12.5 3.5l-9 9"
 	};
 	/* a toolbar whose buttons would wrap onto a second line shows icons only */
 	function fit(bar) {
@@ -212,7 +268,11 @@
 		});
 		if (wraps) bar.classList.add("compact");
 	}
-	function fitAll() { fit($("bar")); if ($("viewer").classList.contains("on")) fit($("vbar")); }
+	function fitAll() {
+		fit($("bar"));
+		if ($("viewer").classList.contains("on")) fit($("vbar"));
+		if ($("editor").classList.contains("on")) fit($("ebar"));
+	}
 	window.addEventListener("resize", fitAll);
 	Array.prototype.forEach.call(document.querySelectorAll("button[data-i]"), function (b) {
 		var label = b.textContent;
@@ -523,6 +583,7 @@
 		$("up").disabled = cwd === "/";
 		$("dl").disabled = !sel || sel.dir;
 		$("view").disabled = !sel || sel.dir || !kindOf(sel.name);
+		$("edit").disabled = !editable(sel);
 		$("ren").disabled = !sel;
 		$("del").disabled = !sel;
 	}
@@ -654,6 +715,9 @@
 		tog("vlines", vlines, textual);
 		tog("vsrc", vsrc, vkind === "html");
 		tog("vjs", vjs, vkind === "html" && !vsrc);
+		tog("vedit", false, vkind === "text" || vkind === "html");
+		tog("vimp", false, /^\/sys\/[^\/]+\.nvram$/i.test(vfile));
+		tog("vrun", false, /^\/(scripts|sys)\/[^\/]+\.s$/i.test(vfile));
 		$("vjs").textContent = vjs ? "JS ON" : "JS off";
 		fit($("vbar"));
 		if (vkind === "img") {
@@ -867,6 +931,12 @@
 	function help(on) { $("help").classList.toggle("on", on); }
 	document.addEventListener("keydown", function (e) {
 		var t = e.target, k = e.key, ctrl = e.ctrlKey || e.metaKey;
+		if ($("dlg").classList.contains("on")) return;		/* the dialog handles its keys */
+		if ($("editor").classList.contains("on")) {		/* focus outside the text box */
+			if (ctrl && (k === "s" || k === "S")) { e.preventDefault(); eSave(); }
+			else if (k === "Escape") { e.preventDefault(); closeEdit(false); }
+			return;
+		}
 		if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
 		var done = true;
 		if ($("help").classList.contains("on")) {			/* key list open */
@@ -878,6 +948,7 @@
 			else if (k === "Enter" && ctrl) download();
 			else if (!ctrl && (k === "l" || k === "L") && $("vlines").style.display !== "none") $("vlines").onclick();
 			else if (!ctrl && (k === "w" || k === "W") && $("vwrap").style.display !== "none") $("vwrap").onclick();
+			else if (!ctrl && (k === "e" || k === "E") && $("vedit").style.display !== "none") $("vedit").onclick();
 			else done = false;
 		} else if (k === "Tab") {
 			pane(act === "list" ? "tree" : "list");
@@ -900,6 +971,8 @@
 			$("mkdir").onclick();
 		} else if (ctrl && (k === "u" || k === "U")) {
 			if (!$("up_btn").disabled) $("up_btn").onclick();
+		} else if (!ctrl && (k === "e" || k === "E")) {
+			if (!$("edit").disabled) $("edit").onclick();
 		} else if (!ctrl && (k === "i" || k === "I")) {
 			$("info").onclick();
 		} else if (k === "F2") {
@@ -973,6 +1046,185 @@
 			}, 600);
 		});
 	};
+	/* ---------- dialog: message [+ input] [+ checkbox], OK (tick) / Cancel (cross) ---------- */
+	var dlgCb = null;
+	function ask(o, cb) {			/* o: {msg, input (default text), check (label)}; cb({value, checked}) or cb(null) */
+		$("dmsg").textContent = o.msg;
+		$("dinp").style.display = o.input === undefined ? "none" : "";
+		$("dinp").value = o.input === undefined ? "" : o.input;
+		$("dchkw").style.display = o.check === undefined ? "none" : "";
+		$("dchkl").textContent = o.check || "";
+		$("dchk").checked = false;
+		dlgCb = cb;
+		$("dlg").classList.add("on");
+		if (o.input !== undefined) { $("dinp").focus(); $("dinp").select(); } else $("dok").focus();
+	}
+	function dlgEnd(ok) {
+		var cb = dlgCb, r = ok ? { value: $("dinp").value, checked: $("dchk").checked } : null;
+		dlgCb = null;
+		$("dlg").classList.remove("on");
+		if ($("editor").classList.contains("on")) $("etext").focus();
+		if (cb) cb(r);
+	}
+	$("dok").onclick = function () { dlgEnd(true); };
+	$("dcancel").onclick = function () { dlgEnd(false); };
+	$("dlg").addEventListener("keydown", function (e) {
+		if (e.key === "Enter" && e.target.tagName !== "BUTTON") { e.preventDefault(); dlgEnd(true); }
+		else if (e.key === "Escape") { e.preventDefault(); dlgEnd(false); }
+		e.stopPropagation();
+	});
+
+	/* ---------- editor: plain text box ---------- */
+	var ePath = null, eOrig = "";
+	function editable(it) { return !!(it && !it.dir && (kindOf(it.name) === "text" || kindOf(it.name) === "html")); }
+	function eDirty() { return $("editor").classList.contains("on") && $("etext").value !== eOrig; }
+	function ePos() {
+		var t = $("etext"), before = t.value.substring(0, t.selectionStart), nl = before.lastIndexOf("\n");
+		var line = before.split("\n").length, col = before.length - nl;
+		$("einfo").innerHTML = "Ln " + line + ", Col " + col + (eDirty() ? ' <span class="mod">modified</span>' : "");
+	}
+	function editFile(path, bytes) {
+		if (bytes > TEXT_MAX) { status(path + ": too big to edit (max 256 KB)", true); return; }
+		status("loading " + path + " ...");
+		fetch("/fm/get?p=" + q(path)).then(function (r) {
+			if (!r.ok) return r.text().then(function (t) { status(t || ("error " + r.status), true); });
+			return r.arrayBuffer().then(function (buf) {
+				var b = new Uint8Array(buf), cr = false;
+				if (b.length > TEXT_MAX) { status(path + ": too big to edit (max 256 KB)", true); return; }
+				for (var i = 0; i < b.length; i++) {
+					if (b[i] === 0 || b[i] >= 0x80) {
+						status(path + ": not plain ASCII text (non-ASCII or NUL bytes) - not editable here", true);
+						return;
+					}
+					if (b[i] === 13 && b[i + 1] === 10) cr = true;
+				}
+				var text = "";
+				for (var k = 0; k < b.length; k += 8192) text += String.fromCharCode.apply(null, b.subarray(k, k + 8192));
+				text = text.replace(/\r\n/g, "\n");
+				ePath = path;
+				eOrig = text;
+				$("ename").textContent = path;
+				var n = $("enote");
+				n.textContent = cr ? "This file has CRLF line endings - saving will convert them to LF." : "";
+				n.style.display = cr ? "block" : "none";
+				$("etext").value = text;
+				closeView();
+				$("editor").classList.add("on");
+				fit($("ebar"));
+				$("etext").focus();
+				$("etext").setSelectionRange(0, 0);
+				$("etext").scrollTop = 0;
+				ePos();
+				status("");
+			});
+		}).catch(function () { status("no connection to the device", true); });
+	}
+	function closeEdit(force) {
+		if (!force && eDirty()) {
+			ask({ msg: "Discard changes to " + ePath + " ?" }, function (r) { if (r) closeEdit(true); });
+			return;
+		}
+		$("editor").classList.remove("on");
+		$("etext").value = "";
+		ePath = null;
+	}
+	/* PUT the text to dest; over: replace; cb(ok, reply) */
+	function ePut(dest, over, cb) {
+		var x = new XMLHttpRequest();
+		x.open("POST", "/fm/put?p=" + q(dest) + (over ? "&over=1" : ""));
+		x.onload = function () {
+			if (x.status === 409 && x.responseText === "SD manager not active") {
+				status("SD manager closed on the device - back to the console...", true);
+				setTimeout(function () { location.href = "/"; }, 1500);
+				return;
+			}
+			cb(x.status === 200, x.responseText);
+		};
+		x.onerror = function () { cb(false, "no connection to the device"); };
+		x.send(new Blob([$("etext").value]));
+	}
+	function eSave(name) {
+		ask({ msg: "Save as (Enter keeps the name; a path starting with / saves elsewhere):", input: name || ePath },
+		    function (r) {
+			if (!r || !r.value.trim()) return;
+			var v = r.value.trim(), dest = v.charAt(0) === "/" ? v : join(parent(ePath), v);
+			var same = dest.toLowerCase() === ePath.toLowerCase();
+			function done(ok, text) {
+				if (ok) {
+					ePath = dest;
+					eOrig = $("etext").value;
+					$("ename").textContent = dest;
+					$("enote").style.display = "none";
+					ePos();
+					if (parent(dest) === cwd) changed(cwd); else subs = {};
+					setTimeout(function () { status("saved " + dest); }, 500);	/* after the list reload */
+					return;
+				}
+				if (text === "read-only") {
+					ask({ msg: dest + " is read-only - save under another name?" }, function (r2) { if (r2) eSave(dest); });
+				} else if (text === "exists") {
+					ask({ msg: dest + " exists - replace it?" }, function (r2) { if (r2) ePut(dest, true, done); });
+				} else {
+					status("not saved: " + text, true);
+				}
+			}
+			ePut(dest, same, done);
+		});
+	}
+	$("edit").onclick = function () { if (editable(sel)) editFile(join(cwd, sel.name), sel.size); };
+	$("vedit").onclick = function () { editFile(vfile, 0); };
+	$("esave").onclick = function () { eSave(); };
+	$("eclose").onclick = function () { closeEdit(false); };
+	$("etext").addEventListener("keydown", function (e) {
+		var ctrl = e.ctrlKey || e.metaKey;
+		if (e.key === "Tab" && !ctrl && !e.altKey) {
+			e.preventDefault();
+			if (!document.execCommand || !document.execCommand("insertText", false, "\t")) {
+				this.setRangeText("\t", this.selectionStart, this.selectionEnd, "end");	/* no undo, but works */
+			}
+			ePos();
+		} else if (ctrl && (e.key === "s" || e.key === "S")) {
+			e.preventDefault();
+			eSave();
+		} else if (e.key === "Escape") {
+			e.preventDefault();
+			closeEdit(false);
+		}
+		e.stopPropagation();
+	});
+	["input", "keyup", "click", "select"].forEach(function (ev) { $("etext").addEventListener(ev, ePos); });
+
+	/* ---------- Import (/sys/*.nvram) and Run (.s) from the viewer ---------- */
+	$("vimp").onclick = function () {
+		var file = vfile, name = file.substring(file.lastIndexOf("/") + 1);
+		ask({ msg: "Import settings from " + name + "?\nMost settings apply at the next boot.", check: "reboot now" },
+		    function (r) {
+			if (!r) return;
+			req("POST", "/fm/nvimport?p=" + q(file) + (r.checked ? "&reboot=1" : ""), function (ok, text) {
+				if (!ok) { status("import failed: " + text, true); return; }
+				var warn = text.indexOf("\n") >= 0 ? " - " + text.substring(text.indexOf("\n") + 1) : "";
+				if (r.checked) {
+					status("imported " + name + warn + " - rebooting, back to the console...");
+					setTimeout(function () { location.href = "/"; }, 6000);
+				} else {
+					status("imported " + name + warn);
+				}
+			});
+		});
+	};
+	$("vrun").onclick = function () {
+		var file = vfile, name = file.substring(file.lastIndexOf("/") + 1);
+		ask({ msg: "Run " + name + " with arguments (leaves the SD manager):", input: "" }, function (r) {
+			if (!r) return;
+			req("POST", "/fm/run?p=" + q(file) + "&a=" + q(r.value.trim()), function (ok, text) {
+				if (!ok) { status("run failed: " + text, true); return; }
+				closeView();
+				status("running " + name + " - back to the console...");
+				location.href = "/";
+			});
+		});
+	};
+
 	/* ---------- upload ---------- */
 	function upload(files) {
 		if (busy || !files.length) return;
@@ -1037,7 +1289,7 @@
 		if (e.dataTransfer && e.dataTransfer.files) upload(e.dataTransfer.files);
 	});
 	window.addEventListener("beforeunload", function (e) {
-		if (busy) { e.preventDefault(); e.returnValue = ""; }	/* leaving would break the upload */
+		if (busy || eDirty()) { e.preventDefault(); e.returnValue = ""; }	/* upload running / unsaved edits */
 	});
 
 	$("exit").onclick = function () {

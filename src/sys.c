@@ -18,6 +18,7 @@
 #include "esp_idf_version.h"
 #include "esp_app_desc.h"
 #include "esp_ota_ops.h"
+#include "esp_image_format.h"
 #include "esp_log.h"
 #include "sdkconfig.h"
 #include "freertos/FreeRTOS.h"
@@ -30,6 +31,7 @@
 #include "nv.h"
 #include "log.h"
 #include "text.h"
+#include "script.h"
 
 #define SYS_WAIT_MAX	60000
 #define SYS_REBOOT_MS	300	/* let OK reach the client first */
@@ -208,12 +210,44 @@ static const char *sysCmdInfo(int argc, char *argv[], cmdReply_t reply)
 	snprintf(text, sizeof(text), "Partition: %s\n", part ? part->label : "?");
 	reply(text);
 
+	if (part) {					/* image size from its header (read at run time) */
+		esp_partition_pos_t  pos = { .offset = part->address, .size = part->size };
+		esp_image_metadata_t meta;
+		if (esp_image_get_metadata(&pos, &meta) == ESP_OK) {
+			snprintf(text, sizeof(text), "App: %" PRIu32 " KB of %" PRIu32 " KB (%" PRIu32 " %%)\n",
+			         meta.image_len / 1024, part->size / 1024,
+			         (uint32_t)((uint64_t)meta.image_len * 100 / part->size));
+		} else {
+			snprintf(text, sizeof(text), "App: size unknown of %" PRIu32 " KB\n", part->size / 1024);
+		}
+		reply(text);
+	}
+
+	snprintf(text, sizeof(text), "Boot: %d\n", s_boot);
+	reply(text);
+
 	snprintf(text, sizeof(text), "Reset: %s\n", sysResetReason());
 	reply(text);
 
 	char stamp[24];
 	sysTimestamp(stamp, sizeof(stamp));
 	snprintf(text, sizeof(text), "Timestamp: %s\n", stamp);
+	reply(text);
+
+	time_t now = time(NULL);
+	if (now >= SYS_CLOCK_SET) {
+		struct tm t;
+		gmtime_r(&now, &t);			/* the browser's local time */
+		snprintf(text, sizeof(text), "Clock: %04d-%02d-%02d %02d:%02d:%02d\n", t.tm_year + 1900, t.tm_mon + 1,
+		         t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec);
+	} else {
+		snprintf(text, sizeof(text), "Clock: not set\n");
+	}
+	reply(text);
+
+	char state[48];
+	scriptState(state, sizeof(state));
+	snprintf(text, sizeof(text), "Script: %s\n", state);
 	reply(text);
 
 	uint32_t s = (uint32_t)(esp_timer_get_time() / 1000000);
@@ -679,17 +713,22 @@ static const char *sysCmdFdelete(int argc, char *argv[], cmdReply_t reply)
 	return err;
 }
 
-static const char *sysCmdReboot(int argc, char *argv[], cmdReply_t reply)
+bool sysRebootLater(void)
 {
 	static esp_timer_handle_t timer;
 	if (!timer) {
 		esp_timer_create_args_t a = { .callback = sysRestart, .name = "reboot" };
 		if (esp_timer_create(&a, &timer) != ESP_OK) {
-			return "reboot failed";
+			return false;
 		}
 	}
-	esp_timer_start_once(timer, SYS_REBOOT_MS * 1000);	/* after the OK has gone out */
-	return NULL;
+	esp_timer_start_once(timer, SYS_REBOOT_MS * 1000);	/* after the reply has gone out */
+	return true;
+}
+
+static const char *sysCmdReboot(int argc, char *argv[], cmdReply_t reply)
+{
+	return sysRebootLater() ? NULL : "reboot failed";
 }
 
 static void sysRestart(void *arg)

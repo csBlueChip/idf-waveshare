@@ -902,8 +902,8 @@ static const char *imuCmdTemp(int argc, char *argv[], cmdReply_t reply)
 	if (err != ESP_OK) {
 		return "IMU read failed";
 	}
-	char text[24];
-	snprintf(text, sizeof(text), "^C:%7.2f\n", c);
+	char text[48];
+	snprintf(text, sizeof(text), "^C:%.1f ^F:%.1f ^K:%.1f\n", c, c * 9.0f / 5.0f + 32.0f, c + 273.15f);
 	reply(text);
 	return NULL;
 }
@@ -1063,31 +1063,23 @@ static const char *imuCmd(int argc, char *argv[], cmdReply_t reply)
 static void imuStatus(cmdReply_t reply)
 {
 	static const char *orNames[] = { "NONE", "P", "L", "ROT" };
-	char text[64];
+	char text[256];
+	int  n;
 
-	snprintf(text, sizeof(text), "ACC %s %s\n", nvGet("imu.arange"), nvGet("imu.arate"));
-	reply(text);
-	snprintf(text, sizeof(text), "GYR %s %s\n", nvGet("imu.grange"), nvGet("imu.grate"));
-	reply(text);
-	if (s_tapEn[0] || s_tapEn[1] || s_tapEn[2]) {
-		snprintf(text, sizeof(text), "TAP %d %d %d\n", s_tapEn[0], s_tapEn[1], s_tapEn[2]);
-	} else {
-		snprintf(text, sizeof(text), "TAP NONE\n");
-	}
-	reply(text);
-	snprintf(text, sizeof(text), "MOTION %d\nSTILL %d\nSIGMO %d%s\n", s_motion, s_stillMs, s_sigmoMs,
-	         s_sigmoRep ? " REPEAT" : "");
-	reply(text);
+	/* one line of field:value words (':' splits words in scripts) */
+	n = snprintf(text, sizeof(text),
+	             "acc:%s arate:%s gyr:%s grate:%s tap1:%d tap2:%d tap3:%d still:%d motion:%d wom:%s sigmo:%d sigmo_rep:%d",
+	             nvGet("imu.arange"), nvGet("imu.arate"), nvGet("imu.grange"), nvGet("imu.grate"),
+	             s_tapEn[0] ? 1 : 0, s_tapEn[1] ? 1 : 0, s_tapEn[2] ? 1 : 0, s_stillMs, s_motion ? 1 : 0,
+	             nvGet("imu.wom"), s_sigmoMs, s_sigmoRep ? 1 : 0);
 	if (IMU_STEP_ENABLE) {
 		xSemaphoreTake(s_lock, portMAX_DELAY);
 		uint32_t steps = imuSteps();
 		xSemaphoreGive(s_lock);
-		snprintf(text, sizeof(text), "STEP %d AUTO %d COUNT %lu\n", s_step, s_stepAuto, (unsigned long)steps);
-		reply(text);
+		n += snprintf(text + n, sizeof(text) - n, " step:%d step_auto:%d step_count:%lu", s_step, s_stepAuto,
+		              (unsigned long)steps);
 	}
-	snprintf(text, sizeof(text), "ORIENT %s%s\n", orNames[s_orMode], s_orAuto ? " AUTO" : "");
-	reply(text);
-	snprintf(text, sizeof(text), "WOM %s\n", nvGet("imu.wom"));
+	snprintf(text + n, sizeof(text) - n, " orient:%s orient_auto:%d\n", orNames[s_orMode], s_orAuto ? 1 : 0);
 	reply(text);
 }
 

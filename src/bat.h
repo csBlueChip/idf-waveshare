@@ -8,7 +8,8 @@
  * holds BAT at ~4.2 V, so "no battery" reads like "full".
  *
  * Command registered by batInit():
- *   BAT    "Vb: x.yy V" - replied and drawn under gZ
+ *   BAT    "Vb:x.yy" (volts) - replied. Charging can't be detected: the
+ *          charger's CHG output is not wired to a GPIO
  *          (portrait row 9; landscape row 5, right half)
  */
 
