@@ -34,6 +34,7 @@ static const char *TAG = "web";
 #define WEB_ROOT		SD_MOUNT_POINT "/www"
 #define WEB_FILE_CHUNK		1436	/* one TCP segment */
 #define WEB_CLOSE_REPLACED	4000	/* WebSocket close code: another page took over */
+#define WEB_TASK_STACK		6144	/* server task (default 4096 overflowed in /fm/nvimport) */
 #define WEB_CLOSE_REBOOT	4001	/* WebSocket close code: device restarting */
 #define WEB_CLOSE_WAIT_MS	200	/* restart: wait for the close frame to be sent */
 #define WEB_CLOSE_FLUSH_MS	50	/* restart: then let TCP put it on the air */
@@ -129,6 +130,7 @@ esp_err_t webStart(webRxCb_t rxCb, webConnCb_t connCb)
 	cfg.open_fn          = webOnOpen;
 	cfg.uri_match_fn     = httpd_uri_match_wildcard;	/* catch-all handler below; exact URIs match first */
 	cfg.max_uri_handlers = 4 + FM_URI_COUNT + 2;		/* ours + the SD manager's + spare */
+	cfg.stack_size       = WEB_TASK_STACK;			/* SD manager handlers: file I/O, NV import */
 	err = httpd_start(&s_server, &cfg);
 	if (err != ESP_OK) {
 		dnsStop();

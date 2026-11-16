@@ -115,7 +115,9 @@
 	#dlg .box { min-width: 280px; max-width: 92vw; padding: 12px 16px; background: #1a1a1a; border: 1px solid #444;
 	            border-radius: 6px; display: flex; flex-direction: column; gap: 10px; }
 	#dmsg { white-space: pre-wrap; word-break: break-word; }
-	#dinp { padding: 6px; font: inherit; color: #eee; background: #000; border: 1px solid #444; border-radius: 4px; }
+	#drow { display: flex; align-items: center; gap: 8px; }
+	#dlbl { white-space: nowrap; color: #8cf; }
+	#dinp { flex: 1; min-width: 0; padding: 6px; font: inherit; color: #eee; background: #000; border: 1px solid #444; border-radius: 4px; }
 	#dchkw { display: flex; align-items: center; gap: 6px; cursor: pointer; }
 	#dlg .btns { display: flex; justify-content: flex-end; gap: 6px; }
 	@media (max-width: 640px) {
@@ -160,7 +162,7 @@
 		<button id="vjs" class="js" title="Run the page's scripts (they could use this manager)">JS off</button>
 		<button id="vedit" data-i="edit" title="Edit (E)">Edit</button>
 		<button id="vimp" data-i="bulb" title="Import these settings into NV (NV IMPORT)">Import</button>
-		<button id="vrun" data-i="play" title="Run this script (leaves the SD manager)">Run</button>
+		<button id="vrun" data-i="play" title="Run this script with arguments (leaves the SD manager; output in the console)">Run</button>
 		<button id="vdl" data-i="download" title="Download (Ctrl+Enter)">Download</button>
 		<button id="vclose" data-i="close" class="exit" title="Close (Esc)">Close</button>
 	</div>
@@ -178,7 +180,7 @@
 </div>
 <div id="dlg"><div class="box">
 	<div id="dmsg"></div>
-	<input id="dinp" type="text" spellcheck="false" autocomplete="off" autocapitalize="off">
+	<div id="drow"><span id="dlbl"></span><input id="dinp" type="text" spellcheck="false" autocomplete="off" autocapitalize="off"></div>
 	<label id="dchkw"><input id="dchk" type="checkbox"><span id="dchkl"></span></label>
 	<div class="btns">
 		<button id="dok" data-i="ok">OK</button>
@@ -212,13 +214,14 @@
 		<tr><td class="k">L</td><td>line numbers on / off</td></tr>
 		<tr><td class="k">W</td><td>wrap on / off</td></tr>
 		<tr><td class="k">E</td><td>Edit (text files)</td></tr>
+		<tr><td class="k"></td><td>Import (bulb, /sys/*.nvram): NV IMPORT, optionally reboot; Run (play, .s): asks for the arguments, leaves the SD manager, output in the console</td></tr>
 		<tr><td class="k">Ctrl+Enter</td><td>Download</td></tr>
 		<tr><td class="k">Esc</td><td>close</td></tr>
 	</table>
 	<h3>Editor</h3>
 	<table>
 		<tr><td class="k">Tab</td><td>insert a tab</td></tr>
-		<tr><td class="k">Ctrl+S</td><td>Save - asks for the name (Enter keeps it)</td></tr>
+		<tr><td class="k">Ctrl+S</td><td>Save - asks for the name (SaveAs: Enter keeps it; a path starting with / saves elsewhere)</td></tr>
 		<tr><td class="k">Esc</td><td>close (asks if there are unsaved changes)</td></tr>
 	</table>
 </div></div>
@@ -1048,16 +1051,30 @@
 	};
 	/* ---------- dialog: message [+ input] [+ checkbox], OK (tick) / Cancel (cross) ---------- */
 	var dlgCb = null;
-	function ask(o, cb) {			/* o: {msg, input (default text), check (label)}; cb({value, checked}) or cb(null) */
-		$("dmsg").textContent = o.msg;
-		$("dinp").style.display = o.input === undefined ? "none" : "";
+	/* o: {msg, label, input (default text), sel [start, end], check (label), okOnly}; cb({value, checked}) or cb(null) */
+	function ask(o, cb) {
+		$("dmsg").textContent = o.msg || "";
+		$("dmsg").style.display = o.msg ? "" : "none";
+		$("drow").style.display = o.input === undefined ? "none" : "";
+		$("dlbl").textContent = o.label || "";
+		$("dlbl").style.display = o.label ? "" : "none";
 		$("dinp").value = o.input === undefined ? "" : o.input;
 		$("dchkw").style.display = o.check === undefined ? "none" : "";
 		$("dchkl").textContent = o.check || "";
 		$("dchk").checked = false;
+		$("dcancel").style.display = o.okOnly ? "none" : "";
 		dlgCb = cb;
 		$("dlg").classList.add("on");
-		if (o.input !== undefined) { $("dinp").focus(); $("dinp").select(); } else $("dok").focus();
+		if (o.input !== undefined) {
+			$("dinp").focus();
+			if (o.sel) $("dinp").setSelectionRange(o.sel[0], o.sel[1]); else $("dinp").select();
+		} else $("dok").focus();
+	}
+	function tell(msg, cb) { ask({ msg: msg, okOnly: true }, function () { if (cb) cb(); }); }
+	/* the name part of a path, without the folder or the extension: [start, end] */
+	function nameSel(p) {
+		var s = p.lastIndexOf("/") + 1, d = p.lastIndexOf(".");
+		return [s, d > s ? d : p.length];
 	}
 	function dlgEnd(ok) {
 		var cb = dlgCb, r = ok ? { value: $("dinp").value, checked: $("dchk").checked } : null;
@@ -1144,8 +1161,8 @@
 		x.send(new Blob([$("etext").value]));
 	}
 	function eSave(name) {
-		ask({ msg: "Save as (Enter keeps the name; a path starting with / saves elsewhere):", input: name || ePath },
-		    function (r) {
+		var start = name || ePath;
+		ask({ label: "SaveAs:", input: start, sel: nameSel(start) }, function (r) {
 			if (!r || !r.value.trim()) return;
 			var v = r.value.trim(), dest = v.charAt(0) === "/" ? v : join(parent(ePath), v);
 			var same = dest.toLowerCase() === ePath.toLowerCase();
@@ -1201,23 +1218,23 @@
 		    function (r) {
 			if (!r) return;
 			req("POST", "/fm/nvimport?p=" + q(file) + (r.checked ? "&reboot=1" : ""), function (ok, text) {
-				if (!ok) { status("import failed: " + text, true); return; }
-				var warn = text.indexOf("\n") >= 0 ? " - " + text.substring(text.indexOf("\n") + 1) : "";
+				if (!ok) { tell("Import failed: " + text + "\n(nothing stored)"); return; }
+				var warn = text.indexOf("\n") >= 0 ? "\n" + text.substring(text.indexOf("\n") + 1).trim() : "";
 				if (r.checked) {
-					status("imported " + name + warn + " - rebooting, back to the console...");
-					setTimeout(function () { location.href = "/"; }, 6000);
+					tell("Imported " + name + warn + "\nRebooting...", function () { location.href = "/"; });
 				} else {
-					status("imported " + name + warn);
+					tell("Imported " + name + warn);
 				}
 			});
 		});
 	};
 	$("vrun").onclick = function () {
 		var file = vfile, name = file.substring(file.lastIndexOf("/") + 1);
-		ask({ msg: "Run " + name + " with arguments (leaves the SD manager):", input: "" }, function (r) {
+		var label = (/^\/sys\//i.test(file) ? "sys/" : "") + name.replace(/\.s$/i, "");
+		ask({ label: label, input: "" }, function (r) {
 			if (!r) return;
 			req("POST", "/fm/run?p=" + q(file) + "&a=" + q(r.value.trim()), function (ok, text) {
-				if (!ok) { status("run failed: " + text, true); return; }
+				if (!ok) { tell("Run failed: " + text); return; }
 				closeView();
 				status("running " + name + " - back to the console...");
 				location.href = "/";

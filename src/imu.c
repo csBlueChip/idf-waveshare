@@ -952,7 +952,7 @@ static const char *imuCmd(int argc, char *argv[], cmdReply_t reply)
 	}
 	if (strcasecmp(sub, "MOTION") == 0 && n <= 1) {
 		if (n == 0) {
-			reply(s_motion ? "1\n" : "0\n");
+			reply(s_motion ? "en:1\n" : "en:0\n");
 			return NULL;
 		}
 		if (!cmdParseInt(a[0], 0, 1, &v)) {
@@ -969,7 +969,7 @@ static const char *imuCmd(int argc, char *argv[], cmdReply_t reply)
 	}
 	if (strcasecmp(sub, "STILL") == 0 && n <= 1) {
 		if (n == 0) {
-			snprintf(text, sizeof(text), "%d\n", s_stillMs);
+			snprintf(text, sizeof(text), "ms:%d\n", s_stillMs);
 			reply(text);
 			return NULL;
 		}
@@ -987,7 +987,7 @@ static const char *imuCmd(int argc, char *argv[], cmdReply_t reply)
 	}
 	if (strcasecmp(sub, "SIGMO") == 0 && n <= 2) {
 		if (n == 0) {
-			snprintf(text, sizeof(text), "%d%s\n", s_sigmoMs, s_sigmoRep ? " REPEAT" : "");
+			snprintf(text, sizeof(text), "ms:%d repeat:%d\n", s_sigmoMs, s_sigmoRep ? 1 : 0);
 			reply(text);
 			return NULL;
 		}
@@ -1025,7 +1025,7 @@ static const char *imuCmd(int argc, char *argv[], cmdReply_t reply)
 	}
 	if (strcasecmp(sub, "WOM") == 0 && n <= 1) {
 		if (n == 0) {
-			snprintf(text, sizeof(text), "%s\n", nvGet("imu.wom"));
+			snprintf(text, sizeof(text), "mg:%s\n", nvGet("imu.wom"));
 			reply(text);
 			return NULL;
 		}
@@ -1091,7 +1091,7 @@ static const char *imuCmdRange(bool acc, int argc, char *argv[], cmdReply_t repl
 
 	if (argc == 0) {
 		char text[32];
-		snprintf(text, sizeof(text), "%s %s\n", nvGet(kr), nvGet(kt));
+		snprintf(text, sizeof(text), "range:%s rate:%s\n", nvGet(kr), nvGet(kt));
 		reply(text);
 		return NULL;
 	}
@@ -1140,12 +1140,9 @@ static const char *imuCmdTap(int argc, char *argv[], cmdReply_t reply)
 	int  v;
 
 	if (argc == 0) {
-		char text[16];
-		if (s_tapEn[0] || s_tapEn[1] || s_tapEn[2]) {
-			snprintf(text, sizeof(text), "%d %d %d\n", s_tapEn[0], s_tapEn[1], s_tapEn[2]);
-		} else {
-			snprintf(text, sizeof(text), "NONE\n");
-		}
+		char text[40];
+		snprintf(text, sizeof(text), "single:%d double:%d triple:%d\n", s_tapEn[0] ? 1 : 0, s_tapEn[1] ? 1 : 0,
+		         s_tapEn[2] ? 1 : 0);
 		reply(text);
 		return NULL;
 	}
@@ -1219,7 +1216,7 @@ static const char *imuCmdOrient(int argc, char *argv[], cmdReply_t reply)
 
 	if (argc == 0) {
 		char text[24];
-		snprintf(text, sizeof(text), "%s%s\n", names[s_orMode], s_orAuto ? " AUTO" : "");
+		snprintf(text, sizeof(text), "mode:%s auto:%d\n", names[s_orMode], s_orAuto ? 1 : 0);
 		reply(text);
 		return NULL;
 	}
@@ -1262,22 +1259,24 @@ void imuOrientSet(imuOrMode_t mode, bool autoFlip)
 static const char *imuCmdSet(int argc, char *argv[], cmdReply_t reply)
 {
 	static const char *keys[] = {
-		"wom", "tap.thr", "tap.gap", "mot.thr", "still.thr",
-		"step.thr", "step.min", "orient.hold", "orient.flat",
+		"tap.thr", "tap.gap", "orient.hold", "orient.flat", "still.thr",
+		"mot.thr", "wom", "step.thr", "step.min",
 	};
 	static const bool engine[] = {			/* needs the chip reconfigured */
-		false, true, false, true, true,
-		true, true, false, false,
+		true, false, false, false, true,
+		true, false, true, true,
 	};
 	const int n = sizeof(keys) / sizeof(keys[0]);
-	char      full[24], text[48];
+	char      full[24], text[200];
 
-	if (argc == 0) {
+	if (argc == 0) {				/* one line of key:value words */
+		int len = 0;
 		for (int i = 0; i < n; i++) {
 			snprintf(full, sizeof(full), "imu.%s", keys[i]);
-			snprintf(text, sizeof(text), "%s=%s\n", keys[i], nvGet(full));
-			reply(text);
+			len += snprintf(text + len, sizeof(text) - len, "%s%s:%s", i ? " " : "", keys[i], nvGet(full));
 		}
+		snprintf(text + len, sizeof(text) - len, "\n");
+		reply(text);
 		return NULL;
 	}
 	const char *key = argv[0];
@@ -1288,7 +1287,7 @@ static const char *imuCmdSet(int argc, char *argv[], cmdReply_t reply)
 	for (i = 0; i < n && strcasecmp(key, keys[i]) != 0; i++) {
 	}
 	if (argc != 2 || i == n) {
-		return "usage: IMU SET [key value]  keys: wom tap.thr tap.gap mot.thr still.thr step.thr step.min orient.hold orient.flat";
+		return "usage: IMU SET [key value]  keys: tap.thr tap.gap orient.hold orient.flat still.thr mot.thr wom step.thr step.min";
 	}
 	snprintf(full, sizeof(full), "imu.%s", keys[i]);
 	const char *k[] = { full }, *v[] = { argv[1] };

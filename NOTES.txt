@@ -172,6 +172,15 @@ conversation context. Keep it current, like the README.
     ^K, BAT Vb:x.yy, NV GET key = value only, EVENTS, LOG, IMU status (one
     line), BTN n, BTN LIST (enabled numbers). Lists stay for people: MEM,
     INFO, FONT, IMG, FDIR, RUN, BTN. Charging is not detectable (no GPIO).
+  IMU query forms field:value (TAP single/double/triple, MOTION en, STILL ms,
+    SIGMO ms repeat, ORIENT mode auto, ACC/GYR range rate, WOM mg, SET one
+    line in order tap.thr tap.gap orient.hold orient.flat still.thr mot.thr
+    wom step.thr step.min). NV GET prefix list; NV IMPORT skips [redacted]
+    values with a warning (and a log line). SD manager: SaveAs:/<script>
+    dialog labels, name part selected, Import result dialog (OK only).
+  Fixed: SD manager Import crashed the board (stack overflow in task httpd,
+    seen on the board): nvImport() buffers now static in PSRAM, web server
+    stack 4096 -> 6144 (WEB_TASK_STACK, web.c).
   gfxLine: endpoints ordered (smaller y, then x) before Bresenham, so a line
     and its reverse are identical (38/144 differed before; checked on PC).
 

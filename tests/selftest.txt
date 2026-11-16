@@ -151,6 +151,8 @@ NV SET btn.gpio 0 2 3 4                # 4 buttons (GP3 allowed, not in the defa
 NV GET btn.gpio
 NV SET wifi.ip 192.168.4.255           # ERR wifi.ip is not a host address for wifi.cidr
 NV GET wifi.ssid
+NV GET btn                             # btn.deb=30 ... btn.gpio=... (prefix list)
+NV GET zz                              # ERR unknown key zz
 NV RESET scr.bl
 NV GET scr.bl                          # 100
 NV IMPORT missing                      # ERR file not found
@@ -253,6 +255,10 @@ BTN                                    # shows the settings above
 BTN 2                                  # n:2 gpio:2 type:tact short:1 long:0 double:0 t_deb:30 t_long:600 t_dbl:300 t_rpt:300
 BTN LIST                               # 1 2 3
 IMU                                    # acc:4 arate:224 ... orient:.. orient_auto:..
+IMU TAP                                # single:0 double:0 triple:0
+IMU ACC                                # range:4 rate:224
+IMU WOM                                # mg:100
+IMU SET                                # tap.thr:1.3 tap.gap:500 orient.hold:500 ... step.min:10
 EVENTS                                 # BTN:1 IMU:1 UI:1 SCRIPT:1
 LOG                                    # log:AUTO debug:0
 # now press the buttons: <<BTN n ...>> messages arrive between replies

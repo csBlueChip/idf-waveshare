@@ -690,12 +690,21 @@ const char *nvExport(const char *name)
 
 const char *nvImport(const char *name, cmdReply_t reply)
 {
-	char         skipped[NV_FILE_LINE] = "";		/* read-only keys found */
+	/* Big buffers are static (PSRAM), not on the stack: the SD manager's
+	 * Import runs this in the web server task (small stack). One import at a
+	 * time: the console's NV IMPORT is refused while the SD manager is open. */
+	static EXT_RAM_BSS_ATTR char skipped[NV_FILE_LINE];	/* read-only keys found */
+	static EXT_RAM_BSS_ATTR char redacted[NV_FILE_LINE];	/* keys whose value is [redacted] */
 	static EXT_RAM_BSS_ATTR char lines[NV_FILE_PAIRS][NV_FILE_LINE];
+	static EXT_RAM_BSS_ATTR char buf[NV_FILE_LINE];
+	static EXT_RAM_BSS_ATTR char text[NV_FILE_LINE + 40];
 	static int   lineNo[NV_FILE_PAIRS];
-	const char  *keys[NV_FILE_PAIRS], *vals[NV_FILE_PAIRS];
+	static const char *keys[NV_FILE_PAIRS], *vals[NV_FILE_PAIRS];
 	int          n = 0, no = 0;
-	char         path[96], buf[NV_FILE_LINE];
+	char         path[96];
+
+	skipped[0]  = '\0';
+	redacted[0] = '\0';
 
 	const char *e = nvFilePath(name, path, sizeof(path));
 	if (e) {
@@ -738,6 +747,13 @@ const char *nvImport(const char *name, cmdReply_t reply)
 		for (char *x = v - 2; x >= k && (*x == ' ' || *x == '\t'); x--) *x = '\0';	/* trim key */
 		while (*v == ' ' || *v == '\t') v++;					/* trim value */
 		int ki = nvFind(k);
+		if (strcmp(v, "[redacted]") == 0) {		/* copied from FCAT / the viewer: not a value */
+			if (!strstr(redacted, k) && strlen(redacted) + strlen(k) + 2 < sizeof(redacted)) {
+				strcat(redacted, " ");
+				strcat(redacted, k);
+			}
+			continue;				/* key keeps its value */
+		}
 		if (ki >= 0 && (s_keys[ki].flags & NV_RO)) {
 			if (!strstr(skipped, s_keys[ki].key) &&
 			    strlen(skipped) + strlen(s_keys[ki].key) + 2 < sizeof(skipped)) {
@@ -756,6 +772,13 @@ const char *nvImport(const char *name, cmdReply_t reply)
 	if (e) {
 		return e;
 	}
+	if (redacted[0] && !s_dry) {
+		ESP_LOGW(TAG, "%s:%s ignored (redacted)", name, redacted);
+	}
+	if (redacted[0] && reply && !s_dry) {
+		snprintf(text, sizeof(text), "warning:%s ignored (redacted)\n", redacted);
+		reply(text);
+	}
 	if (n == 0) {
 		return s_noSet;
 	}
@@ -768,7 +791,6 @@ const char *nvImport(const char *name, cmdReply_t reply)
 		return msg;
 	}
 	if (!e && skipped[0] && reply && !s_dry) {
-		char text[NV_FILE_LINE + 40];
 		snprintf(text, sizeof(text), "warning:%s ignored (read-only)\n", skipped);
 		reply(text);
 	}
@@ -801,20 +823,25 @@ static const char *nvCmd(int argc, char *argv[], cmdReply_t reply)
 		return nvSetMany(1, k, v, NULL);
 	}
 	if (strcasecmp(sub, "GET") == 0 && argc <= 2) {
-		for (int i = 0; i < NV_COUNT; i++) {
-			if (argc == 1 || strcasecmp(argv[1], s_keys[i].key) == 0) {
-				if (argc == 1) {
-					snprintf(text, sizeof(text), "%s=%s\n", s_keys[i].key, s_val[i]);
-				} else {
-					snprintf(text, sizeof(text), "%s\n", s_val[i]);	/* NV GET key: the value only */
-				}
+		if (argc == 2) {
+			int i = nvFind(argv[1]);
+			if (i >= 0) {				/* NV GET key: the value only */
+				snprintf(text, sizeof(text), "%s\n", s_val[i]);
 				reply(text);
-				if (argc == 2) {
-					return NULL;
-				}
+				return NULL;
 			}
 		}
-		if (argc == 2) {
+		/* NV GET: all; NV GET xxx: every key starting with xxx (key=value lines) */
+		size_t plen  = (argc == 2) ? strlen(argv[1]) : 0;
+		bool   found = false;
+		for (int i = 0; i < NV_COUNT; i++) {
+			if (plen == 0 || strncasecmp(s_keys[i].key, argv[1], plen) == 0) {
+				snprintf(text, sizeof(text), "%s=%s\n", s_keys[i].key, s_val[i]);
+				reply(text);
+				found = true;
+			}
+		}
+		if (argc == 2 && !found) {
 			snprintf(s_err, sizeof(s_err), "unknown key %s", argv[1]);
 			return s_err;
 		}

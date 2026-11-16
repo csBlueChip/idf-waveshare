@@ -83,7 +83,9 @@
  *                         .nvram files: default.nvram uses it for the
  *                         per-board keys; wifi.pwd gets a new number)
  *   NV SET btn.gpio 0 2 4 ..   same, the GPIO list (several words = one value)
- *   NV GET [key]          all as key=value lines, or one key's value only; secrets (wifi.pwd) are
+ *   NV GET [key|prefix]   all as key=value lines; an exact key: its value only;
+ *                         otherwise every key starting with prefix (key=value
+ *                         lines, case ignored; none: ERR unknown key). Secrets (wifi.pwd) are
  *                         shown in clear - NV is a privileged command
  *   NV RESET [key]        back to default (all if no key; sys.bootcnt is kept)
  *   NV EXPORT name        write key=value lines to SD:/sys/name.nvram (secret keys,
@@ -91,7 +93,10 @@
  *   NV IMPORT name        set the keys found in SD:/sys/name.nvram; all lines are
  *                         checked first, nothing is written if any is bad;
  *                         read-only keys are skipped ("warning: ... ignored");
- *                         a leading '!' on a line is ignored
+ *                         a leading '!' on a line is ignored; a value of exactly
+ *                         [redacted] (copied from FCAT / the viewer) is skipped -
+ *                         the key keeps its value - with "warning: key ignored
+ *                         (redacted)"
  *
  * In commands "\#" in a value stands for '#'.
  *

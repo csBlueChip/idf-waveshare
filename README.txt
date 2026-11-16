@@ -261,6 +261,7 @@ IMU (QMI8658A; see section 8)
                                 motion:0 wom:100 sigmo:0 sigmo_rep:0
                                 orient:NONE orient_auto:0
   IMU ACC [range rate]          accel range 2|4|8|16 g, rate 28..896 Hz
+                                (alone: range:4 rate:224; also IMU GYR)
   IMU GYR [range rate]          gyro range 16..2048 dps, rate 28..896 Hz
                                 (stored in NV, applied now)
   IMU RESET                     chip reset, NV settings, all detectors off
@@ -271,6 +272,13 @@ IMU (QMI8658A; see section 8)
   IMU SIGMO [ms [REPEAT]]       significant motion: still moving ms after
                                 the movement began (0 = off, 100..60000);
                                 REPEAT: again every ms while it keeps moving
+  Without arguments these reply their settings as field:value words:
+    IMU TAP     single:1 double:0 triple:0
+    IMU MOTION  en:0
+    IMU STILL   ms:100
+    IMU SIGMO   ms:100 repeat:1
+    IMU ORIENT  mode:L auto:1
+    IMU WOM     mg:100
   IMU STEP ...                  ERR not implemented (the chip's pedometer
                                 never counts; see section 8)
   TAP cannot run with MOTION, STILL or SIGMO: switching one on while the
@@ -281,10 +289,11 @@ IMU (QMI8658A; see section 8)
                                 orientation events (P portrait only, L
                                 landscape only, ROT all); AUTO also turns
                                 the picture 180 deg when ROT is upside down
-  IMU SET [key value]           list / store + apply the imu.* tuning keys
-                                (wom tap.thr tap.gap mot.thr still.thr
-                                step.thr step.min orient.hold orient.flat;
-                                step.* unused while STEP is not implemented)
+  IMU SET [key value]           show (one line of key:value words) / store
+                                + apply the imu.* tuning keys (tap.thr
+                                tap.gap orient.hold orient.flat still.thr
+                                mot.thr wom step.thr step.min; step.*
+                                unused while STEP is not implemented)
   IMU WOM [thr]                 wake-on-motion threshold 1..255 mg (NV)
   IMU SLEEP [SCR|RAD|CPU] [thr] sleep until motion or BOOT (default SCR;
                                 thr overrides imu.wom for this sleep)
@@ -339,6 +348,8 @@ Settings (stored in flash, used at the next boot)
   NV GET                        list all settings
   NV GET key                    show one setting
                                 - the value only, e.g. NV GET scr.bl -> 100
+  NV GET prefix                 every key starting with prefix, as
+                                key=value lines (NV GET btn, NV GET wifi.p)
                                 (NV is privileged: GET shows secrets such
                                 as wifi.pwd in clear)
   NV SET key value              check and store; value * = the key's
@@ -351,7 +362,11 @@ Settings (stored in flash, used at the next boot)
   NV IMPORT name                load /sys/name.nvram (all lines checked,
                                 nothing stored if any is bad; sys.bootcnt
                                 is skipped: "warning: sys.bootcnt ignored";
-                                a leading '!' on a line is ignored)
+                                a leading '!' on a line is ignored; a value
+                                of exactly [redacted] - copied from FCAT or
+                                the viewer - is skipped, the key keeps its
+                                value: "warning: wifi.pwd ignored
+                                (redacted)")
   In values "\#" stands for '#'.
 
 USB disk
@@ -424,13 +439,14 @@ SD card manager (web UI only)
   inserts a tab, Ctrl+S Save, Esc close.
   Edit (text and HTML files): a plain text box. Files over 256 KB or with
   non-ASCII / NUL bytes are refused; CRLF files show a warning (saved with
-  LF). Save (Ctrl+S) always asks for the name - Enter keeps it, a new name
+  LF). Save (Ctrl+S) always asks for the name (SaveAs:, the file name part
+  selected) - Enter keeps it, a new name
   saves a copy (handy for read-only files and trial edits); an existing
   name asks "replace?", a read-only one asks for another name. Saved like
   an upload (name.upl, renamed when complete). Closing with unsaved
   changes asks first.
   Viewer extras: Import (lightbulb, /sys/*.nvram files) = NV IMPORT, with a
-  "reboot now" choice; Run (play, .s files in /scripts or /sys) asks for
+  "reboot now" choice and the result (warnings / error) in a dialog; Run (play, .s files in /scripts or /sys) asks for
   the arguments, leaves the SD manager and runs the script once the
   console page is back (or after 5 s), so its output shows there.
   Saving, uploading, deleting or renaming /sys/debug.cfg reloads the log

@@ -9,19 +9,21 @@
  * the imu.* keys (IMU SET). Detectors are off at every boot.
  *
  * Commands registered by imuInit():
- *   ACC | GYR | TEMP          read accel (g), gyro (dps), die temperature (^C)
+ *   ACC | GYR                 read accel (g), gyro (dps)
  *   IMU                       status, one line of field:value words: acc arate
  *                             gyr grate tap1 tap2 tap3 still motion wom sigmo
  *                             sigmo_rep orient orient_auto
  *   TEMP                      ^C:23.4 ^F:74.1 ^K:296.6 (one decimal)
- *   IMU ACC|GYR [range rate]  show / store + apply range and rate
+ *   IMU ACC|GYR [range rate]  show (range:4 rate:224) / store + apply range and rate
  *   IMU RESET                 chip reset, NV config, all detectors off
- *   IMU TAP [s d t | NONE]    <<IMU TAP>> <<IMU 2TAP>> <<IMU 3TAP>>
- *   IMU MOTION [0|1]          <<IMU MOTION>> when movement starts
- *   IMU STILL [ms]            <<IMU STILL>> quiet for ms after a motion (0 off)
+ *   IMU TAP [s d t | NONE]    <<IMU TAP>> <<IMU 2TAP>> <<IMU 3TAP>>; shows
+ *                             single:0|1 double:0|1 triple:0|1
+ *   IMU MOTION [0|1]          <<IMU MOTION>> when movement starts; shows en:0|1
+ *   IMU STILL [ms]            <<IMU STILL>> quiet for ms after a motion (0 off);
+ *                             shows ms:n
  *   IMU SIGMO [ms [REPEAT]]   <<IMU SIGMO>> still moving ms after the motion session
  *                             began; once per session, or REPEAT: every ms while moving
- *                             (0 off, 100..60000; firmware-timed)
+ *                             (0 off, 100..60000; firmware-timed); shows ms:n repeat:0|1
  *   IMU STEP [RESET|0|1|AUTO n]  pedometer; AUTO n: <<IMU STEP count>> every n steps.
  *                             Only with IMU_STEP_ENABLE 1 (imu.c); now 0 = replies
  *                             "not implemented" (the chip's pedometer never counted)
@@ -29,9 +31,12 @@
  *   reports nothing while another engine runs): enabling one while the other is
  *   on replies an error
  *   IMU ORIENT [NONE|P|L|ROT] [AUTO]  <<IMU ORIENT 0..3|FLAT>>; AUTO turns the
- *                             picture 180 degrees (view flip) when ROT is upside down
- *   IMU SET [key value]       imu.* tuning keys (stored, applied now)
- *   IMU WOM [thr]             wake-on-motion threshold, mg (NV imu.wom)
+ *                             picture 180 degrees (view flip) when ROT is upside down;
+ *                             shows mode:NONE|P|L|ROT auto:0|1
+ *   IMU SET [key value]       imu.* tuning keys (stored, applied now); shows one
+ *                             line: tap.thr tap.gap orient.hold orient.flat
+ *                             still.thr mot.thr wom step.thr step.min (key:value)
+ *   IMU WOM [thr]             wake-on-motion threshold, mg (NV imu.wom); shows mg:n
  *   IMU SLEEP [SCR|RAD|CPU] [thr]  sleep until motion or BOOT (<<IMU WAKE>>)
  *   IMU CAL | IMU TEST        gyro calibration / self-test
  *   IMU DEBUG [0|1]           dbgf lines "IMU <ms> ...": raw STATUS1 / TAP_STATUS on

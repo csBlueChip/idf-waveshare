@@ -101,9 +101,16 @@ To do
 
  27. Board test - replies: TEMP (^C ^F ^K, 1 decimal), BAT (Vb:x.yy),
      NV GET key (value only), EVENTS / LOG / IMU field:value, BTN n,
-     BTN LIST; GET $t = TEMP -> $t[2] etc.
+     BTN LIST; GET $t = TEMP -> $t[2] etc. IMU TAP / MOTION / STILL / SIGMO
+     / ORIENT / ACC / GYR / WOM / SET query forms; NV GET prefix; Import of
+     a file with "!wifi.pwd=[redacted]" (skipped, warning in the dialog);
+     SaveAs: / Run dialogs on a phone. Import retest after the httpd stack
+     fix: no crash, sys.bootcnt warning in the dialog, reboot only when
+     "reboot now" is ticked.
 
 On hold
+ 28. NV SET / IMPORT / RESET of btn.deb|long|dbl|rpt also updating the
+     global button timings at once (now: next boot, or BTN SET).
  20. iPhone test - web console in the captive-portal window: page not too
      wide, no zoom-in when the input gets the focus or after the "^"
      history list; first reply lines at the bottom, above the input.
