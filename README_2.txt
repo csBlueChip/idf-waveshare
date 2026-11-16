@@ -49,7 +49,7 @@ This is the boot order from app_main in src/main.c:
  7	ledInit           RGB LED
  8	sdInit            SD card mounted
  9	resetBootFile     /sys/reset.nvram handled, if present
-10	mainAutorunFlash  LED flashes sys.aron/sys.aroff for 100 ms
+10	mainAutorunFlash  LED flashes sys.aron/sys.aroff for 100 ms (unless colour BLACK)
 11	logLoadCfg        /sys/debug.cfg log volumes
 12	lcdInit           LCD (172x320)
 13a	gfxInit           drawing
@@ -468,8 +468,9 @@ After being applied, it will then be renamed to either:  reset.done
 The built-in web-based file manager supports 4DOS 'DESCRIPT.ION' files.
 (one per folder, one file per line)
 
-=======================================================================================================================
------------------------------------------------------------------------------------------------------------------------
+ ,------------------.
+(  CONSOLE COMMANDS  )=================================================================================================
+ `------------------'
 
 The boot sequence is complete:
 	The device has booted
@@ -479,9 +480,37 @@ The boot sequence is complete:
 
 At this point, it is expected that onConnect will run your system script.
 
+But before we look at scripts, let's look at the system commands that are available in the UI.
+
+
+ ,-------------.
+(  Basic Rules  )------------------------------------------------------------------------------------------------------
+ `-------------'
+
+In the UI you may only ONE command per line
+
+Commands are NOT case-sensitive .. Eg. `REBOOT` == `reboot` == `ReBoOt`
+
+Command limits:  200 characters, 18 arguments
+
+Each command replies either
+	OK
+	ERR <reason>
+	unknown |<input>|
+
+All Input is ASCII .. ^ (circumflex) is used as the degrees symbol (eg. 37.1^C)
+
+
+ ,------.
+(  Help  )-------------------------------------------------------------------------------------------------------------
+ `------'
+
+A brief summary of commands and usage can be requested with:
+	HELP
+
 
  ,-------------------------.
-(  Colours - Normal People  )
+(  Colours - Normal People  )==========================================================================================
  `-------------------------'
 
 Colours may be represented as RGB (decimal or hex/HTML format) or HSL (decimal format only).
@@ -495,7 +524,7 @@ For simplicity, just use HTML colour codes and skip the rest of this section.
 	 HTML |  000000  :  FFFFFF  :  FF80C0      :  DC6E14
 
  ,-----------------------.
-(  Colours - Power Users  )
+(  Colours - Power Users  )============================================================================================
  `-----------------------'
 
 For power users...
@@ -525,7 +554,7 @@ The HSL -> RGB888 formula can be found in /src/cmd.c:cmdParseHsl()
 The firmware never needs RGB??? -> HSL  [qv. Appendix A]
 
 =========================
- LED - Das Blinken Light
+ LED - Das Blinken Light |---------------------------------------------------------------------------------------------
 =========================
 
 The LED is actually three LEDs R, G, and B.
@@ -533,7 +562,7 @@ Each takes a "brightness" (PWM factor) of {0..255}
 So each colour shown is exactly the colour specified by the code (ie. RGB888).
 
 ======================
- LCD - Screen / Glass
+ LCD - Screen / Glass |------------------------------------------------------------------------------------------------
 ======================
 
 The LCD actually uses a different (but standard) colour encoding: BGR565 (yes, BGR)
@@ -556,7 +585,7 @@ The screen driver then converts RGB565 -> BRG565
 
 
  ,-------------------------.
-(  LED - Das Blinken Light  )
+(  LED - Das Blinken Light  )==========================================================================================
  `-------------------------'
 
 Change the colour of the LED:
@@ -568,7 +597,7 @@ Eg. if sys.aroff or sys.aron fires and is set to 000000, the light is NOT flashe
 
 
  ,----------------------.
-(  LCD - Screen / Glass  )
+(  LCD - Screen / Glass  )=============================================================================================
  `----------------------'
 
 Although the screen only supports 65536 colours, <rgb> is still specified as {0..255}
@@ -576,7 +605,7 @@ Although the screen only supports 65536 colours, <rgb> is still specified as {0.
 	ie. Don't worry about it, just use 'normal' colours.
 
 ===========
- Backlight
+ Backlight |-----------------------------------------------------------------------------------------------------------
 ===========
 
 The backlight level is set as a percentage
@@ -586,7 +615,7 @@ The backlight level is set as a percentage
 	BL <n>  # set backlight brightness {0..100}
 
 ==========
- ROTATION
+ ROTATION |------------------------------------------------------------------------------------------------------------
 ==========
 
 The screen can be oriented in 4 ways {0..3}
@@ -607,7 +636,7 @@ If you specify a value >3, it will be taken modulo 4
 Rotation ONLY effects the coordinate system, it does NOT cause the current image to rotate.
 
 ===========
- AUTO-FLIP
+ AUTO-FLIP |-----------------------------------------------------------------------------------------------------------
 ===========
 
 The gyroscope can be used to flip the screen when the device is turned.
@@ -618,7 +647,7 @@ The gyroscope can be used to flip the screen when the device is turned.
 	SCR FLIP NONE   # disable gryo flip
 
 =============
- SCREEN-SHOT
+ SCREEN-SHOT |---------------------------------------------------------------------------------------------------------
 =============
 
 You can take a screenshot at any point.
@@ -634,7 +663,7 @@ If you wish to force a file-overwrite, use -f
 	SCR SHOT [filname] [-f]
 
 ==================
- DOUBLE BUFFERING
+ DOUBLE BUFFERING |----------------------------------------------------------------------------------------------------
 ==================
 
 The screen is Double Buffered.
@@ -650,7 +679,7 @@ If AUTO-update is DISabled, you will need to trigger the update yourself.
 	SCR UPD      # Update now
 
 ==============
- TRANSISTIONS
+ TRANSISTIONS |--------------------------------------------------------------------------------------------------------
 ==============
 
 When an update occurs the scratch buffer is swapped with the active buffer, and the LCD is updated.
@@ -696,7 +725,7 @@ Example useage:
 	SCR TRP NONE         # Display immediately
 
 ==============
- Clear Screen
+ Clear Screen |--------------------------------------------------------------------------------------------------------
 ==============
 
 You may clear the entire screen to a single colour:
@@ -704,7 +733,7 @@ You may clear the entire screen to a single colour:
 	CLS <rgb>
 
 ====================
- Images and Sprites
+ Images and Sprites |--------------------------------------------------------------------------------------------------
 ====================
 
 An image may be any size (realistically, up to the size of the screen)
@@ -738,7 +767,7 @@ Example useage:
 	IMG dog 30 45  # show SD;/images/dog.png at {x=30, y=45}
 
 ==============
- Basic Shapes
+ Basic Shapes |--------------------------------------------------------------------------------------------------------
 ==============
 
 A few basic shapes are included in the core engine.
@@ -774,7 +803,7 @@ Circles:
 <rad>   is the radius in pixels
 
 ============
- Text Boxes
+ Text Boxes |----------------------------------------------------------------------------------------------------------
 ============
 
 If you want something akin to an ebook screen, you will probably just define a single text-box
@@ -789,7 +818,7 @@ List and enumerate all available fonts (maximum 9):
 
 Retrieve the parameters of a specific font:
 	FONT <n>
-	
+
 	Eg.	n:1 name:DejaVu_Sans_Mono height:24 baseline:19 lead:2 maxw:12 prop:0 first:32 last:126
 
 	n        - font number
@@ -839,7 +868,7 @@ TCLS    : clear the text box (including outline) to the specified colour
 
 Modify textbox parameters:
 	TBOX <n> SET <x|y|w|l|s|f|d> <v>
-	
+
 <x> <y> : top-left location
 <w>     : width  in PIXELS
 <l>     : height in LINES
@@ -858,9 +887,9 @@ Eg. Change the "typing speed":
 
 To retrieve the current parameters for a textbox:
 	TBOX <n>
-	
+
 	n:1 rot:0 x:6 y:6 w:160 lines:4 speed:0 font:1 lead:2 h:102 cx:10 cy:2 scroll:0 ink:FFFFFF paper:auto
-	
+
 	n       - box number
 	rot     - rotation it was defined in
 	x y     - top-left corner, in pixels
@@ -878,29 +907,31 @@ To retrieve the current parameters for a textbox:
 
 
 ======================
- Show Text in Textbox
+ Show Text in Textbox |------------------------------------------------------------------------------------------------
 ======================
 
-Text boxes do NOT support "RTL" (right-to-left) display. Sorry.
+Text boxes are ASCII, Left-to-Right, only.
 
 The virtual cursor starts on the left of the first line.
-It is automatically advanced when text is displayed.  
+It is automatically advanced to the start of the next line when text is displayed.
 
 TEXT does NOT add an implicit '\n' (carriage return) to the end of strings:
+
 	TEXT <n> "hello"
 	TEXT <n> "-sailor"
+
 Will render "hello-sailor"
 Not "hello
      -sailor"
 
 Line-wrapping and word-breaking are both enforced according to these rules:
-	# A word that doesn’t fit on the rest of the line goes to the next line, 
+	# A word that doesn’t fit on the rest of the line goes to the next line,
 	  unless it’s already at the start of a line.
 	# A word wider than the box will split between characters.
 	# A space at the end of the line that doesn’t fit is dropped. Other spaces are kept.
 	# "\n" moves the cursor to the start of the next line
-	# Printing beyond the bottom of the box: 
-	    with scroll on, the box content moves up. 
+	# Printing beyond the bottom of the box:
+	    with scroll on, the box content moves up.
 		with scroll off, the rest is dropped until the cursor moves (TYX or TCLS).
 
 You may position the cursor by hand.
@@ -911,48 +942,53 @@ You may position the cursor by hand.
 <x> : pixel coordinate
 
 ===================
- What is a String?
+ What is a String? |---------------------------------------------------------------------------------------------------
 ===================
 
 For simplicity: Just wrap all your strings up in "quotes", and read the bit about "escapes".
 
-*	Escapes: 
-		\n      ->  new line. 
-		\\      ->  \  .. a way to print the escape character
-		\#      ->  #  .. *ALL* #'s in strings MUST be escaped (or they will start a comment)
-		\$      ->  $  .. an unescaped $ will be seen as a variable name
+*	Escapes:
+		\n      ->  new line.
 		\1..\9  ->  select font (for the rest of this TEXT)
+
+		\#      ->  #  .. *ALL* #'s in strings MUST be escaped (or they will start a comment)
+		\$      ->  $  .. an unescaped $ will be interpreted as a variable name prefix
+		\\      ->  \  .. a way to print the escape character
+
+		\"      ->  "\"" -> "  ..  '\"' -> \"  .. If a string is quoted, that encapsulation quote
+		\'      ->  '\'' -> '  ..  "\'" -> \'  ..    needs to be escaped inside the encapsulated string
+
 		...anything not listed above is literal text:  "\#\H" -> |#\H|
-		
+
 In detail, there are a number of rules in play:
 
 *	Unquoted Strings:
 		The text begins after the one space that follows n. Any further spaces are kept.
-		
+
 *	Single Quotes:
-		Include only and all of the text between the quotes: 
+		Include only and all of the text between the quotes:
 			' foo bar ' -> | foo bar |
 		To print a single quote, escape it
 			'Chief O\'Brien' -> |Chief O'Brien|
 		Anything other than blanks (or comments) after the closing quote is an error
-		
+
 *	Double Quotes:
-		Include only and all of the text between the quotes: 
+		Include only and all of the text between the quotes:
 			" foo bar " -> | foo bar |
 		To print a double quote, escape it
 			"He's \"the\" man' -> |He's "the" man|
 		Anything other than blanks (or comments) after the closing quote is an error
-		
+
 *	Leading \" or \':
 		This is not an open-quote, but a literal quote at the start of an unquoted string
 			\"hello" -> |"hello"|
-			
+
 *	In scripts [discussed later]:
 		$variables are expanded, and then the string is displayed.
 		A # or ; that comes from a variable’s value does NOT count as a comment or separator.
-			LET $s = "\#;hello" ; TEXT 1 $s  
+			LET $s = "\#;hello" ; TEXT 1 $s
 			-> |#;hello|
-			
+
 *	Rendering:
 		Starts at the current cursor position, and obeys word-wrap and scroll rules.
 
@@ -967,45 +1003,232 @@ Examples:
 	TEXT <n>   \" foo  bar      # Displays |  " foo  bar|
 	TEXT <n>    \' baz "bug's"  # Displays |   ' baz "bug's"|
 
+ ,-------.
+(  NVRAM  )============================================================================================================
+ `-------'
+
+The system configuration is controlled by NVRAM Variables
+
+NVRAM settings are persistent between boots, and do not require an SDCard.
+
+	NV GET                    | List all current NVRAM settings
+	NV GET <var.name>         | Show a specific NVRAM setting
+							  |
+	NV SET <var.name> <value> | Change a specific NVRAM setting
+							  |
+*1	NV RESET                  | Reset (almost) ALL NVRAM variables to factory default
+	NV RESET <var.name>       | Reset a specific   NVRAM variable  to factory default
+							  |
+	NV EXPORT <filename>      | Save current settings to   SD/sys/<filename>.nvram
+*2	NV IMPORT <filename>      | Load         settings from SD/sys/<filename>.nvram
 
 
+*1	sys.bootcnt  is NOT reset
+	wifi.pwd     gets a new random 4-digit number
+
+*2	sys.bootcnt  is ignored (with a warning)
+	all lines are validated before import - any error aborts the import (with an error)
 
 
+ ,-------------.
+(  System Info  )======================================================================================================
+ `-------------'
 
+Hardware and firmware details can be retrieved with:
+	INFO
 
+	Chip: esp32s3 rev 0.2, 2 cores, 160 MHz
+	Flash: 16 MB  PSRAM: 8 MB
+	Free: 95 KB internal, 7741 KB PSRAM
+	MAC: Wi-Fi 28:84:85:55:74:b9  BT 28:84:85:55:74:ba
+	FW: wavedemo 0.5.0 (Nov 15 2026 08:11:12)
+	IDF: v6.1
+	Partition: ota_0
+	App: 1698 KB of 4096 KB (41 %)
+	Boot: 182
+	Reset: USB
+	Timestamp: 20261115-225541
+	Clock: 2026-11-15 22:55:41
+	Script: none
+	Uptime: 0d 00:05:04
+	SD: 59.4 GB, 59.4 GB free
 
+Runtime details can be retrieved with:
+	MEM
 
+	Internal: free 95 KB, lowest 47 KB, largest block 31 KB
+	PSRAM: free 7741 KB, lowest 7652 KB, largest block 7680 KB
+	Task             prio  stack free (lowest)
+	httpd               5    1576 B
+	main                1    4888 B
+	IDLE0               0     756 B
+	IDLE1               0     752 B
+	ser                 5    3152 B
+	tcpip              18    1840 B
+	dns                 5    1804 B
+	imu                 4    4744 B
+	ipc0               23     388 B
+	btn                 6    3360 B
+	btController       23    2780 B
+	nimble_host        21    2180 B
+	ipc1               24     560 B
+	sys_evt            20    1544 B
+	esp_timer          22    3044 B
+	wifi               23    4100 B
+	Tmr Svc             1    1388 B
 
+ ,--------------.
+(  UI Selection  )=====================================================================================================
+ `--------------'
 
+The UI can be changed, and/or set from the UI:
 
+Check default UI:
+	UI                 # active:<current> default:<boot_default>
 
+Change UI:
+	UI <mode>          # {Web, Telnet, BLE, USB, UART, MSC}
 
+Change UI & set default:
+	UI <mode> DEFAULT  # {Web, Telnet, BLE, USB, UART, MSC}
 
+	If <mode> is NOT the current active mode, switch to it.
 
+Set default UI to current UI:
+	UI DEFAULT
 
+Set default UI without switching:
+	NV SET sys.ui <mode>
 
-
-
-
-
-
-
-
-,---------------------------.
-| [Accel X] [-1.000]        |  Here we have 3 fixed-text boxes
-| [Accel Y] [+0.300]        |    and 3 that we will be updating regularly
-| [Accel Z] [+0.926]        |
-| ...                       |
-`---------------------------'
-
-
-
+NVRAM variables [sys]:
+	sys.ui = <Mode>  [BLE]  # Default UI: BLE|TELNET|WEB|UART|USB|MSC
 
 
  ,------.
-(  Text  )
+(  Wait  )=============================================================================================================
  `------'
 
+Although seemingly useless, this aids in debugging groups of commands pasted in to a serial session.
+
+	WAIT <ms>    # Pause for <ms> (1 second = 1000 ms) .. resolution 1 ms
+
+
+ ,--------.
+(  REBOOT  )===========================================================================================================
+ `--------'
+
+To reboot the device from the UI:
+	REBOOT
+
+
+ ,---------.
+(  Battery  )==========================================================================================================
+ `---------'
+
+The battery voltage can be retrieved from the hardware:
+	BAT      # Vb:4.19  (two decimal places)
+
+ ,---------------------------------.
+(  IMU : Inertial Measurement Unit  )==================================================================================
+ `---------------------------------'
+
+The Waveshare is equipped with a QMI8658A "IMU".
+
+It offers four features:
+	# Accelerometer
+	# Gyroscope
+	# Temperature Sensor (temp of chip reads a few degrees higher than ambient)
+	# Step Counter (pedometer - click) [DISABLED]
+
+It can generate interrupts:
+	# Tap                - peak
+	# Motion start       - when motion starts
+	# Motion stop        - when motion stops
+	# Wake-on-Motion     - stop hibernating
+	# Significant motion - Ignored - re-implemented in firmware (for greater control)
+
+And we can generate inferred events for:
+	# Tap Events:
+		# Single - <<IMU TAP>>
+		# Double - <<IMU 2TAP>>
+		# Triple - <<IMU 3TAP>>
+
+	# Motion Events:
+		# Motion start       - <<IMU MOTION>>   [once per movement session]
+		# Motion stop        - <<IMU STILL>>
+		# Significant motion - <<IMU SIGMO>>    [after <ms> of "significant" movement]
+
+	# Wake-on-Motion     - <<IMU WAKE>>
+	# Screen orientation - <<IMU ORIENT 0..3|FLAT>>
+
+..."Tap Events" and "Motion Events" are exclusive - one or the other, but not both.
+
+The firmware parameters are set with the IMU command:
+	IMU TAP <s d t|NONE>              # sdt=<0|1> .. enable Single/Double/Triple .. "NONE" == "0 0 0"
+	IMU ORIENT <L|P|ROT|NONE> [AUTO]  # Landscape/Portrait orientation events [AUTO flip screen]
+	IMU STILL <ms>                    # {0..60000} [0 = off] .. enable Still detection
+	IMU MOTION <0|1>                  # enable Motion detection
+	IMU SIGMO <ms> [REPEAT]           # {0, 100..60000} [0 = off] .. enable Significant Motion detection
+
+The IMU settings can be configured with:
+	IMU ACC <g>   <hz>  # { 2,  4,  8,  16}                       .. {28, 56, 112, 224, 448, 896}
+	IMU GYR <dps> <hz>  # {16, 32, 64, 128, 256, 512, 1024, 2048} .. {28, 56, 112, 224, 448, 896}
+	IMU WOM <mg>        # {1..255}
+
+Running any of those commands without argument will return the current settings:
+	IMU TAP     # single:<0|1> double:<0|1> triple:<0|1>
+	IMU ORIENT  # mode:<P|L|ROT|NONE> auto:<0|1>
+	IMU STILL   # ms:<n>    [0 -> off]
+	IMU MOTION  # en:<0|1>
+	IMU SIGMO   # ms:<n> repeat:<0|1>
+
+	IMU ACC     # range:<n> rate:<hz>
+	IMU GYR     # range:<n> rate:<hz>
+	IMU WOM     # mg:<n>
+
+...TAP, MOTION, STILL, SIGMO and ORIENT settings are all DISABLED at boot.
+
+The IMU core settings can be retrieved:
+	IMU SET     # tap.thr:1.3   tap.gap:500  orient.hold:500   orient.flat:30       [a single line
+	            # still.thr:64  mot.thr:100  wom:100   step.thr:200   step.min:10    with single spaces]
+
+The IMU core settings can be changed (both Live and NVRAM settings are updated):
+	IMU SET <field> <value>  # also edits NVRAM
+
+NVRAM variables [imu]:
+	imu.arange      = <g>    [4]    # {2, 4, 8, 16}                  - accelerometer range
+	imu.arate       = <hz>   [224]  # {28, 56, 112, 224, 448, 896}Hz - sample rate
+
+	imu.grange      = <dps>  [512]  # {16, 32, 64, 128, 256, 512, 1024, 2048} - gyroscope range
+	imu.grate       = <hz>   [224]  # {28, 56, 112, 224, 448, 896}Hz          - sample rate
+
+	imu.tap.thr     = <g>    [1.3]  # {0.1 .. 7.9} - peak reading (one decimal place)
+	imu.tap.gap     = <ms>   [500]  # {100..2000}  - maximum gap between taps (for 2tap/3tap)
+
+	imu.orient.hold = <ms>   [500]  # {0..5000}    - delay before registering an orientation change
+	imu.orient.flat = <deg>  [30]   # {5..80}      - angle from horizontal which is considered to be "flat"
+
+	imu.still.thr   = <mg>   [64]   # {32..2000}   - largest  change between samples [step size 31.25 mg]
+	imu.mot.thr     = <mg>   [100]  # {32..2000}   - smallest change between samples [step size 31.25 mg]
+	imu.wom         = <mg>   [100]  # {1..255}     - change that wakes from IMU SLEEP
+
+	imu.step.thr    = <mg>   [200]  # {50..2000}   - [DISABLED] peak-to-peak change
+	imu.step.min    = <n>    [10]   # {1..255}     - [DISABLED] steps before counting starts
+
+
+Commands not mentioned: if this page is the IMU reference, ACC, GYR, TEMP, IMU SLEEP, IMU CAL, IMU TEST, IMU REC, IMU RESET and IMU DEBUG are missing. A one-line pointer to them would do.
+
+
+
+
+ ,-------------.
+(  Temperature  )======================================================================================================
+ `-------------'
+
+The Waveshare has a temperature sensor on it.
+
+You can read the current value with:
+	TEMP     # ^C:37.1 ^F:93.7 ^K:301.1  (one decimal place)
 
 
 
@@ -1044,20 +1267,16 @@ Examples:
 
 
 
-	<text> has several
 
-But before we got to scripting, lets list the system commands:
-
-The system configuration is controlled by NVRAM Variables:
-	NV SET key value|r g b|g1 g2 .. | GET [key] | RESET [key] | EXPORT name | IMPORT name
-
-The system status can be examined:
-	INFO  hardware and firmware info
-	MEM  RAM use: internal, PSRAM, task stacks
+=======================================================================================================================
+-----------------------------------------------------------------------------------------------------------------------
+=======================================================================================================================
+-----------------------------------------------------------------------------------------------------------------------
 
 
 
-WAIT ms  pause 0..60000 ms (1 ms resolution)
+
+
 
 LOG [UART|USB|BOTH|AUTO] | DEBUG [SAVE | device|ALL [0..4 [SAVE]]]  log port(s) / volume
 PRINT text  reply text {\n \\ \# \$}
@@ -1069,25 +1288,21 @@ FDIR [txt|var|nvram|*]  list data files (name size ro|rw)
 FSTAT file[.var|.nvram]  size:ro|rw
 FDELETE file[.var|.nvram]  delete a data file
 
-REBOOT  restart the device
 
 ACC  accelerometer aX,aY,aZ (g)
 GYR  gyroscope gX,gY,gZ (dps)
-
-TEMP  temperature (^C)
-
 IMU [ACC|GYR|RESET|TAP|MOTION|STILL|SIGMO|STEP|ORIENT|SET|WOM|SLEEP|CAL|TEST|REC ...]
 
-BAT  battery voltage
 
 
 FILES [WEB [STOP|EXIT] | FMEXPORT | SYNEXPORT]  USB disk / web SD manager / export page, colours
 
-UI [BLE|TELNET|WEB|UART|USB|NEXT]  show / switch interface
 
 EVENTS [BTN|IMU|UI|SCRIPT|ALL 0|1]  events sent to the client
 
 BTN [n s l d [TACT|TOUCH]] | BTN [n] SET deb|long|dbl|rpt ms | BTN CAL
+
+LIST [name [from [to]]]  list a script
 
 RUN [name [args]]  list / start a script
 LOAD name [args]  load, pause at the first line
@@ -1096,9 +1311,6 @@ PAUSE  pause the script
 CONT  resume a paused script
 STEP [IN|OUT]  run one line (paused)
 BPT [[file:]n | DEL ALL|#n|[file:]n]  breakpoints
-
-LIST [name [from [to]]]  list a script
-
 VARS  variables (paused)
 STACK  call stack (paused)
 
@@ -1134,12 +1346,12 @@ STACK  call stack (paused)
 
 
 
- ,--------------.
-(  Appendix : A  )
- `--------------'
+ ,------------------------.
+(  Appendix A : rgb2hsl()  )===========================================================================================
+ `------------------------'
 
 // RGB888 -> HSL : h {0..359}, s and l {0..100} (nearest whole numbers)
-void  rgbToHsl (uint8_t r8,  uint8_t g8,  uint8_t b8,  int *h,  int *s,  int *l)
+void  rgb2hsl (uint8_t r8,  uint8_t g8,  uint8_t b8,  int *h,  int *s,  int *l)
 {
 	int    max = (r8 > g8) ? ((r8 > b8) ? r8 : b8) : ((g8 > b8) ? g8 : b8) ;
 	int    min = (r8 < g8) ? ((r8 < b8) ? r8 : b8) : ((g8 < b8) ? g8 : b8) ;
@@ -1164,9 +1376,9 @@ void  rgbToHsl (uint8_t r8,  uint8_t g8,  uint8_t b8,  int *h,  int *s,  int *l)
 	*l = (int)(L * 100.0f + 0.5f);
 }
 
- ,--------------.
-(  Appendix : B  )
- `--------------'
+ ,-------------------------.
+(  Appendix B : drawPoly()  )==========================================================================================
+ `-------------------------'
 
 FN drawPoly $n $cx $cy $r          # n sides, centre cx cy, radius r
   VARS $i $a $x1 $y1 $x2 $y2
@@ -1179,3 +1391,6 @@ FN drawPoly $n $cx $cy $r          # n sides, centre cx cy, radius r
     LET $x1 = $x2 ; LET $y1 = $y2
   END
 END
+
+-----------------------------------------------------------------------------------------------------------------------
+=======================================================================================================================
