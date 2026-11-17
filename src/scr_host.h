@@ -71,7 +71,8 @@ int scrHostPause(void);
 int scrHostFilesDefault(void);
 
 /* Data files (FREAD FWRITE ... and VARS SAVE / LOAD): fname is "name.txt" or
- * "name.var" in the script data folder (SD:/scripts/data). Offsets from 0.
+ * "name.var" in the script data folder (scriptDataDir: SD:/scripts/data or
+ * SD:/sys/data). Offsets from 0.
  * Size in bytes, -1 = no such file (*err NULL) or an error (*err set);
  * *ro = read-only. */
 long scrHostFileSize(const char *fname, bool *ro, const char **err);

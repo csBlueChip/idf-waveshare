@@ -1,5 +1,6 @@
 #include "nv.h"
 
+#include <ctype.h>
 #include <errno.h>
 #include <math.h>
 #include <stdio.h>
@@ -56,6 +57,7 @@ static const char *nvChkBaud(const char *in, int min, int max, char *out);
 static const char *nvChkBlePwr(const char *in, int min, int max, char *out);
 static const char *nvChkPin(const char *in, int min, int max, char *out);
 static const char *nvChkBtnGpio(const char *in, int min, int max, char *out);
+static const char *nvChkGcal(const char *in, int min, int max, char *out);
 static bool        nvPinOk(int g);
 static const char *nvCrossIp(char (*vals)[NV_VAL_MAX]);
 static const char *nvCrossPins(char (*vals)[NV_VAL_MAX]);
@@ -105,6 +107,7 @@ static const nvKey_t s_keys[] = {
 	{ "imu.step.min",     "10",            nvChkInt,   1,   255,   0 },
 	{ "imu.orient.hold",  "500",           nvChkInt,   0,   5000,  0 },
 	{ "imu.orient.flat",  "30",            nvChkInt,   5,   80,    0 },
+	{ "imu.gcal",         "",              nvChkGcal,  0,   0,     0 },
 	{ "run.files",        "4",             nvChkInt,   1,   16,    0 },
 	{ "sys.autorun",      "0",             nvChkInt,   0,   1,     0 },
 	{ "sys.aron",         "0,255,0",       nvChkRgb,   0,   255,   0 },
@@ -331,6 +334,26 @@ static const char *nvChkText(const char *in, int min, int max, char *out)
 		return msg;
 	}
 	strcpy(out, in);
+	return NULL;
+}
+
+/* Gyro gains from IMU CAL: empty, or "xxxx,yyyy,zzzz" (hex X,Y,Z), stored lower case. */
+static const char *nvChkGcal(const char *in, int min, int max, char *out)
+{
+	if (!in[0]) {
+		out[0] = 0;
+		return NULL;
+	}
+	bool ok = strlen(in) == 14;
+	for (int i = 0; ok && i < 14; i++) {
+		ok = (i == 4 || i == 9) ? in[i] == ',' : isxdigit((unsigned char)in[i]);
+	}
+	if (!ok) {
+		return "must be empty or xxxx,yyyy,zzzz (hex)";
+	}
+	for (int i = 0; i <= 14; i++) {
+		out[i] = tolower((unsigned char)in[i]);
+	}
 	return NULL;
 }
 
@@ -659,11 +682,12 @@ static const char *nvFilePath(const char *name, char *path, size_t n)
 
 const char *nvExport(const char *name)
 {
-	char path[96];
-	const char *e = nvFilePath(name, path, sizeof(path));
+	char path[96], file[SD_NAME_MAX];
+	const char *e = sdNameMake(name, NV_EXT, file, sizeof(file));	/* new file: restricted name */
 	if (e) {
 		return e;
 	}
+	nvFilePath(file, path, sizeof(path));
 
 	sdLock();
 	if (sdEnsureMounted() != ESP_OK) {

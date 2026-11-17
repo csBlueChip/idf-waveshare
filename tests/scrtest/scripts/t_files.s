@@ -1,10 +1,10 @@
-# data files: FWRITE FREAD FTELL FSEEK FCLOSE, FLOG FSTAT FDELETE (positions from 1)
+# data files: FWRITE FREAD FTELL FSEEK FCLOSE, FAPP FSTAT FDELETE (positions from 1)
 ONERROR CONT
 FTELL $p log
 PRINT new file position $p
 FWRITE log "line one\nline two\n"
 FTELL $p log
-FSTAT log
+FSTAT log.txt
 PRINT after write: pos=$p stat=$.ret
 FSEEK log START
 FREAD $a log EOL
@@ -34,7 +34,7 @@ FWRITE log "ONE"
 FSEEK log START
 FREAD $a log EOL
 PRINT overwrite: [$a]
-FLOG log appended by FLOG
+FAPP log.txt appended by FAPP
 FSEEK log START
 FREAD $x log 200
 PRINT whole: [$x] err=$.err
@@ -51,9 +51,9 @@ PRINT after fclose: pos $q
 XRO log
 FWRITE log "x"
 PRINT ro: $.err
-FSTAT log
+FSTAT log.txt
 PRINT stat: $.ret
-FDELETE log
+FDELETE log.txt
 PRINT delete ro: $.err
 LET $$score = 12.5
 LET $$name = 'say "hi"\nnext'

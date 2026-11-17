@@ -13,7 +13,7 @@ FREAD $v tg EOL
 PRINT "B=10: $v"
 FSEEK tg TAG last
 FTELL $p tg
-FSTAT tg
+FSTAT tg.txt
 PRINT "after last: $p (size $.ret)"
 FSEEK tg TAG I=2
 FREAD $v tg EOL

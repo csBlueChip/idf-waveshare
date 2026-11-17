@@ -1,6 +1,7 @@
 # file names from constants and variables; quoted (text) constants
 .CONST FN_BOAST "boast"
 .CONST FN_PLAIN quiz
+.CONST FN_BOAST_T "boast.txt"
 .CONST MSG "hello there"
 .CONST ID "007"
 FWRITE FN_BOAST "B=1\nfirst\nB=2\nsecond\n"
@@ -20,8 +21,8 @@ PRINT "plain constant + global: $p"
 LET $i = ID
 PRINT "text constant kept exactly: $i"
 TEXT 1 MSG
-FLOG FN_BOAST appended
-GET $s = FSTAT FN_BOAST
+FAPP FN_BOAST_T appended
+GET $s = FSTAT FN_BOAST_T
 PRINT "command line: $s"
 VARS SAVE FN_BOAST $$h
 ONERROR CONT

@@ -12,7 +12,7 @@ UI NEXT                                # ERR usage: ...
 UI                                     # active:TELNET default:TELNET
 LED 255,0,0
 LED 0,0,0
-foo bar                                # unknown |foo bar|
+foo bar                                # ERR unknown |foo bar|
 BL 40
 BL 100
 
@@ -110,15 +110,18 @@ FBOX 20 40 132 200 0,0,0               # dissolves out, different pattern
 SCR TR WIPE 500                        # ERR usage (direction required)
 
 # ---------- screenshots (SD card) ----------
-SCR SHOT                               # next free number, e.g. 00000001.png
-SCR SHOT                               # +1
+SCR SHOT                               # timestamp, e.g. b002A_001523.png
+SCR SHOT                               # same second: b002A_001523_1.png
 SCR SHOT selftest                      # selftest.png
 SCR SHOT selftest                      # ERR file exists
 SCR SHOT selftest.png -f               # selftest.png (overwritten)
-SCR SHOT a/b                           # ERR bad file name
+SCR SHOT a/b                           # ERR name: letters, digits, '_' (max 31)
+SCR SHOT my-shot                       # ERR name: ...
+SCR SHOT abcdefghijklmnopqrstuvwxyz123456  # ERR name: ... (32 chars)
 
 # ---------- NV (settings are backed up and restored) ----------
 NV EXPORT selftest_backup              # SD:/sys/selftest_backup.nvram
+NV EXPORT my.settings                  # ERR name: letters, digits, '_' (max 31)
 NV GET
 NV GET scr.bl
 NV SET scr.bl 60                       # next boot: backlight 60 %
@@ -166,6 +169,7 @@ CLS 0,0,0
 IMG 1                                  # x y default 0 0
 IMG poseidon.PNG 60 100
 IMG 9                                  # ERR not found
+IMG 21                                 # ERR not found (numbers: first 20 only)
 IMG 1 5                                # ERR usage
 
 # ---------- text boxes ----------
@@ -259,6 +263,9 @@ IMU TAP                                # single:0 double:0 triple:0
 IMU ACC                                # range:4 rate:224
 IMU WOM                                # mg:100
 IMU SET                                # tap.thr:1.3 tap.gap:500 orient.hold:500 ... step.min:10
+IMU TEST                               # acc:pass ax:.. ay:.. az:.. gyr:pass gx:.. gy:.. gz:..
+IMU CAL                                # keep still: cod:0x00 result:pass gcal:xxxx,yyyy,zzzz
+NV GET imu.gcal                        # the same xxxx,yyyy,zzzz
 EVENTS                                 # BTN:1 IMU:1 UI:1 SCRIPT:1
 LOG                                    # log:AUTO debug:0
 # now press the buttons: <<BTN n ...>> messages arrive between replies

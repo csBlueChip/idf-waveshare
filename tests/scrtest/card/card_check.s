@@ -7,12 +7,18 @@ VARS SAVE card $$n
 LET $$n = 0
 VARS LOAD card $$n
 PRINT "card.var: $$n"
-FLOG cardlog first line
-FLOG cardlog second line
-GET $s = FSTAT cardlog
+FAPP cardlog.txt first line
+FAPP cardlog.txt second line
+GET $s = FSTAT cardlog.txt
 PRINT "cardlog: $s"
 FWRITE scratch hello
-FDELETE scratch
-GET $s = FSTAT scratch
+FDELETE scratch.txt
+GET $s = FSTAT scratch.txt
 PRINT "scratch deleted: $.ok"
 CALL shapes.drawPoly 3 10 10 5
+GET $s = FSTAT cardlog
+PRINT "no extension: $.ok $.err"
+GET $s = FSTAT /sys/default.nvram
+PRINT "folder in a script: $.ok $.err"
+GET $s = FSTAT default.nvram
+PRINT "nvram from /scripts: $.ok $.err"

@@ -326,7 +326,7 @@ static const char *constWords(const char *line)
 	return o;
 }
 
-/* quote char of a raw-text command (TEXT n "..." / TLEN n "..." / FLOG f '...') */
+/* quote char of a raw-text command (TEXT n "..." / TLEN n "..." / FAPP f '...') */
 static char rawQuote(const char *line, int skipWords)
 {
 	const char *p = scrSkip(line);
@@ -344,7 +344,7 @@ static bool runCmd(const char *text, cmdCtx_t *c)
 {
 	const char *t = constWords(text);
 	const char *line;
-	if (scrWordIs(t, "TEXT") || scrWordIs(t, "TLEN") || scrWordIs(t, "FLOG")) {
+	if (scrWordIs(t, "TEXT") || scrWordIs(t, "TLEN") || scrWordIs(t, "FAPP")) {
 		line = scrSubst(t, SUB_RAW, rawQuote(t, 2));	/* the command does quotes / escapes */
 	} else {
 		line = scrSubst(t, SUB_CMD, 0);
@@ -2238,7 +2238,7 @@ static const char *bptParse(const char *a, char *file, int *line)
 		if (l > 2 && strncasecmp(c - 2, ".s", 2) == 0) {
 			l -= 2;
 		}
-		if (l <= 0 || l > SCR_FNAME_MAX) {
+		if (l <= 0 || l > SCR_PNAME_MAX) {
 			return "bad file name";
 		}
 		memcpy(file, a, l);
@@ -2248,7 +2248,7 @@ static const char *bptParse(const char *a, char *file, int *line)
 		if (!scr.active) {
 			return "no active script: use BPT file:n";
 		}
-		snprintf(file, SCR_FNAME_MAX + 1, "%s", scr.name);
+		snprintf(file, SCR_PNAME_MAX + 1, "%s", scr.name);
 	}
 	char *e;
 	long  n = strtol(a, &e, 10);
@@ -2271,7 +2271,7 @@ static const char *srcLine(const char *file, int line)
 
 const char *scrCmdBpt(int argc, char *argv[], scrReply_t reply)
 {
-	char file[SCR_FNAME_MAX + 1];
+	char file[SCR_PNAME_MAX + 1];
 	int  line;
 	char out[SCR_LINE_MAX + 400];
 
@@ -2280,7 +2280,8 @@ const char *scrCmdBpt(int argc, char *argv[], scrReply_t reply)
 	}
 	if (argc == 0) {
 		for (int i = 0; i < scrNBpts; i++) {
-			snprintf(out, sizeof(out), "#%d : %s.s:%d  %.200s\n", i + 1, scrBpts[i].file, scrBpts[i].line,
+			snprintf(out, sizeof(out), "#%d : %.*s.s:%d  %.200s\n", i + 1, SCR_PNAME_MAX, scrBpts[i].file,
+			         scrBpts[i].line,
 			         scr.active ? srcLine(scrBpts[i].file, scrBpts[i].line) : "");
 			reply(out);
 		}
@@ -2343,7 +2344,7 @@ const char *scrCmdBpt(int argc, char *argv[], scrReply_t reply)
 
 const char *scrCmdList(int argc, char *argv[], scrReply_t reply)
 {
-	char name[SCR_FNAME_MAX + 1];
+	char name[SCR_PNAME_MAX + 1];
 	if (!scrEnsureCtx()) {
 		return "out of memory";
 	}
@@ -2357,7 +2358,7 @@ const char *scrCmdList(int argc, char *argv[], scrReply_t reply)
 		if (l > 2 && strcasecmp(argv[0] + l - 2, ".s") == 0) {
 			l -= 2;
 		}
-		if (l > SCR_FNAME_MAX) {
+		if (l > SCR_PNAME_MAX) {
 			return "bad file name";
 		}
 		snprintf(name, sizeof(name), "%.*s", l, argv[0]);

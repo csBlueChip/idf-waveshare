@@ -39,13 +39,13 @@ static const char *TAG = "script";
 #define SCRIPT_TASK_STACK	16384
 #define SCRIPT_TASK_PRIO	1		/* = main task: STOP is always read */
 #define SCRIPT_EV_TEXT		64
-#define SCRIPT_LIST_MAX		64
 #define SCRIPT_WATCH_MS		50		/* BOOT escape watcher poll */
 #define SCRIPT_ESCAPE_MS	3000		/* hold BOOT this long: autorun off */
 #define SCRIPT_BOOT_GPIO	GPIO_NUM_0
+#define SYS_PFX_LEN		(int)(sizeof(SCR_SYS_PREFIX) - 1)
 
 typedef struct {
-	char              name[SCR_FNAME_MAX + 1];
+	char              name[SCR_PNAME_MAX + 1];
 	char              args[CMD_LINE_MAX + 1];
 	char              fn[SCR_NAME_MAX + 1];
 	bool              load;
@@ -143,7 +143,7 @@ esp_err_t scriptInit(void)
 	if (err == ESP_OK) err = cmdRegister("STEP", 0, 1, scriptCmdStep, "STEP [IN|OUT]  run one line (paused)");
 	if (err == ESP_OK) err = cmdRegister("BPT", 0, 2, scriptCmdBpt, "BPT [[file:]n | DEL ALL|#n|[file:]n]  breakpoints");
 	if (err == ESP_OK) err = cmdRegister("VARS", 0, 0, scriptCmdVars, "VARS  variables (paused)");
-	if (err == ESP_OK) err = cmdRegister("LIST", 0, 3, scriptCmdList, "LIST [name [from [to]]]  list a script");
+	if (err == ESP_OK) err = cmdRegister("LIST", 0, 3, scriptCmdList, "LIST [name [from [to]]]  list a script (alone: all scripts)");
 	if (err == ESP_OK) err = cmdRegister("STACK", 0, 0, scriptCmdStack, "STACK  call stack (paused)");
 	return err;
 }
@@ -259,9 +259,9 @@ bool scriptEvent(const char *text)
 
 void scriptBoot(void)
 {
-	if (scriptAutorun() && scriptExists("sys/onBoot")) {
-		ESP_LOGI(TAG, "sys/onBoot.s");
-		scriptStart("sys/onBoot", "", NULL, false, true, true, NULL);
+	if (scriptAutorun() && scriptExists(SCR_SYS_PREFIX "onBoot")) {
+		ESP_LOGI(TAG, SCR_SYS_PREFIX "onBoot.s");
+		scriptStart(SCR_SYS_PREFIX "onBoot", "", NULL, false, true, true, NULL);
 	}
 }
 
@@ -269,15 +269,15 @@ bool scriptWaitBegin(const char *details)
 {
 	s_waitActive  = false;
 	s_waitInstead = false;
-	if (!scriptAutorun() || s_running || !scriptExists("sys/onWait")) {
+	if (!scriptAutorun() || s_running || !scriptExists(SCR_SYS_PREFIX "onWait")) {
 		return false;
 	}
 	snprintf(s_waitDetails, sizeof(s_waitDetails), "%s", details);
 	s_waitActive = true;
-	scriptStart("sys/onWait", details, "before", false, true, true, NULL);
-	if (scrHasFn("sys/onWait", "instead", true)) {
+	scriptStart(SCR_SYS_PREFIX "onWait", details, "before", false, true, true, NULL);
+	if (scrHasFn(SCR_SYS_PREFIX "onWait", "instead", true)) {
 		s_waitInstead = true;
-		scriptStart("sys/onWait", details, "instead", false, true, false, NULL);
+		scriptStart(SCR_SYS_PREFIX "onWait", details, "instead", false, true, false, NULL);
 		return true;
 	}
 	return false;
@@ -296,25 +296,25 @@ void scriptWaitEnd(void)
 		s_waitInstead = false;
 	}
 	if (scriptAutorun()) {
-		scriptStart("sys/onWait", s_waitDetails, "after", false, true, true, NULL);
+		scriptStart(SCR_SYS_PREFIX "onWait", s_waitDetails, "after", false, true, true, NULL);
 	}
 }
 
 void scriptConnect(const char *uiName, void (*builtin)(void))
 {
-	if (!scriptAutorun() || s_running || !scriptExists("sys/onConnect")) {
+	if (!scriptAutorun() || s_running || !scriptExists(SCR_SYS_PREFIX "onConnect")) {
 		builtin();
 		return;
 	}
 	char arg[32];
 	snprintf(arg, sizeof(arg), "UI:%s", uiName);
-	scriptStart("sys/onConnect", arg, "before", false, false, true, NULL);
-	if (scrHasFn("sys/onConnect", "instead", true)) {
-		scriptStart("sys/onConnect", arg, "instead", false, false, true, NULL);
+	scriptStart(SCR_SYS_PREFIX "onConnect", arg, "before", false, false, true, NULL);
+	if (scrHasFn(SCR_SYS_PREFIX "onConnect", "instead", true)) {
+		scriptStart(SCR_SYS_PREFIX "onConnect", arg, "instead", false, false, true, NULL);
 	} else {
 		builtin();
 	}
-	scriptStart("sys/onConnect", arg, "after", false, false, true, NULL);
+	scriptStart(SCR_SYS_PREFIX "onConnect", arg, "after", false, false, true, NULL);
 }
 
 void scriptClientGone(void)
@@ -367,14 +367,14 @@ static bool scriptAutorun(void)
 	return nvGetInt("sys.autorun") == 1;
 }
 
-/* "name" -> SD:/scripts/name.s, "sys/name" -> SD:/sys/name.s. false = bad name. */
+/* "name" -> SD:/scripts/name.s, "/sys/name" -> SD:/sys/name.s. false = bad name. */
 static bool scriptPath(const char *name, char *out, size_t n)
 {
 	if (!nameOk(name, strlen(name))) {
 		return false;
 	}
-	if (strncasecmp(name, "sys/", 4) == 0) {
-		snprintf(out, n, "%s/sys/%s.s", SD_MOUNT_POINT, name + 4);
+	if (scriptIsSys(name)) {
+		snprintf(out, n, "%s/sys/%s.s", SD_MOUNT_POINT, name + SYS_PFX_LEN);
 	} else {
 		snprintf(out, n, "%s/%s.s", SCRIPT_DIR, name);
 	}
@@ -565,7 +565,7 @@ char *scrHostRead(const char *name, size_t *len, const char **err)
 	char        path[sizeof(SCRIPT_DIR) + SCR_FNAME_MAX + 8];
 	struct stat st;
 	if (!scriptPath(name, path, sizeof(path))) {
-		*err = "bad file name (letters, digits, '_'; system scripts sys/name)";
+		*err = "bad file name (letters, digits, '_'; system scripts /sys/name)";
 		return NULL;
 	}
 	sdLock();
@@ -928,8 +928,30 @@ int scrHostPause(void)
 /* ================= Data files ================= */
 
 #define SCRIPT_DATA_DIR		SCRIPT_DIR "/data"
+#define SCRIPT_SYS_DIR		SD_MOUNT_POINT "/sys"
+#define SCRIPT_SYS_DATA_DIR	SCRIPT_SYS_DIR "/data"
 
-/* "name.txt" / "name.var" -> SD:/scripts/data/..., false = bad name */
+bool scriptIsCaller(void)
+{
+	return s_task && xTaskGetCurrentTaskHandle() == s_task;
+}
+
+bool scriptIsSys(const char *name)
+{
+	return strncasecmp(name, SCR_SYS_PREFIX, SYS_PFX_LEN) == 0;
+}
+
+const char *scriptDataDir(bool *sys)
+{
+	bool y = scriptIsCaller() && scriptIsSys(s_curName);
+	if (sys) {
+		*sys = y;
+	}
+	return y ? SCRIPT_SYS_DATA_DIR : SCRIPT_DATA_DIR;
+}
+
+/* "name.txt" / "name.var" -> <home>/data/... (home of the script started by
+ * RUN / LOAD: /scripts or /sys), false = bad name */
 static bool dataPath(const char *fname, char *out, size_t n)
 {
 	const char *dot = strrchr(fname, '.');
@@ -937,7 +959,7 @@ static bool dataPath(const char *fname, char *out, size_t n)
 	    !nameOk(fname, dot - fname) || strchr(fname, '/')) {
 		return false;
 	}
-	snprintf(out, n, "%s/%s", SCRIPT_DATA_DIR, fname);
+	snprintf(out, n, "%s/%s", scriptDataDir(NULL), fname);
 	return true;
 }
 
@@ -997,6 +1019,8 @@ const char *scrHostFileWrite(const char *fname, long off, const char *data, int 
 {
 	char        path[sizeof(SCRIPT_DATA_DIR) + SCR_FNAME_MAX + 8];
 	struct stat st;
+	bool        sys;
+	scriptDataDir(&sys);
 	if (!dataPath(fname, path, sizeof(path))) {
 		return "bad file name";
 	}
@@ -1009,8 +1033,8 @@ const char *scrHostFileWrite(const char *fname, long off, const char *data, int 
 	bool        exists = stat(path, &st) == 0 && S_ISREG(st.st_mode);
 	if (exists && !(st.st_mode & S_IWUSR)) {
 		err = "read-only";
-	} else if ((mkdir(SCRIPT_DIR, 0775) == 0 || errno == EEXIST) &&
-	           (mkdir(SCRIPT_DATA_DIR, 0775) == 0 || errno == EEXIST)) {
+	} else if ((mkdir(sys ? SCRIPT_SYS_DIR : SCRIPT_DIR, 0775) == 0 || errno == EEXIST) &&
+	           (mkdir(scriptDataDir(NULL), 0775) == 0 || errno == EEXIST)) {
 		FILE *f = fopen(path, (trunc || !exists) ? "w+b" : "r+b");
 		if (f) {
 			bool ok = fseek(f, off, SEEK_SET) == 0 && fwrite(data, 1, n, f) == (size_t)n;
@@ -1027,9 +1051,9 @@ const char *scrHostFileWrite(const char *fname, long off, const char *data, int 
 
 static bool nameOk(const char *n, int l)
 {
-	if (l > 4 && strncasecmp(n, "sys/", 4) == 0) {
-		n += 4;					/* system script: SD:/sys/name.s */
-		l -= 4;
+	if (l > SYS_PFX_LEN && strncasecmp(n, SCR_SYS_PREFIX, SYS_PFX_LEN) == 0) {
+		n += SYS_PFX_LEN;			/* system script: SD:/sys/name.s */
+		l -= SYS_PFX_LEN;
 	}
 	if (l <= 0 || l > SCR_FNAME_MAX) {
 		return false;
@@ -1049,26 +1073,7 @@ static const char *runOrLoad(const char *args, cmdReply_t reply, bool load)
 		args++;
 	}
 	if (!*args) {
-		if (load) {
-			return "usage: LOAD name [args]";
-		}
-		static EXT_RAM_BSS_ATTR char names[SCRIPT_LIST_MAX][SD_NAME_MAX];
-		sdLock();
-		int n = (sdEnsureMounted() == ESP_OK) ? sdListFiles(SCRIPT_DIR, ".s", names, SCRIPT_LIST_MAX) : -1;
-		sdUnlock();
-		if (n < 0) {
-			return "no SD card";
-		}
-		for (int i = 0; i < n; i++) {
-			names[i][strlen(names[i]) - 2] = '\0';
-			char line[SD_NAME_MAX + 2];
-			snprintf(line, sizeof(line), "%s\n", names[i]);
-			reply(line);
-		}
-		if (n == 0) {
-			reply("no scripts in /scripts\n");
-		}
-		return NULL;
+		return load ? "usage: LOAD name [args]" : "usage: RUN name [args]";
 	}
 	if (s_running) {
 		return "script running";
@@ -1077,14 +1082,14 @@ static const char *runOrLoad(const char *args, cmdReply_t reply, bool load)
 	while (args[l] && args[l] != ' ' && args[l] != '\t') {
 		l++;
 	}
-	char name[SCR_FNAME_MAX + 8];			/* "sys/" + name + ".s" */
-	snprintf(name, sizeof(name), "%.*s", l > SCR_FNAME_MAX + 4 ? SCR_FNAME_MAX + 4 : l, args);
+	char name[SCR_PNAME_MAX + 3];			/* "/sys/" + name + ".s" */
+	snprintf(name, sizeof(name), "%.*s", l > SCR_PNAME_MAX + 2 ? SCR_PNAME_MAX + 2 : l, args);
 	int nl = strlen(name);
 	if (nl > 2 && strcasecmp(name + nl - 2, ".s") == 0) {
 		name[nl -= 2] = '\0';
 	}
 	if (!nameOk(name, nl)) {
-		return "name: letters, digits, '_' (max 31; system scripts: sys/name)";
+		return "name: letters, digits, '_' (max 31; system scripts: /sys/name)";
 	}
 	const char *a = args + l;
 	while (*a == ' ' || *a == '\t') {
@@ -1175,8 +1180,22 @@ static const char *scriptCmdVars(int argc, char *argv[], cmdReply_t reply)
 	return s_paused ? scrCmdVars(reply) : "no script paused";
 }
 
+/* LIST: no name and no active script -> every .s in /scripts, then in /sys
+ * as /sys/name ("name size ro|rw", then the count); else the script text. */
 static const char *scriptCmdList(int argc, char *argv[], cmdReply_t reply)
 {
+	if (argc == 0 && !s_running) {
+		int         n   = 0;
+		const char *err = sysListDir(SCRIPT_DIR, ".s", "", false, reply, &n);
+		if (!err) {
+			err = sysListDir(SCRIPT_SYS_DIR, ".s", SCR_SYS_PREFIX, false, reply, &n);
+		}
+		if (err) {
+			return err;
+		}
+		sysListCount(n, reply);
+		return NULL;
+	}
 	return scrCmdList(argc, argv, reply);
 }
 

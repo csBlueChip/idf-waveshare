@@ -29,10 +29,11 @@ Rules:
   - One command per line, words separated by spaces.
   - Command names are case-insensitive.
   - Success replies OK; failure replies ERR <reason>.
-  - Unknown commands reply: unknown |<line>|
+  - Unknown commands reply: ERR unknown |<line>| (in a script: $.ok 0,
+    $.err = unknown |<line>|)
   - '#' starts a comment; "\#" is a literal '#'.
   - Blank and comment-only lines are ignored silently.
-  - Text arguments (TEXT, TLEN, PRINT, DEBUG, FLOG; FWRITE in scripts):
+  - Text arguments (TEXT, TLEN, PRINT, DEBUG, FAPP; FWRITE in scripts):
       text starts after one separating space; further spaces are kept
       "text" or 'text'   quoted (leading spaces before the quote dropped);
                          \" inside "..." / \' inside '...' = the quote;
@@ -65,26 +66,37 @@ General
                                 block; each task's lowest free stack
   PRINT text                    reply text (text rules: section 1)
   DEBUG text                    text to the log port(s), as dbgf()
-Data files (text files SD:/scripts/data/file.txt; file = letters, digits,
-'_', max 31, given without .txt)
+Data files (name = letters, digits, '_', max 31). <data> = the data/
+folder in the home of the script started by RUN / LOAD: SD:/scripts/data,
+or SD:/sys/data for a /sys/ script; on the console SD:/scripts/data.
+FAPP / FCAT / FSTAT / FDELETE always take the full name:
+                                console               script
+  name.txt, name.var            <data>                <data>
+  /sys/name.txt, /sys/name.var  SD:/sys/data          ERR (no folder)
+  name.nvram                    SD:/sys/name.nvram    /sys/ scripts only
+  (no extension, /sys/name.nvram, other extensions: ERR file: ...)
 
-  FLOG file text                add text plus a new line at the end of the
-                                file (folders and file created)
-  FCAT file [start,count] [>DEBUG]
-                                show the file, or count lines from line
-                                start (1-based); to the log port(s) with
+  FAPP file text                append text plus a new line to the file
+                                (folders and file created; e.g. FAPP
+                                log.txt booted, FAPP keep.var $$n=1)
+  FCAT file [start [count]] [>DEBUG]
+                                show the file, from line start (1-based),
+                                count lines (default: to the end); e.g.
+                                FCAT notes.txt 5 3; to the log port(s) with
                                 >DEBUG; CR dropped, non-ASCII shown as '?',
                                 lines over 200 chars split
-  FDIR [txt|var|nvram|*]        list the files: name, size, ro|rw (default
-                                txt; * lists all three, with extensions)
+  FDIR [txt|var|nvram|*]        list the files: name, size, ro|rw, then the
+                                count (default *: all three). txt / var:
+                                SD:/scripts/data, then SD:/sys/data as
+                                /sys/name.txt; full names, as FCAT takes
+                                them. No limit
   FSTAT file                    size:ro or size:rw (ro = read-only, set on
                                 a PC); in a script the reply goes to $.ret
   FDELETE file                  delete the file (not a read-only one)
-  FCAT / FSTAT / FDELETE: file = name (name.txt), name.var
-  (SD:/scripts/data, VARS SAVE files) or name.nvram (SD:/sys). In a .nvram
-  file FCAT shows a line starting with '!' as !key=[redacted].
-  FLOG and the script commands FWRITE / FREAD / FTELL / FSEEK / FCLOSE
-  (section 9) use .txt files only.
+  In a .nvram file FCAT shows a line starting with '!' as
+  !key=[redacted].
+  The script commands FWRITE / FREAD / FTELL / FSEEK / FCLOSE (section 9)
+  use .txt files only, given without .txt.
   No SD card, a missing file or a read-only file is an ERR.
 
   LOG                           show where logs go (section 7):
@@ -161,6 +173,7 @@ Screen
                                 L swaps ROT 1/3; stored in NV, applied now
   SCR SHOT                      save screen as /scrshots/<timestamp>.png
   SCR SHOT name                 save screen as /scrshots/name.png
+                                (name: letters, digits, '_', max 31; see 4)
   SCR SHOT [name] -f            same, overwrite if it exists
   SCR TR                        show transitions: "x > y" (one-shot >
                                 persistent), "x" if y is CUT, "> y" if no x
@@ -239,14 +252,16 @@ Text boxes (n = 1..32; a box keeps the rotation it was created in)
 
 Images (PNG in /images on the SD card)
 
-  IMG                           list PNGs as "n name"
-  IMG name|n                    draw image at 0,0
+  IMG                           list the first 20 PNGs (sorted, ignoring
+                                case) as "n name"; more: "(20 of n images)"
+  IMG name|n                    draw image at 0,0 (n: 1..20; a name finds
+                                any image, also past the first 20)
   IMG name|n x y                draw image at x,y (-1000..1000)
 
 Sensors
 
-  ACC                           accelerometer aX aY aZ (g)
-  GYR                           gyroscope gX gY gZ (dps)
+  ACC                           accelerometer (g): aX:0.012 aY:-0.003 aZ:1.001
+  GYR                           gyroscope (dps): gX:0.152 gY:-0.297 gZ:0.049
   TEMP                          IMU temperature: ^C:23.4 ^F:74.1 ^K:296.6
   BAT                           battery voltage: Vb:4.12 (charging cannot
                                 be detected: the charger is not wired to
@@ -297,8 +312,23 @@ IMU (QMI8658A; see section 8)
   IMU WOM [thr]                 wake-on-motion threshold 1..255 mg (NV)
   IMU SLEEP [SCR|RAD|CPU] [thr] sleep until motion or BOOT (default SCR;
                                 thr overrides imu.wom for this sleep)
-  IMU CAL                       gyro calibration (keep still ~1.5 s)
-  IMU TEST                      accel + gyro self-test, PASS/FAIL
+  IMU CAL                       gyro gain calibration (keep still ~1.5 s):
+                                cod:0x00 result:pass gcal:1a3f,207c,4e12
+                                (fail: gcal:none). On pass the X,Y,Z gains
+                                are stored in NV imu.gcal and applied at
+                                every boot and IMU RESET. Gains drift (PCB
+                                stress, temperature, age): re-run CAL now
+                                and then; NV SET imu.gcal "" drops them
+  IMU TEST                      accel + gyro self-test, one line:
+                                acc:pass ax:310 ay:295 az:402 gyr:pass
+                                gx:420 gy:388 gz:451 (mg / dps; pass|fail,
+                                none = no result)
+  CAL and TEST results are appended to SD:/imu/imu_cal.log, one line
+  each: "<timestamp> : CAL|TEST <reply>", e.g.
+    20261116_181005 : CAL cod:0x00 result:pass gcal:1a3f,207c,4e12
+    20261116_181140 : TEST acc:pass ax:775 ay:665 az:678 gyr:pass ...
+    b002A_001523 : CAL result:timeout
+  (no card / write error: warning on the log port, reply unchanged)
   IMU DEBUG [0|1]               to the log port(s), each line starting with
                                 ms since boot: the chip's raw event status
                                 (STATUS1, TAP_STATUS, hex) on every change,
@@ -307,7 +337,8 @@ IMU (QMI8658A; see section 8)
                                 (default 0)
   IMU REC ms                    record to the console (max 3000 ms on BLE
                                 and UART, 60000 ms on telnet/web/USB)
-  IMU REC ms name|* [-f]        record to /imu/name.csv (* = timestamp),
+  IMU REC ms name|* [-f]        record to /imu/name.csv (* = timestamp;
+                                name: letters, digits, '_', max 31),
                                 max 600000 ms; -f overwrites an existing file
 
   Detectors (TAP MOTION STILL SIGMO ORIENT) are off at every boot and
@@ -357,7 +388,8 @@ Settings (stored in flash, used at the next boot)
   NV SET btn.gpio 0 2 4 ...     same, for the button GPIO list
   NV RESET                      all settings to defaults (except sys.bootcnt)
   NV RESET key                  one setting to default
-  NV EXPORT name                write /sys/name.nvram (wifi.pwd is written
+  NV EXPORT name                write /sys/name.nvram (name: letters,
+                                digits, '_', max 31; wifi.pwd is written
                                 as !wifi.pwd=...: FCAT shows [redacted])
   NV IMPORT name                load /sys/name.nvram (all lines checked,
                                 nothing stored if any is bad; sys.bootcnt
@@ -427,24 +459,36 @@ SD card manager (web UI only)
   Info (i in a circle, key I): add / edit / remove (empty) the
   DESCRIPT.ION description of the selected entry, or the folder's "."
   line with nothing selected. Delete keeps a record: the entry's line
-  gets a '*' in front (ignored for descriptions). Rename updates the
-  entry; a move takes it to the new folder's DESCRIPT.ION. Names with
+  gets a '*' in front (ignored for descriptions). Rename (F2) asks
+  Rename: (the name part selected; a path starting with / moves it) and
+  Desc: (the current description); the entry follows the new name / the
+  new folder's DESCRIPT.ION, a changed Desc is set there, cleared removes
+  it; same name + changed Desc only updates the description. A refused
+  rename shows why in a dialog. Names with
   spaces are written in quotes; other lines, CRLF / LF and non-ASCII
   bytes are kept (read with /fm/get, written with /fm/put).
+  Create (page with a +, key N): asks name: (default <timestamp>.txt, all
+  selected; no / or \) and Desc: (optional DESCRIPT.ION description), then
+  creates an empty (0 byte) file in this folder; an existing name is
+  never replaced ("<name> exists").
   Keys (? shows them): Up/Down move (list or tree), Tab switches tree /
   list, Left/Right fold / unfold (tree), Enter open / View / Download,
-  Ctrl+Enter Download, Backspace parent, F5 Refresh, + New folder,
+  Ctrl+Enter Download, Backspace parent, F5 Refresh, + New folder, N Create,
   Ctrl+U Upload, F2 Rename, I Info, E Edit, Del Delete, Ctrl+X Exit; viewer:
   L lines, W wrap, E Edit, Ctrl+Enter Download, Esc close; editor: Tab
   inserts a tab, Ctrl+S Save, Esc close.
   Edit (text and HTML files): a plain text box. Files over 256 KB or with
   non-ASCII / NUL bytes are refused; CRLF files show a warning (saved with
   LF). Save (Ctrl+S) always asks for the name (SaveAs:, the file name part
-  selected) - Enter keeps it, a new name
+  selected) and the description (Desc:, prefilled from DESCRIPT.ION; same
+  file: a changed text updates the entry, cleared removes it; new name:
+  the text, if any, becomes its entry) - Enter keeps the name, a new name
   saves a copy (handy for read-only files and trial edits); an existing
   name asks "replace?", a read-only one asks for another name. Saved like
-  an upload (name.upl, renamed when complete). Closing with unsaved
-  changes asks first.
+  an upload (name.upl, renamed when complete). Closing (or Esc) with
+  unsaved changes asks: Save (over the file being edited, no name asked,
+  DESCRIPT.ION untouched; then close - if it fails, the editor stays),
+  Discard, or Cancel. Enter = Save.
   Viewer extras: Import (lightbulb, /sys/*.nvram files) = NV IMPORT, with a
   "reboot now" choice and the result (warnings / error) in a dialog; Run (play, .s files in /scripts or /sys) asks for
   the arguments, leaves the SD manager and runs the script once the
@@ -463,8 +507,8 @@ SD card manager (web UI only)
 
 Scripts (SD:/scripts/name.s; language: SCRIPTING.txt, section 9 here)
 
-  RUN                           list the scripts
-  RUN name [args]               start name.s (OK at once, output follows)
+  RUN name [args]               start name.s (OK at once, output follows);
+                                system scripts: RUN /sys/name
   LOAD name [args]              load and pause before the first line
   STOP [NOW]                    stop the script; NOW also cuts a long
                                 command short (IMU REC, screen transition)
@@ -473,6 +517,9 @@ Scripts (SD:/scripts/name.s; language: SCRIPTING.txt, section 9 here)
   BPT [[file:]n | DEL ALL|#n|[file:]n]
                                 breakpoints (kept until reboot)
   VARS / STACK                  (paused) variables / call stack
+  LIST                          no active script: every /scripts/*.s,
+                                then /sys/*.s as /sys/name: name size
+                                ro|rw, then the count (no limit)
   LIST [name [from [to]]]       list a script with line numbers
                                 ('>' paused line, '*' breakpoint)
   While a script runs only STOP, STOP NOW and PAUSE work, also as
@@ -554,6 +601,8 @@ Scripts (SD:/scripts/name.s; language: SCRIPTING.txt, section 9 here)
                              (step.*: unused, IMU STEP not implemented)
   imu.orient.hold 500        orientation must hold 0..5000 ms
   imu.orient.flat 30         FLAT within 5..80 degrees of horizontal
+  imu.gcal                   gyro gains X,Y,Z from IMU CAL: xxxx,yyyy,zzzz
+                             (hex; empty = chip defaults)
   run.files  4               data files with a position per script 1..16
                              (when the script has no .FILES n)
   sys.autorun 0              1 = run the system scripts (onBoot ...);
@@ -585,7 +634,8 @@ at its next use.
                         not all digits, unique ignoring case; max 64)
   /scrshots/            screenshots from SCR SHOT
                         (default name = timestamp, e.g. b002A_001523.png)
-  /imu/                 recordings from IMU REC ms name|* (.csv)
+  /imu/                 recordings from IMU REC ms name|* (.csv);
+                        imu_cal.log: IMU CAL / TEST results
   /sys/                 settings files from NV EXPORT / for NV IMPORT,
                         (name.nvram: key=value lines, '#' comments,
                         !key=value = secret: FCAT shows [redacted]),
@@ -598,7 +648,8 @@ at its next use.
                         default.nvram (all NV defaults: NV IMPORT default),
                         debug.cfg (log volume per device, section 7),
                         system scripts onBoot.s onWait.s onConnect.s
-                        (NV sys.autorun 1; by hand RUN sys/onBoot)
+                        (NV sys.autorun 1; by hand RUN /sys/onBoot);
+                        data/ (data files of /sys/ scripts)
   /www/                 web files served in WEB mode (http://<wifi.ip>/path
                         -> /www/path; / -> /www/index.html if present;
                         no caching, no folder listings)
@@ -609,14 +660,20 @@ at its next use.
   redacts it; the file itself is not encrypted).
 
 Created automatically when first needed: /scrshots/, /sys/, /imu/,
-/scripts/data/ (FLOG, FWRITE, VARS SAVE; FDIR / FCAT show them).
+/scripts/data/ and /sys/data/ (FAPP, FWRITE, VARS SAVE; FDIR / FCAT show
+them).
 
 Timestamp (automatic file names, INFO, $.time): once a browser has set the
-clock (web console or SD manager page connected) YYYYMMDD-HHMMSS, e.g.
-20261113-142530 (the PC's local time); before that bNNNN_hhmmss = boot
+clock (web console or SD manager page connected) YYYYMMDD_HHMMSS, e.g.
+20261113_142530 (the PC's local time); before that bNNNN_hhmmss = boot
 count in hex (NV sys.bootcnt, +1 every boot) and time since boot, e.g.
 b002A_001523 = boot 42, 0 h 15 min 23 s. The clock is lost at every
-reboot. A name already taken gets -1, -2 ... added.
+reboot. A name already taken gets _1, _2 ... added.
+
+File names given to commands that create files (IMU REC, SCR SHOT, NV
+EXPORT) follow the script rule, so a script can use them: letters, digits
+and '_' only, max 31 characters, the extension optional and not counted.
+Anything else: ERR name: letters, digits, '_' (max 31).
 Create /images/ and /www/ yourself (missing = none).
 
 
@@ -843,11 +900,19 @@ Create /images/ and /www/ yourself (missing = none).
                      after the wake, so <<IMU WAKE>> is not seen).
                 CPU: deep sleep; wake = reboot (BOOT or motion).
                 Wake: motion above thr, or BOOT pressed.
-  CAL           Gyro X/Y gain calibration; lost at power-off/reset.
+  CAL           Gyro X/Y/Z gain calibration; the chip loses it at
+                power-off/reset, so the firmware stores it (imu.gcal)
+                and writes it back at boot and IMU RESET.
   TEST          Self-test: accel > 200 mg, gyro > 300 dps on every axis.
   REC           Accel + gyro through the chip FIFO at the rate (needs
-                imu.arate = imu.grate). Lines: "t ax ay az gx gy gz"
-                (t ms from start, g, dps), header line first. Blocks other
+                imu.arate = imu.grate). CSV: a '#' comment line with the
+                time and settings (gcal X/Y/Z or none), the header line,
+                then the samples, all 3 dp, padded so the decimal points
+                line up (pandas: comment='#' or skiprows=1):
+                # 20261116_181005 arange:4 arate:224 grange:512 grate:224 gcal:1a3f/207c/4e12
+                         t,      ax,      ay,      az,        gx,        gy,        gz
+                     0.000,  -0.125,  -0.820,   0.197,    -1.640,    12.640,     1.840
+                (t ms from start, g, dps). Blocks other
                 commands while recording. "ERR FIFO overflow" if the
                 client or card was too slow (samples lost).
 
@@ -874,7 +939,9 @@ Create /images/ and /www/ yourself (missing = none).
     sys.autorun 0 and reboots (a broken system script can't lock you out).
     onWait before/after and all of onConnect run while the console
     waits: the new client's lines are taken after onConnect ends.
-  - Data files in scripts (SD:/scripts/data/file.txt):
+  - Data files in scripts (<data>/file.txt: SD:/scripts/data, or
+    SD:/sys/data when the script started by RUN / LOAD is a /sys/ one;
+    CALLed library code uses its caller's folder):
       FWRITE file text        write the text (no new line added) at the
                               file's position, overwriting / growing it
       FREAD $v file n|EOL     read n bytes (1..200) or to the end of the
@@ -892,7 +959,7 @@ Create /images/ and /www/ yourself (missing = none).
     within 1 .. size + 1. A file starts at 1 when first used; up to
     run.files (NV, default 4) or .FILES n (top of the script, 1..16)
     files at once; all are closed when the script ends.
-  - VARS SAVE name [$a $$b ...] writes SD:/scripts/data/name.var (a new
+  - VARS SAVE name [$a $$b ...] writes <data>/name.var (a new
     file each time). WITHOUT A LIST, SAVE STORES THE GLOBALS ONLY ($$);
     locals are saved only when listed.
     VARS LOAD name [$a $$b ... | ALL] sets the listed variables (all when

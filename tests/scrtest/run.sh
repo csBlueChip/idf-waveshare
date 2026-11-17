@@ -52,5 +52,27 @@ else
 	fail=$((fail + 1))
 	echo "FAIL card_check (diff card/card_check.out card/card_check.got)"
 fi
+# /sys/ layout: card/sys_check.s runs as /sys/sys_check; its data goes to sys/data.
+tmp=$(mktemp -d)
+cp -R "$here/../../sd/." "$tmp/"
+cp "$here/card/sys_check.s" "$tmp/sys/"
+{
+	"$out" "$tmp" /sys/sys_check -dump sysvars.var || true
+	echo "[files in sys/data]"
+	ls "$tmp/sys/data" | sort
+	echo "[scripts/data has no sys files]"
+	ls "$tmp/scripts/data" | grep -i '^sys' || true
+} > "$here/card/sys_check.got" 2>&1
+rm -rf "$tmp"
+if [ "$1" = "-update" ]; then
+	cp "$here/card/sys_check.got" "$here/card/sys_check.out"
+fi
+if cmp -s "$here/card/sys_check.got" "$here/card/sys_check.out"; then
+	pass=$((pass + 1))
+	rm -f "$here/card/sys_check.got"
+else
+	fail=$((fail + 1))
+	echo "FAIL sys_check (diff card/sys_check.out card/sys_check.got)"
+fi
 echo "passed $pass, failed $fail"
 [ "$fail" = 0 ]

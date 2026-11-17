@@ -46,6 +46,7 @@ imu.step.thr=200
 imu.step.min=10
 imu.orient.hold=500
 imu.orient.flat=30
+imu.gcal=
 run.files=4
 sys.autorun=0
 sys.aron=0,255,0

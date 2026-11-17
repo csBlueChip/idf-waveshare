@@ -20,14 +20,13 @@
 static const char *TAG = "img";
 
 #define IMG_EXT		".png"
-#define IMG_MAX_FILES	64
+#define IMG_MAX_FILES	20	/* IMG list and IMG n: the first 20 (IMG name: all) */
 #define IMG_STRIP_ROWS	16	/* fully opaque rows sent to the LCD in one go */
 #define IMG_ALPHA_MIN	128	/* pixels below this alpha are not drawn */
 #define IMG_COORD_MAX	1000
 #define IMG_DIR		SD_MOUNT_POINT "/images"
 #define IMG_SHOT_DIR	SD_MOUNT_POINT "/scrshots"
 
-typedef char imgName_t[SD_NAME_MAX];
 
 /* Decoder buffers, kept in one struct so they survive libpng's longjmp. */
 typedef struct {
@@ -45,7 +44,7 @@ typedef struct {
 static void        imgMemRead(png_structp png, png_bytep out, size_t n);
 static esp_err_t   imgRun(FILE *f, imgMem_t *mem, int x, int y);
 static int         imgBaseLen(const char *fileName);
-static int         imgList(imgName_t *names);
+static int         imgList(sdEntry_t **names);
 static bool        imgNameValid(const char *base);
 static esp_err_t   imgDecode(png_structp png, png_infop info, imgBufs_t *b, int x, int y);
 static const char *imgCmd(int argc, char *argv[], cmdReply_t reply);
@@ -270,21 +269,23 @@ static int imgBaseLen(const char *fileName)
 	return (int)(strlen(fileName) - strlen(IMG_EXT));
 }
 
-/* Sorted list of valid PNG file names (full on-card names). -1 if no card. */
-static int imgList(imgName_t *names)
+/* Every valid PNG file name (full on-card names), sorted ignoring case, in
+ * a PSRAM array (*names, caller frees). -1 = no card, -2 = out of memory. */
+static int imgList(sdEntry_t **names)
 {
-	int n = sdListFiles(IMG_DIR, IMG_EXT, names, IMG_MAX_FILES);
+	int n = sdListAll(IMG_DIR, IMG_EXT, names);
 	if (n < 0) {
-		return -1;
+		return n;
 	}
 
-	int kept = 0;
+	sdEntry_t *l    = *names;
+	int        kept = 0;
 	for (int i = 0; i < n; i++) {
 		char base[SD_NAME_MAX];
-		snprintf(base, sizeof(base), "%.*s", imgBaseLen(names[i]), names[i]);
+		snprintf(base, sizeof(base), "%.*s", imgBaseLen(l[i].name), l[i].name);
 		if (imgNameValid(base)) {
 			if (kept != i) {
-				memcpy(names[kept], names[i], SD_NAME_MAX);
+				l[kept] = l[i];
 			}
 			kept++;
 		}
@@ -306,10 +307,7 @@ static const char *imgCmd(int argc, char *argv[], cmdReply_t reply)
 		return "x and y must be -1000..1000";
 	}
 
-	imgName_t *names = malloc(IMG_MAX_FILES * sizeof(imgName_t));
-	if (!names) {
-		return "out of memory";
-	}
+	sdEntry_t *names = NULL;
 
 	sdLock();
 	const char *err = NULL;
@@ -318,17 +316,21 @@ static const char *imgCmd(int argc, char *argv[], cmdReply_t reply)
 		goto done;
 	}
 
-	int n = imgList(names);
+	int n = imgList(&names);
 	if (n < 0) {
-		err = "no SD card";
+		err = (n == -2) ? "out of memory" : "no SD card";
 		goto done;
 	}
 
 	/* ---- list ---- */
 	if (argc == 0) {
 		char line[SD_NAME_MAX + 8];
-		for (int i = 0; i < n; i++) {
-			snprintf(line, sizeof(line), "%d %.*s\n", i + 1, imgBaseLen(names[i]), names[i]);
+		for (int i = 0; i < n && i < IMG_MAX_FILES; i++) {
+			snprintf(line, sizeof(line), "%d %.*s\n", i + 1, imgBaseLen(names[i].name), names[i].name);
+			reply(line);
+		}
+		if (n > IMG_MAX_FILES) {
+			snprintf(line, sizeof(line), "(%d of %d images)\n", IMG_MAX_FILES, n);
 			reply(line);
 		}
 		goto done;
@@ -337,7 +339,7 @@ static const char *imgCmd(int argc, char *argv[], cmdReply_t reply)
 	/* ---- resolve name or number ---- */
 	int idx = -1;
 	if (cmdParseInt(argv[0], 1, 1000000, &idx)) {
-		idx = (idx <= n) ? idx - 1 : -1;
+		idx = (idx <= n && idx <= IMG_MAX_FILES) ? idx - 1 : -1;	/* numbers: the first 20 only */
 	} else {
 		char want[SD_NAME_MAX];
 		strlcpy(want, argv[0], sizeof(want));
@@ -346,8 +348,8 @@ static const char *imgCmd(int argc, char *argv[], cmdReply_t reply)
 			want[len - extLen] = '\0';
 		}
 		for (int i = 0; i < n; i++) {
-			if (imgBaseLen(names[i]) == (int)strlen(want) &&
-			    strncasecmp(names[i], want, strlen(want)) == 0) {
+			if (imgBaseLen(names[i].name) == (int)strlen(want) &&
+			    strncasecmp(names[i].name, want, strlen(want)) == 0) {
 				idx = i;
 				break;
 			}
@@ -360,7 +362,7 @@ static const char *imgCmd(int argc, char *argv[], cmdReply_t reply)
 
 	/* ---- draw ---- */
 	char path[sizeof(IMG_DIR) + SD_NAME_MAX + 1];
-	snprintf(path, sizeof(path), "%s/%s", IMG_DIR, names[idx]);
+	snprintf(path, sizeof(path), "%s/%s", IMG_DIR, names[idx].name);
 
 	switch (imgShowPng(path, x, y)) {
 	case ESP_OK:                break;
@@ -396,12 +398,10 @@ const char *imgShotCmd(int argc, char *argv[], cmdReply_t reply)
 
 	char file[SD_NAME_MAX];
 	if (name) {
-		size_t len   = strlen(name);
-		bool   hasExt = len >= 4 && strcasecmp(name + len - 4, IMG_EXT) == 0;
-		if (len == 0 || strpbrk(name, "/\\:") || len + (hasExt ? 0 : 4) >= sizeof(file)) {
-			return "bad file name";
+		const char *e = sdNameMake(name, IMG_EXT, file, sizeof(file));
+		if (e) {
+			return e;
 		}
-		snprintf(file, sizeof(file), "%s%s", name, hasExt ? "" : IMG_EXT);
 	}
 
 	sdLock();

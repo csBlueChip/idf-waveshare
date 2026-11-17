@@ -11,7 +11,7 @@
 > overwrite: [line ONE]
 > whole: [line ONE
 line two
-appended by FLOG
+appended by FAPP
 ] err=over-read 165
 > missing: nofile.txt: no such file
 > bad name: file: letters, digits, '_' only (no extension)

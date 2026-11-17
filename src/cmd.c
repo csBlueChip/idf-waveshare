@@ -198,7 +198,7 @@ void cmdExecute(const char *line, cmdReply_t reply)
 		return;
 	}
 
-	snprintf(out, sizeof(out), "unknown |%s|\n", line);
+	snprintf(out, sizeof(out), "ERR unknown |%s|\n", line);
 	reply(out);
 }
 

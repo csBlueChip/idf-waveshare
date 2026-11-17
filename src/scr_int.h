@@ -48,7 +48,7 @@ typedef struct {
 } scrLabel_t;
 
 typedef struct {
-	char       name[SCR_FNAME_MAX + 1];
+	char       name[SCR_PNAME_MAX + 1];
 	scrStmt_t *st;
 	int        n, cap;
 	scrFn_t   *fns;
@@ -62,7 +62,7 @@ typedef struct {
 } scrMod_t;
 
 typedef struct {
-	char   name[SCR_FNAME_MAX + 1];
+	char   name[SCR_PNAME_MAX + 1];
 	char  *text;		/* whole file, lines NUL-separated */
 	char **lines;
 	int    nLines;
@@ -126,7 +126,7 @@ typedef struct {
 
 	/* running */
 	bool       active;
-	char       name[SCR_FNAME_MAX + 1];
+	char       name[SCR_PNAME_MAX + 1];
 	scrFrame_t frames[SCR_STACK_MAX + 1];
 	int        depth;		/* frames in use */
 	scrVar_t   globals[SCR_GLOBALS];
@@ -169,7 +169,7 @@ extern scrCtx_t *scrCtxP;
 bool scrEnsureCtx(void);
 
 /* breakpoints (kept between runs) */
-typedef struct { char file[SCR_FNAME_MAX + 1]; int line; } scrBpt_t;
+typedef struct { char file[SCR_PNAME_MAX + 1]; int line; } scrBpt_t;
 extern scrBpt_t scrBpts[SCR_BPT_MAX];
 extern int      scrNBpts;
 
@@ -208,7 +208,7 @@ scrVal_t scrEval(const char **pp, const char *stopWords);
 scrVal_t scrEvalAll(const char *s);			/* whole string, error if extra */
 const char *scrSubst(const char *s, int mode, char quote);	/* arena */
 /* substitution modes: CMD '#' -> "\#", "\$" -> '$'; TEXT '\' -> "\\" (an escape step
- * follows); PLAIN values as they are; RAW (TEXT / TLEN / FLOG) '\' '#' and the quote
+ * follows); PLAIN values as they are; RAW (TEXT / TLEN / FAPP) '\' '#' and the quote
  * escaped, "\$" kept (the command does quotes and escapes) */
 enum { SUB_CMD, SUB_TEXT, SUB_PLAIN, SUB_RAW };
 const char *scrUnquote(const char *in);		/* arena; fails on bad quotes */

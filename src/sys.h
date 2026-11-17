@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include "esp_err.h"
+#include "cmd.h"
 
 /*
  * System commands registered by sysInit():
@@ -15,15 +16,16 @@
  *   PRINT text        reply text to the client (text rules: text.h textUnquote,
  *                     escapes \n \\ \# \$, \1..\9 dropped)
  *   DEBUG text        same text rules, to the log port(s) as dbgf()
- *   FLOG file text    same text rules, one line added to
- *                     SD:/scripts/data/file.txt (file: letters, digits, '_',
- *                     max 31; folders and file created; no card = error)
- *   FCAT file [start,count] [>DEBUG]  show file.txt (or count lines from
- *                     line start) to the client or the log; CR dropped,
+ *   FAPP file text    same text rules, text + new line appended to file (full
+ *                     name, as FCAT; folders and file created; read-only /
+ *                     no card = error)
+ *   FCAT file [start [count]] [>DEBUG]  show file (full name: name.txt|var|nvram,
+ *                     /sys/name.txt|var), from line start, count lines, to the client or the log; CR dropped,
  *                     non-ASCII shown as '?', lines over 200 chars split
- *   FDIR              list the .txt files: name size ro|rw, then "n files"
- *   FSTAT file        size:ro|rw
- *   FDELETE file      delete a data file (not a read-only one)
+ *   FDIR [type]       list the files, default * (/scripts/data, then /sys/data as /sys/name;
+ *                     nvram: /sys): name size ro|rw, then "n files"; no limit
+ *   FSTAT file        size:ro|rw (full name, as FCAT)
+ *   FDELETE file      delete a data file (full name; not a read-only one)
  */
 
 /* Count this boot, register the commands above. Call after cmdInit() and nvInit(). */
@@ -33,12 +35,21 @@ esp_err_t sysInit(void);
  * no timer. */
 bool sysRebootLater(void);
 
-/* Current timestamp (n >= 16): "YYYYMMDD-HHMMSS" once a browser has set the
- * clock (POST /time), e.g. "20261113-142530"; else boot count (hex) and
+/* Current timestamp (n >= 16): "YYYYMMDD_HHMMSS" once a browser has set the
+ * clock (POST /time), e.g. "20261113_142530"; else boot count (hex) and
  * uptime hhmmss, e.g. "b002A_001523". */
 void sysTimestamp(char *out, size_t n);
 
-/* Free file name in dir from the timestamp: "<stamp><ext>", or "<stamp>-1<ext>",
- * "-2" ... if taken. Caller holds sdLock() with the card mounted and dir existing.
+/* Free file name in dir from the timestamp: "<stamp><ext>", or "<stamp>_1<ext>",
+ * "_2" ... if taken. Caller holds sdLock() with the card mounted and dir existing.
  * Returns NULL, or an error text. */
 const char *sysTimestampFile(const char *dir, const char *ext, char *out, size_t n);
+
+/* FDIR / LIST: one folder's files matching ext (no limit), one line each:
+ * "<prefix><name> size ro|rw" (ext dropped unless keepExt); adds the count
+ * to *count. NULL, "no SD card" or "out of memory". */
+const char *sysListDir(const char *dir, const char *ext, const char *prefix, bool keepExt,
+                       cmdReply_t reply, int *count);
+
+/* The closing "n file(s)" line. */
+void sysListCount(int n, cmdReply_t reply);

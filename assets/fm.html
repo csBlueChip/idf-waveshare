@@ -115,9 +115,9 @@
 	#dlg .box { min-width: 280px; max-width: 92vw; padding: 12px 16px; background: #1a1a1a; border: 1px solid #444;
 	            border-radius: 6px; display: flex; flex-direction: column; gap: 10px; }
 	#dmsg { white-space: pre-wrap; word-break: break-word; }
-	#drow { display: flex; align-items: center; gap: 8px; }
-	#dlbl { white-space: nowrap; color: #8cf; }
-	#dinp { flex: 1; min-width: 0; padding: 6px; font: inherit; color: #eee; background: #000; border: 1px solid #444; border-radius: 4px; }
+	#drow, #drow2 { display: flex; align-items: center; gap: 8px; }
+	#dlbl, #dlbl2 { white-space: pre; color: #8cf; }
+	#dinp, #dinp2 { flex: 1; min-width: 0; padding: 6px; font: inherit; color: #eee; background: #000; border: 1px solid #444; border-radius: 4px; }
 	#dchkw { display: flex; align-items: center; gap: 6px; cursor: pointer; }
 	#dlg .btns { display: flex; justify-content: flex-end; gap: 6px; }
 	@media (max-width: 640px) {
@@ -133,6 +133,7 @@
 	<button id="up" data-i="up" title="Up: parent folder (Backspace)">Up</button>
 	<button id="refresh" data-i="refresh" title="Refresh (F5)">Refresh</button>
 	<button id="mkdir" data-i="mkdir" title="New folder (+)">New folder</button>
+	<button id="create" data-i="create" title="Create an empty file, optionally with a DESCRIPT.ION description (N)">Create</button>
 	<button id="up_btn" data-i="upload" title="Upload files to this folder, or drop them on the list (Ctrl+U)">Upload</button>
 	<input id="pick" type="file" multiple style="display:none">
 	<button id="dl" data-i="download" title="Download (Ctrl+Enter)" disabled>Download</button>
@@ -181,8 +182,10 @@
 <div id="dlg"><div class="box">
 	<div id="dmsg"></div>
 	<div id="drow"><span id="dlbl"></span><input id="dinp" type="text" spellcheck="false" autocomplete="off" autocapitalize="off"></div>
+	<div id="drow2"><span id="dlbl2"></span><input id="dinp2" type="text" spellcheck="false" autocomplete="off" autocapitalize="off"></div>
 	<label id="dchkw"><input id="dchk" type="checkbox"><span id="dchkl"></span></label>
 	<div class="btns">
+		<button id="dext" data-i="save">Save</button>
 		<button id="dok" data-i="ok">OK</button>
 		<button id="dcancel" data-i="cancel">Cancel</button>
 	</div>
@@ -202,6 +205,7 @@
 		<tr><td class="k">Backspace</td><td>parent folder</td></tr>
 		<tr><td class="k">F5</td><td>Refresh</td></tr>
 		<tr><td class="k">+</td><td>New folder</td></tr>
+		<tr><td class="k">N</td><td>Create an empty file (name: default &lt;timestamp&gt;.txt; Desc: its DESCRIPT.ION description, optional)</td></tr>
 		<tr><td class="k">Ctrl+U</td><td>Upload</td></tr>
 		<tr><td class="k">F2</td><td>Rename / move</td></tr>
 		<tr><td class="k">I</td><td>Info: edit the DESCRIPT.ION description</td></tr>
@@ -221,8 +225,8 @@
 	<h3>Editor</h3>
 	<table>
 		<tr><td class="k">Tab</td><td>insert a tab</td></tr>
-		<tr><td class="k">Ctrl+S</td><td>Save - asks for the name (SaveAs: Enter keeps it; a path starting with / saves elsewhere)</td></tr>
-		<tr><td class="k">Esc</td><td>close (asks if there are unsaved changes)</td></tr>
+		<tr><td class="k">Ctrl+S</td><td>Save - asks for the name (SaveAs: Enter keeps it; a path starting with / saves elsewhere) and the DESCRIPT.ION description (Desc: changed or cleared = updated / removed)</td></tr>
+		<tr><td class="k">Esc</td><td>close (unsaved changes: Save over the file and close, Discard, or Cancel)</td></tr>
 	</table>
 </div></div>
 <script>
@@ -255,6 +259,7 @@
 		source:   "M5 4L1.5 8 5 12M11 4l3.5 4-3.5 4M9.5 2.5l-3 11",
 		close:    "M3.5 3.5l9 9M12.5 3.5l-9 9",
 		edit:     "M3 1.5h6.5l3.5 3.5v9.5H3zM9.5 1.5V5H13M5.5 8h5M5.5 10.5h5M5.5 13h3",	/* page with lines */
+		create:   "M3 1.5h6.5l3.5 3.5v9.5H3zM9.5 1.5V5H13M8 7v5.5M5.25 9.75h5.5",	/* page with a + */
 		save:     "M2.5 2.5h9l2 2v9h-11zM5 2.5v3.5h5.5V2.5M5 13.5v-4.5h6v4.5",	/* floppy disk */
 		bulb:     "M8 1.5a4.5 4.5 0 0 0-2.5 8.2V11.5h5V9.7A4.5 4.5 0 0 0 8 1.5zM6 13.5h4",
 		play:     "M5 3l8 5-8 5z",
@@ -277,12 +282,15 @@
 		if ($("editor").classList.contains("on")) fit($("ebar"));
 	}
 	window.addEventListener("resize", fitAll);
-	Array.prototype.forEach.call(document.querySelectorAll("button[data-i]"), function (b) {
-		var label = b.textContent;
+	/* icon + word on a button (also used to relabel the dialog buttons) */
+	function btnSet(b, icon, label) {
+		b.setAttribute("data-i", icon);
 		b.setAttribute("aria-label", label);
-		b.innerHTML = '<svg viewBox="0 0 16 16"><path d="' + ICONS[b.getAttribute("data-i")] + '"/></svg>' +
-		              '<span class="lbl"></span>';
+		b.innerHTML = '<svg viewBox="0 0 16 16"><path d="' + ICONS[icon] + '"/></svg>' + '<span class="lbl"></span>';
 		b.lastChild.textContent = label;
+	}
+	Array.prototype.forEach.call(document.querySelectorAll("button[data-i]"), function (b) {
+		btnSet(b, b.getAttribute("data-i"), b.textContent);
 	});
 
 	/* ---------- viewer colours: /fm/syntax ---------- */
@@ -972,6 +980,8 @@
 			$("refresh").onclick();
 		} else if (k === "+" && !ctrl) {
 			$("mkdir").onclick();
+		} else if (!ctrl && (k === "n" || k === "N")) {
+			$("create").onclick();
 		} else if (ctrl && (k === "u" || k === "U")) {
 			if (!$("up_btn").disabled) $("up_btn").onclick();
 		} else if (!ctrl && (k === "e" || k === "E")) {
@@ -998,26 +1008,94 @@
 			changed(cwd);
 		});
 	};
+	/* Create: an empty file in this folder (never overwrites), and optionally
+	 * its DESCRIPT.ION entry. Default name <timestamp>.txt (browser clock, as
+	 * the device's timestamps once the page has set its clock). */
+	function stamp() {
+		var d = new Date(), p = function (n) { return (n < 10 ? "0" : "") + n; };
+		return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + "_" + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
+	}
+	function reselect(name) {			/* after a reload: select the entry again */
+		setTimeout(function () {
+			var tr = document.querySelector('#rows tr[data-n="' + name.toLowerCase().replace(/"/g, '\\"') + '"]');
+			if (tr) pick(tr);
+		}, 600);
+	}
+	function createAsk(name, desc) {
+		ask({ label: "name:", input: name, label2: "Desc:", input2: desc }, function (r) {
+			if (!r) return;
+			var n = r.value.trim(), d = r.value2.replace(/[\r\n]+/g, " ").trim();
+			if (!n || /[\/\\]/.test(n)) {
+				tell("name: no / or \\", function () { createAsk(n, d); });
+				return;
+			}
+			var dir = cwd, x = new XMLHttpRequest();
+			x.open("POST", "/fm/put?p=" + q(join(dir, n)));	/* no over=1: never replaces */
+			x.onload = function () {
+				if (x.status === 409 && x.responseText === "SD manager not active") {
+					status("SD manager closed on the device - back to the console...", true);
+					setTimeout(function () { location.href = "/"; }, 1500);
+					return;
+				}
+				if (x.status !== 200) {
+					tell(x.responseText === "exists" ? n + " exists" : "not created: " + x.responseText);
+					return;
+				}
+				function fin(err) {
+					changed(dir);
+					reselect(n);
+					if (err) setTimeout(function () { tell("created " + n + ", but " + err); }, 700);
+					else setTimeout(function () { status("created " + join(dir, n)); }, 500);
+				}
+				if (d) ionEdit(dir, n, { set: d }, fin); else fin(null);
+			};
+			x.onerror = function () { tell("not created: no connection to the device"); };
+			x.send(new Blob([]));
+		});
+	}
+	$("create").onclick = function () { createAsk(stamp() + ".txt", ""); };
+	/* Rename / move (F2): Rename: (a path starting with / moves it) and Desc:
+	 * (the DESCRIPT.ION entry: unchanged = it follows the entry; changed = set;
+	 * cleared = removed). Same name + new Desc = only the description changes. */
+	function renAsk(it, to0, desc0) {
+		var cur = descOf(cwd, it.name);
+		ask({ label: "Rename:", input: to0, sel: it.dir ? null : nameSel(to0),
+		      label2: "Desc:", input2: desc0 }, function (r) {
+			if (!r || !r.value.trim()) return;
+			var to = r.value.trim(), d = r.value2.replace(/[\r\n]+/g, " ").trim();
+			var dest = to.charAt(0) === "/" ? to : join(cwd, to);
+			var from = it.name, fromDir = cwd;
+			var toDir = parent(dest), toName = dest.substring(dest.lastIndexOf("/") + 1);
+			function done(err) {
+				load(cwd);
+				if (toDir === fromDir) reselect(toName);
+				if (err) setTimeout(function () { tell(err); }, 700);
+			}
+			function setDesc(err) {			/* after the move: a changed Desc wins */
+				if (err || d === cur) { done(err); return; }
+				ionEdit(toDir, toName, { set: d }, done);
+			}
+			if (dest === join(cwd, from)) {		/* name unchanged */
+				if (d !== cur) ionEdit(cwd, from, { set: d }, done);
+				return;
+			}
+			req("POST", "/fm/ren?p=" + q(join(cwd, from)) + "&to=" + q(dest), function (ok, text) {
+				if (!ok) { tell("not renamed: " + text, function () { renAsk(it, to, d); }); return; }
+				subs = {};			/* a move may change other folders */
+				if (toDir === fromDir) {	/* same folder: rename the entry */
+					ionEdit(fromDir, from, { rename: toName }, setDesc);
+				} else {			/* moved: the entry moves with it */
+					ionEdit(fromDir, from, { take: true }, function (err, old) {
+						if (err || !old) { setDesc(err); return; }
+						ionEdit(toDir, toName, { set: old }, setDesc);
+					});
+				}
+			});
+		});
+	}
 	$("ren").onclick = function () {
 		if (!sel) return;
-		var to = prompt("New name (a path starting with / moves it):", sel.name);
-		if (!to || to === sel.name) return;
-		var dest = to.charAt(0) === "/" ? to : join(cwd, to);
-		var from = sel.name, fromDir = cwd;
-		req("POST", "/fm/ren?p=" + q(join(cwd, from)) + "&to=" + q(dest), function (ok, text) {
-			if (!ok) { status(text, true); return; }
-			subs = {};			/* a move may change other folders */
-			var toDir = parent(dest), toName = dest.substring(dest.lastIndexOf("/") + 1);
-			function done(err) { load(cwd); if (err) setTimeout(function () { status(err, true); }, 400); }
-			if (toDir === fromDir) {		/* same folder: rename the entry */
-				ionEdit(fromDir, from, { rename: toName }, done);
-			} else {				/* moved: the entry moves with it */
-				ionEdit(fromDir, from, { take: true }, function (err, d) {
-					if (err || !d) { done(err); return; }
-					ionEdit(toDir, toName, { set: d }, done);
-				});
-			}
-		});
+		renAsk(sel, sel.name, descOf(cwd, sel.name));
 	};
 	$("del").onclick = function () {
 		if (!sel) return;
@@ -1051,7 +1129,9 @@
 	};
 	/* ---------- dialog: message [+ input] [+ checkbox], OK (tick) / Cancel (cross) ---------- */
 	var dlgCb = null;
-	/* o: {msg, label, input (default text), sel [start, end], check (label), okOnly}; cb({value, checked}) or cb(null) */
+	/* o: {msg, label, input (default text), sel [start, end], label2, input2 (a second
+	 * box), check (label), okOnly, ok: [icon, word] (default OK), extra: [icon, word]
+	 * (a third button)}; cb({value, value2, checked, extra}) or cb(null) */
 	function ask(o, cb) {
 		$("dmsg").textContent = o.msg || "";
 		$("dmsg").style.display = o.msg ? "" : "none";
@@ -1059,16 +1139,27 @@
 		$("dlbl").textContent = o.label || "";
 		$("dlbl").style.display = o.label ? "" : "none";
 		$("dinp").value = o.input === undefined ? "" : o.input;
+		$("drow2").style.display = o.input2 === undefined ? "none" : "";
+		$("dlbl2").textContent = o.label2 || "";
+		$("dinp2").value = o.input2 === undefined ? "" : o.input2;
+		$("dlbl").style.minWidth = $("dlbl2").style.minWidth = "";
 		$("dchkw").style.display = o.check === undefined ? "none" : "";
 		$("dchkl").textContent = o.check || "";
 		$("dchk").checked = false;
 		$("dcancel").style.display = o.okOnly ? "none" : "";
+		btnSet($("dok"), o.ok ? o.ok[0] : "ok", o.ok ? o.ok[1] : "OK");
+		$("dext").style.display = o.extra ? "" : "none";
+		if (o.extra) btnSet($("dext"), o.extra[0], o.extra[1]);
 		dlgCb = cb;
 		$("dlg").classList.add("on");
+		if (o.input2 !== undefined) {		/* line the two boxes up */
+			var w = Math.max($("dlbl").offsetWidth, $("dlbl2").offsetWidth) + "px";
+			$("dlbl").style.minWidth = $("dlbl2").style.minWidth = w;
+		}
 		if (o.input !== undefined) {
 			$("dinp").focus();
 			if (o.sel) $("dinp").setSelectionRange(o.sel[0], o.sel[1]); else $("dinp").select();
-		} else $("dok").focus();
+		} else (o.extra ? $("dext") : $("dok")).focus();	/* close dialog: Save, never Discard, on Enter */
 	}
 	function tell(msg, cb) { ask({ msg: msg, okOnly: true }, function () { if (cb) cb(); }); }
 	/* the name part of a path, without the folder or the extension: [start, end] */
@@ -1076,14 +1167,15 @@
 		var s = p.lastIndexOf("/") + 1, d = p.lastIndexOf(".");
 		return [s, d > s ? d : p.length];
 	}
-	function dlgEnd(ok) {
-		var cb = dlgCb, r = ok ? { value: $("dinp").value, checked: $("dchk").checked } : null;
+	function dlgEnd(ok, extra) {
+		var cb = dlgCb, r = ok ? { value: $("dinp").value, value2: $("dinp2").value, checked: $("dchk").checked, extra: !!extra } : null;
 		dlgCb = null;
 		$("dlg").classList.remove("on");
 		if ($("editor").classList.contains("on")) $("etext").focus();
 		if (cb) cb(r);
 	}
 	$("dok").onclick = function () { dlgEnd(true); };
+	$("dext").onclick = function () { dlgEnd(true, true); };
 	$("dcancel").onclick = function () { dlgEnd(false); };
 	$("dlg").addEventListener("keydown", function (e) {
 		if (e.key === "Enter" && e.target.tagName !== "BUTTON") { e.preventDefault(); dlgEnd(true); }
@@ -1138,7 +1230,17 @@
 	}
 	function closeEdit(force) {
 		if (!force && eDirty()) {
-			ask({ msg: "Discard changes to " + ePath + " ?" }, function (r) { if (r) closeEdit(true); });
+			ask({ msg: "Discard changes to " + ePath + " ?", ok: ["delete", "Discard"], extra: ["save", "Save"] }, function (r) {
+				if (!r) return;
+				if (!r.extra) { closeEdit(true); return; }
+				var path = ePath;			/* Save: over the edited file, then close */
+				ePut(path, true, function (ok, text) {
+					if (!ok) { tell("not saved: " + text); return; }
+					if (parent(path) === cwd) changed(cwd); else subs = {};
+					closeEdit(true);
+					setTimeout(function () { status("saved " + path); }, 500);
+				});
+			});
 			return;
 		}
 		$("editor").classList.remove("on");
@@ -1160,25 +1262,38 @@
 		x.onerror = function () { cb(false, "no connection to the device"); };
 		x.send(new Blob([$("etext").value]));
 	}
-	function eSave(name) {
+	function baseName(p) { return p.substring(p.lastIndexOf("/") + 1); }
+	function eSave(name, ion) {
 		var start = name || ePath;
-		ask({ label: "SaveAs:", input: start, sel: nameSel(start) }, function (r) {
+		var cur   = descOf(parent(ePath), baseName(ePath));	/* the edited file's description */
+		ask({ label: "SaveAs:", input: start, sel: nameSel(start), label2: "Desc:", input2: ion === undefined ? cur : ion },
+		    function (r) {
 			if (!r || !r.value.trim()) return;
 			var v = r.value.trim(), dest = v.charAt(0) === "/" ? v : join(parent(ePath), v);
 			var same = dest.toLowerCase() === ePath.toLowerCase();
+			var d = r.value2.replace(/[\r\n]+/g, " ").trim();
+			/* after a good save: same file -> update / remove if changed; new name -> set if given */
+			function ion(cb) {
+				if (same ? d === cur : d === "") { cb(null); return; }
+				ionEdit(parent(dest), baseName(dest), { set: d }, cb);
+			}
 			function done(ok, text) {
 				if (ok) {
+					ion(function (err) {
+						if (err) setTimeout(function () { tell("saved " + dest + ", but " + err); }, 700);
+						if (parent(dest) === cwd) changed(cwd);
+					});
 					ePath = dest;
 					eOrig = $("etext").value;
 					$("ename").textContent = dest;
 					$("enote").style.display = "none";
 					ePos();
-					if (parent(dest) === cwd) changed(cwd); else subs = {};
+					if (parent(dest) !== cwd) subs = {};	/* this folder reloads after the ION step */
 					setTimeout(function () { status("saved " + dest); }, 500);	/* after the list reload */
 					return;
 				}
 				if (text === "read-only") {
-					ask({ msg: dest + " is read-only - save under another name?" }, function (r2) { if (r2) eSave(dest); });
+					ask({ msg: dest + " is read-only - save under another name?" }, function (r2) { if (r2) eSave(dest, d); });
 				} else if (text === "exists") {
 					ask({ msg: dest + " exists - replace it?" }, function (r2) { if (r2) ePut(dest, true, done); });
 				} else {
@@ -1230,7 +1345,7 @@
 	};
 	$("vrun").onclick = function () {
 		var file = vfile, name = file.substring(file.lastIndexOf("/") + 1);
-		var label = (/^\/sys\//i.test(file) ? "sys/" : "") + name.replace(/\.s$/i, "");
+		var label = (/^\/sys\//i.test(file) ? "/sys/" : "") + name.replace(/\.s$/i, "");
 		ask({ label: label, input: "" }, function (r) {
 			if (!r) return;
 			req("POST", "/fm/run?p=" + q(file) + "&a=" + q(r.value.trim()), function (ok, text) {

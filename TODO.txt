@@ -50,7 +50,7 @@ To do
      (bootcnt kept; read-only card: "No backup: ..." and still resets);
      no card: "NVRAM - no backup"; Script: /sys/reset.s ($arg SCRIPT),
      missing = ERR; FULL; SD:/sys/reset.nvram at boot (empty, with
-     settings, bad -> reset.bad); timestamps YYYYMMDD-HHMMSS after a
+     settings, bad -> reset.bad); timestamps YYYYMMDD_HHMMSS after a
      browser connects (SCR SHOT, INFO, $.time); SD manager ".." needs a
      double-click.
  19. Board test - per-board defaults: erase NV (esptool erase_region
@@ -108,7 +108,78 @@ To do
      fix: no crash, sys.bootcnt warning in the dialog, reboot only when
      "reboot now" is ticked.
 
+ 29. Board test - IMU: ACC / GYR one line (aX: aY: aZ: / gX: gY: gZ:);
+     IMU TEST one line (acc:pass ax: .. gyr:pass gx: ..); IMU CAL kept
+     still -> cod:0x00 result:pass gcal:xxxx,yyyy,zzzz and NV GET imu.gcal
+     the same; reboot -> log "gyro gains ... applied"; IMU RESET -> same
+     log; CAL while moving -> result:fail gcal:none (imu.gcal unchanged);
+     NV SET imu.gcal 12,34 -> ERR; NV SET imu.gcal "" -> no gains applied.
+     GYR 3 dp. SD:/imu/imu_cal.log gets "<timestamp> : CAL|TEST <reply>"
+     per run (CAL timeout: "CAL result:timeout"; no card: reply as usual,
+     warning in the log). Timestamps 20261116_181005 (underscore) in file
+     names: IMU REC *, SCR SHOT, NV EXPORT. IMU REC ms (console and *.csv):
+     comma-separated, 3 dp, decimal points aligned; opens in a spreadsheet;
+     first line "# <timestamp> arange:.. arate:.. grange:.. grate:..
+     gcal:x/y/z" (gcal:none when imu.gcal is empty).
+     File names: IMU REC 100 a-b / SCR SHOT a.b / NV EXPORT 32-char name
+     -> ERR name: letters, digits, '_' (max 31); x.csv / x.png / x.nvram
+     accepted. Two SCR SHOT in the same second -> stamp.png, stamp_1.png.
+
+ 30. Board test - web console: OK green, ERR red (last line of a reply
+     only; e.g. FDIR's lines plain, its OK green). LIST with no script:
+     /scripts/*.s then /sys/*.s as /sys/name (name size ro|rw, count);
+     LIST while paused: the script text. RUN alone -> ERR usage. RUN
+     /sys/onWait, BPT /sys/onWait:4, messages <<SCRIPT /sys/onWait ...>>;
+     RUN sys/onWait -> ERR. A /sys/ script's FAPP / FWRITE / VARS SAVE ->
+     SD:/sys/data (CALLed library code too); FDIR lists /sys/data files
+     as /sys/name; FCAT /sys/x, FSTAT /sys/x.var, FDELETE /sys/x on the
+     console; FCAT /sys/x inside a script -> ERR. FDIR with > 64 files
+     lists them all. SD manager Run on a /sys/ script: label /sys/<name>.
+     RESET! screen still runs /sys/reset.s.
+
+ 31. Board test - IMG lists the first 20 PNGs (sorted) + "(20 of n
+     images)"; IMG 21 -> ERR not found; IMG <name past 20> draws. FDIR
+     alone = FDIR *. SD manager: Create (N) -> name: <timestamp>.txt all
+     selected, Desc: empty; a/b -> "name: no / or \" and the dialog again;
+     OK -> 0-byte file selected, Desc text in DESCRIPT.ION; same name again
+     -> "<name> exists". Editor Save: Desc: prefilled; change -> entry
+     updated; clear -> removed; new name + text -> new entry. Phone layout
+     of the two-box dialog.
+
+ 32. Board test - unknown command "dir sdlkj" -> ERR unknown |dir sdlkj|
+     (red, now a pinker red #ff6b8b); in a script $.ok 0. SD manager:
+     Rename (F2) dialog (Rename: / Desc:): rename, move to /x/ (entry
+     moves), change only Desc, clear Desc, refused rename (dialog). Editor
+     Close / Esc with changes: Save (file saved, editor closed; read-only
+     file -> message, editor stays), Discard, Cancel; Enter = Save.
+     FCAT x.txt 5 / FCAT x.txt 5 3 / FCAT x.txt 5,3 -> ERR usage. FCAT /
+     FSTAT / FDELETE: x -> ERR file: ...; x.txt, x.var, /sys/x.txt,
+     x.nvram ok, also from a script; /sys/x.nvram -> ERR. FDIR txt shows
+     x.txt and /sys/x.txt.
+
+ 34. Board test - FAPP (was FLOG): console FAPP x.txt / x.var / /sys/x.txt
+     / x.nvram text -> appended; FAPP x -> ERR file: ...; from a /scripts
+     script: FAPP x.txt ok, /sys/x.txt -> ERR no folder, x.nvram -> ERR
+     only from /sys/ scripts; from a /sys/ script x.nvram works (FAPP,
+     FCAT, FSTAT, FDELETE). FCAT /sys/x.txt from any script -> ERR.
+
 On hold
+ 33. Trashcan (idea, parked - too messy as designed):
+     FDELETE -> FTRASH; erased files and their DESCRIPT.ION line moved to
+     /trash/ (mirroring the path: /trash/scripts/data/foo.txt); SD
+     manager Delete the same, plus a Restore button when browsing
+     /trash/; FRESTORE file; FDIR TRASH.
+     Open questions:
+     - same file trashed twice: keep latest only / number the older
+       copies (foo.txt.1 ...) / timestamp each copy
+     - restore onto an existing file: refuse (ERR exists, -f to
+       overwrite) / ask in the SD manager; trash the replaced file?
+     - emptying: FTRASH EMPTY, an Empty button, a size limit (NV)?
+     - overwrites (Save over, IMU REC -f, SCR SHOT -f, NV EXPORT, NV
+       RESET backups): trash them too, or explicit deletes only?
+     - keep FDELETE as a real delete (scripts like persist.s "forget"
+       would fill the trash)?
+     - names: FTRASH / FRESTORE / /trash at the card root
  28. NV SET / IMPORT / RESET of btn.deb|long|dbl|rpt also updating the
      global button timings at once (now: next boot, or BTN SET).
  20. iPhone test - web console in the captive-portal window: page not too

@@ -19,14 +19,15 @@
  *   STEP [IN|OUT]       one line / into a call / out of the function (paused)
  *   BPT [[file:]n | DEL ALL|#n|[file:]n]   breakpoints
  *   VARS                variables of the paused script
- *   LIST [name [from [to]]]   list a script with line numbers
+ *   LIST [name [from [to]]]   list a script with line numbers; alone with no
+ *                       active script: the .s files in /scripts, then /sys (name size ro|rw)
  *   STACK               call stack of the paused script
  * While a script runs, only STOP, STOP NOW and PAUSE are accepted (and lines
  * for INPUT); everything else replies "ERR script running".
  *
  * System scripts (NV sys.autorun 1), in SD:/sys/: onBoot.s at the end of
  * start-up, onWait.s (FN before / instead / after) around each Wait screen,
- * onConnect.s around the connect splash. By hand: RUN sys/onBoot etc.
+ * onConnect.s around the connect splash. By hand: RUN /sys/onBoot etc.
  * While onBoot or onWait runs, holding BOOT for 3 s sets sys.autorun 0 and
  * reboots.
  */
@@ -60,11 +61,11 @@ void scriptConnect(const char *uiName, void (*builtin)(void));
  * without is stopped; a paused one is stopped. */
 void scriptClientGone(void);
 
-/* Script name ("name" or "sys/name") exists on the card. */
+/* Script name ("name" or "/sys/name") exists on the card. */
 bool scriptHas(const char *name);
 
 /* Main task: run a script as a system script (BOOT 3 s escape on) and wait
- * for it to end (RESET! screen: sys/reset). false = could not start. */
+ * for it to end (RESET! screen: /sys/reset). false = could not start. */
 bool scriptRunWait(const char *name, const char *args);
 
 /* INFO: "name running", "name paused" or "none". */
@@ -80,3 +81,14 @@ bool scriptAbortRequested(void);
 /* Serial (USB) input while a script is paused with no client: the USB port is
  * the console. true = the bytes were taken. */
 bool scriptUsbRx(const uint8_t *data, size_t len);
+
+/* True when called from the script task (a command run by a script). */
+bool scriptIsCaller(void);
+
+/* name is a system script name ("/sys/..."). */
+bool scriptIsSys(const char *name);
+
+/* Data folder for the calling context: SD:/sys/data when called from a
+ * script started as /sys/name, else SD:/scripts/data (also the console).
+ * *sys (if not NULL) = the /sys/ case. */
+const char *scriptDataDir(bool *sys);

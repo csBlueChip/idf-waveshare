@@ -19,7 +19,7 @@ static const char *TAG = "reset";
 #define RESET_DONE		RESET_DIR "/reset.done"
 #define RESET_BAD		RESET_DIR "/reset.bad"
 #define RESET_NV_NAME		"reset"		/* nvResetImport(): SD:/sys/reset.nvram */
-#define RESET_SCR_NAME		"sys/reset"	/* SD:/sys/reset.s */
+#define RESET_SCR_NAME		"/sys/reset"	/* SD:/sys/reset.s */
 #define RESET_REBOOT_MS		1500		/* "Rebooting..." stays this long */
 
 void resetBootFile(void)

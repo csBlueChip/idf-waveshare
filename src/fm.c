@@ -938,7 +938,7 @@ static esp_err_t fmRun(httpd_req_t *req)
 	if (strncasecmp(rel, "/scripts/", 9) == 0 && !strchr(rel + 9, '/')) {
 		snprintf(name, sizeof(name), "%.*s", (int)(len - 9 - 2), rel + 9);
 	} else if (strncasecmp(rel, "/sys/", 5) == 0 && !strchr(rel + 5, '/')) {
-		snprintf(name, sizeof(name), "sys/%.*s", (int)(len - 5 - 2), rel + 5);
+		snprintf(name, sizeof(name), "/sys/%.*s", (int)(len - 5 - 2), rel + 5);
 	} else {
 		return fmFail(req, "400 Bad Request", "only scripts in /scripts or /sys can be run");
 	}

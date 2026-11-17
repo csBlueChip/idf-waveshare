@@ -3,7 +3,8 @@
  *   build: make (or run.sh)     use: scrtest SD name [args] [options] (README.txt)
  *
  * SD is the card's root folder (e.g. ../../sd): name.s comes from SD/scripts
- * (sys/name from SD/sys), data files are real files in SD/scripts/data.
+ * (/sys/name from SD/sys), data files are real files in the started
+ * script's home: SD/scripts/data (/sys/name: SD/sys/data).
  * -test: the old layout for the test suite - SD is the folder holding the
  * scripts, data files live in memory (nothing is written to disk).
  *
@@ -25,8 +26,10 @@
  *   XGO mode           queues a debugger answer (CONT STEP IN OUT STOP)
  *   XSTOP / XPAUSE     request STOP / PAUSE (seen between statements)
  *   XCLIENT 0|1        client connected (INPUT with none: -1)
- *   FLOG f text        appends "text\n" to data file f.txt
- *   FSTAT f / FDELETE f / FCAT f   on the data files (f.var allowed)
+ *   FAPP f text        appends "text\n" to data file f (f.txt, f.var; f.nvram from
+ *                      a /sys/ main script)
+ *   FSTAT f / FDELETE f / FCAT f   on the data files, names as FAPP (scripts:
+ *                      no folder; no extension: ERR, as the device)
  *   XRO f              make f.txt read-only
  * Time is virtual (not with -i): WAIT / time-outs advance it; timers tick on it.
  * On a pause it prints STACK and VARS, then takes the next XGO (default CONT).
@@ -47,7 +50,8 @@
 static const char *s_dir;
 static bool        s_card = true;		/* SD layout, data files on disk (not -test) */
 static bool        s_live;			/* -i: keyboard INPUT, real time */
-static char        s_data[512];		/* SD/scripts/data */
+static char        s_data[512];		/* SD/scripts/data or SD/sys/data */
+static bool        s_sysMain;		/* main script is /sys/name (.nvram allowed) */
 static int64_t     s_t0;			/* -i: real ms at start */
 
 /* -i: real milliseconds since the start (+1000, like the virtual clock) */
@@ -196,8 +200,8 @@ const char *scrHostFileWrite(const char *fname, long off, const char *data, int 
 char *scrHostRead(const char *name, size_t *len, const char **err)
 {
 	char path[512];
-	if (s_card) {				/* as on the card: sys/x -> SD/sys/x.s, x -> SD/scripts/x.s */
-		snprintf(path, sizeof(path), strchr(name, '/') ? "%s/%s.s" : "%s/scripts/%s.s", s_dir, name);
+	if (s_card) {				/* as on the card: /sys/x -> SD/sys/x.s, x -> SD/scripts/x.s */
+		snprintf(path, sizeof(path), name[0] == '/' ? "%s%s.s" : "%s/scripts/%s.s", s_dir, name);
 	} else {
 		snprintf(path, sizeof(path), "%s/%s.s", s_dir, name);
 	}
@@ -235,23 +239,32 @@ static void post(const char *t)
 	snprintf(s_ev[s_nev++], sizeof(s_ev[0]), "%s", t);
 }
 
-/* FLOG / FSTAT / FDELETE / FCAT / XRO on the real data files (card layout) */
+/* FAPP / FSTAT / FDELETE / FCAT / XRO on the real data files (card layout) */
 static void cardCmd(const char *cmd, const char *fn, const char *text,
                     void (*cb)(void *ctx, const char *text), void *ctx)
 {
 	char        path[600], buf[700];
 	struct stat st;
-	dataPath(fn, path, sizeof(path));
+	size_t      fl = strlen(fn);
+	if (fl > 6 && !strcasecmp(fn + fl - 6, ".nvram")) {
+		snprintf(path, sizeof(path), "%s/sys/%s", s_dir, fn);
+	} else {
+		dataPath(fn, path, sizeof(path));
+	}
 	bool exists = stat(path, &st) == 0 && S_ISREG(st.st_mode);
-	if (!strcasecmp(cmd, "FLOG")) {
-		char t[600];
-		snprintf(t, sizeof(t), "%s\n", text);
-		const char *e = scrHostFileWrite(fn, exists ? (long)st.st_size : 0, t, strlen(t), false);
-		if (e) {
-			snprintf(buf, sizeof(buf), "ERR %s\n", e);
-			cb(ctx, buf);
+	if (!strcasecmp(cmd, "FAPP")) {
+		if (exists && access(path, W_OK) != 0) {
+			cb(ctx, "ERR read-only\n");
 			return;
 		}
+		mkdir(s_data, 0775);
+		FILE *f = fopen(path, "ab");
+		if (!f) {
+			cb(ctx, "ERR write failed\n");
+			return;
+		}
+		fprintf(f, "%s\n", text);
+		fclose(f);
 	} else if (!exists) {
 		cb(ctx, "ERR no such file\n");
 		return;
@@ -313,22 +326,38 @@ void scrHostCmd(const char *line, void (*cb)(void *ctx, const char *text), void 
 		s_req |= SCR_CHK_PAUSE;
 	} else if (strncasecmp(line, "XCLIENT ", 8) == 0) {
 		s_client = atoi(line + 8);
-	} else if (!strncasecmp(line, "FLOG ", 5) || !strncasecmp(line, "FSTAT ", 6) || !strncasecmp(line, "FDELETE ", 8) ||
+	} else if (!strncasecmp(line, "FAPP ", 5) || !strncasecmp(line, "FSTAT ", 6) || !strncasecmp(line, "FDELETE ", 8) ||
 	           !strncasecmp(line, "FCAT ", 5) || !strncasecmp(line, "XRO ", 4)) {
 		char cmd[16], nm[40], fn[48];
 		int  used = 0;
 		sscanf(line, "%15s %39s %n", cmd, nm, &used);
-		snprintf(fn, sizeof(fn), strchr(nm, '.') && strcasecmp(cmd, "FLOG") ? "%s" : "%s.txt", nm);
+		bool   xro = !strcasecmp(cmd, "XRO");
+		size_t nl  = strlen(nm);
+		const char *dot = strchr(nm, '.');
+		bool   nv  = nl > 6 && !strcasecmp(nm + nl - 6, ".nvram");
+		if (!xro && strchr(nm, '/')) {			/* as the device (always a script here) */
+			cb(ctx, "ERR file: no folder in a script (its home data/ folder is used)\n");
+			return;
+		}
+		if (!xro && (!dot || dot == nm || (strcasecmp(dot, ".txt") && strcasecmp(dot, ".var") && !nv))) {
+			cb(ctx, "ERR file: name.txt, name.var, name.nvram or /sys/name.txt|var\n");
+			return;
+		}
+		if (nv && !s_sysMain) {
+			cb(ctx, "ERR file: .nvram files only from /sys/ scripts\n");
+			return;
+		}
+		snprintf(fn, sizeof(fn), dot ? "%s" : "%s.txt", nm);
 		if (s_card) {
 			cardCmd(cmd, fn, used ? line + used : "", cb, ctx);
 			return;
 		}
-		int i = fileFind(fn, !strcasecmp(cmd, "FLOG"));
+		int i = fileFind(fn, !strcasecmp(cmd, "FAPP"));
 		if (i < 0) {
 			cb(ctx, "ERR no such file\n");
 			return;
 		}
-		if (!strcasecmp(cmd, "FLOG")) {
+		if (!strcasecmp(cmd, "FAPP")) {
 			char t[600];
 			snprintf(t, sizeof(t), "%s\n", used ? line + used : "");
 			const char *e = scrHostFileWrite(fn, s_f[i].n, t, strlen(t), false);
@@ -361,7 +390,7 @@ void scrHostCmd(const char *line, void (*cb)(void *ctx, const char *text), void 
 bool scrHostIsCommand(const char *name)
 {
 	static const char *c[] = { "TEXT", "TLEN", "TPAPER", "CLS", "LED", "UI", "NV", "IMU", "BTN", "FAIL", "REPLY", "EVT",
-	                           "ACC", "GYR", "FBOX", "LINE", "FLOG", "FCAT", "FDIR", "FSTAT", "FDELETE", NULL };
+	                           "ACC", "GYR", "FBOX", "LINE", "FAPP", "FCAT", "FDIR", "FSTAT", "FDELETE", NULL };
 	for (int i = 0; c[i]; i++) {
 		if (!strcasecmp(c[i], name)) {
 			return true;
@@ -678,7 +707,7 @@ int main(int argc, char **argv)
 	if (argc < 3) {
 		fprintf(stderr, "use: scrtest SD name [args] [-i] [-test] [-load] [-bpt file:n] [-fn name]\n"
 		                "       [-go STEP,IN,...] [-file name=path] [-input a,b,...] [-seed n] [-dump name]\n"
-		                "  SD = the card's root folder (scripts/, sys/, scripts/data/), e.g. ../../sd\n");
+		                "  SD = the card's root folder (scripts/, sys/, scripts/data/, sys/data/), e.g. ../../sd\n");
 		return 2;
 	}
 	s_dir = argv[1];
@@ -689,7 +718,8 @@ int main(int argc, char **argv)
 			s_live = true;
 		}
 	}
-	snprintf(s_data, sizeof(s_data), "%s/scripts/data", s_dir);
+	s_sysMain = strncasecmp(argv[2], "/sys/", 5) == 0;
+	snprintf(s_data, sizeof(s_data), s_sysMain ? "%s/sys/data" : "%s/scripts/data", s_dir);
 	if (s_card) {
 		char        sc[600];
 		struct stat st;

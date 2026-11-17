@@ -1,0 +1,19 @@
+> sysvars.var: 7
+> sysdata.txt: hello
+CMD: LINE 15 10 8 14 255,255,255
+CMD: LINE 8 14 7 6 255,255,255
+CMD: LINE 7 6 15 10 255,255,255
+> home data: 5:rw
+> folder in a script: 0 file: no folder in a script (its home data/ folder is used)
+> nvram from /sys/: 1:rw
+> nvram deleted: 0
+<<SCRIPT /sys/sys_check END>>
+[result END]
+[sysvars.var]
+$$n=7
+[end]
+[files in sys/data]
+sysdata.txt
+syslog.txt
+sysvars.var
+[scripts/data has no sys files]

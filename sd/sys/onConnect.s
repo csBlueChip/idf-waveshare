@@ -1,4 +1,4 @@
-# sys/onConnect.s - system script around the connect splash (NV sys.autorun 1)
+# /sys/onConnect.s - system script around the connect splash (NV sys.autorun 1)
 # $arg = UI:name, e.g. UI:WEB
 #
 # All three functions are optional; they are here as a template.

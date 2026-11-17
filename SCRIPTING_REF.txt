@@ -1,7 +1,7 @@
 WAVEDEMO SCRIPT - QUICK REFERENCE        (full rules: SCRIPTING.txt)
 ====================================
 
-FILES     SD:/scripts/name.s     name: letters digits _ (max 31)   sys/x = system
+FILES     SD:/scripts/name.s     name: letters digits _ (max 31)   /sys/x = system
 CONSOLE   RUN [name args]  STOP [NOW]  PAUSE  CONT  LOAD name [args]
           STEP [IN|OUT]  BPT [[file:]n | DEL ALL|#n|[file:]n]  VARS
           LIST [name [from [to]]]  STACK  LOG [UART|USB|BOTH|AUTO]
@@ -26,10 +26,10 @@ EXPR      ( )  ! - ~  * / %  + -  << >>  &  ^  |
 FUNCTIONS INT ROUND ABS MIN MAX SQRT SIN COS ATAN2 (degrees) LEN UPPER
           LOWER MID(t,s,n) FIND(t,p) RND(a,b)
 
-OUTPUT    TEXT n text  TLEN n text  PRINT text  DEBUG text  FLOG file text
-FILES     SD:/scripts/data/file.txt, positions from 1 (end = size + 1)
-          FLOG FCAT file [start,count] [>DEBUG]  FDIR [txt|var|nvram|*]
-          FSTAT file ($.ret)  (FCAT/FSTAT/FDELETE: name, name.var, name.nvram)
+OUTPUT    TEXT n text  TLEN n text  PRINT text  DEBUG text  FAPP file text
+FILES     <home>/data/file.txt (/scripts/data, /sys/data), positions from 1
+          FAPP FCAT file [start [count]] [>DEBUG]  FDIR [txt|var|nvram|*]
+          FSTAT file ($.ret)  (FAPP/FCAT/FSTAT/FDELETE: name.txt|var; .nvram: /sys/ scripts; no folder)
           FDELETE file  FWRITE file text  FREAD $v file n|EOL  FTELL $v file
           FSEEK file START|END [n]|SET n|OFFS n|TAG text  FCLOSE file
           VARS SAVE name [$v ...] (no list = globals)  VARS LOAD name [$v ...|ALL]
@@ -57,6 +57,6 @@ RANDOM    RNG TRNG | RNG PRNG [seed]
 DEBUG     BPT!  (in a script)
 
 SYSTEM    NV sys.autorun 1:  SD:/sys/ onBoot.s onWait.s onConnect.s
-          (by hand: RUN sys/onBoot)
+          (by hand: RUN /sys/onBoot)
           (FN before / instead / after)    hold BOOT 3 s = autorun off
           start-up LED: sys.aron (autorun 1) / sys.aroff (0)

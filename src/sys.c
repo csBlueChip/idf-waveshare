@@ -35,15 +35,18 @@
 
 #define SYS_WAIT_MAX	60000
 #define SYS_REBOOT_MS	300	/* let OK reach the client first */
-#define SYS_STAMP_TRIES	100	/* -1 .. -99 suffixes */
+#define SYS_STAMP_TRIES	100	/* _1 .. _99 suffixes */
 #define SYS_CLOCK_SET	1577836800	/* 2020-01-01: below = never set (boots at 1970) */
 #define SYS_DATA_DIR	SD_MOUNT_POINT "/scripts/data"
+#define SYS_SDATA_DIR	SD_MOUNT_POINT "/sys/data"	/* data of /sys/ scripts */
+#define SYS_PFX		"/sys/"			/* console: FCAT /sys/name ... */
+#define SYS_PFX_LEN	5
 #define SYS_NV_DIR	SD_MOUNT_POINT "/sys"	/* name.nvram files */
 #define SYS_PATH_MAX	(sizeof(SYS_DATA_DIR) + SYS_FILE_MAX + 8)
-#define SYS_FILE_MAX	31	/* FLOG / FCAT ... file name length */
+#define SYS_FILE_MAX	31	/* FAPP / FCAT ... file name length */
+#define SYS_FILE_ERR	"file: name.txt, name.var, name.nvram or /sys/name.txt|var"
 #define SYS_LINE_MAX	200	/* FCAT: longer lines are split */
 #define SYS_READ_BLOCK	1024	/* FCAT: bytes read per card access */
-#define SYS_LIST_MAX	64	/* FDIR: files listed */
 
 static int s_boot;		/* this boot's number (NV sys.bootcnt) */
 
@@ -90,19 +93,19 @@ esp_err_t sysInit(void)
 		err = cmdRegisterRaw("DEBUG", sysCmdDebug, "DEBUG text  text to the log port(s)");
 	}
 	if (err == ESP_OK) {
-		err = cmdRegisterRaw("FLOG", sysCmdAppend, "FLOG file text  add a line to SD:/scripts/data/file.txt");
+		err = cmdRegisterRaw("FAPP", sysCmdAppend, "FAPP file text  append text + new line (name.txt|var|nvram, /sys/name.txt|var)");
 	}
 	if (err == ESP_OK) {
-		err = cmdRegister("FCAT", 1, 3, sysCmdLogcat, "FCAT file[.var|.nvram] [start,count] [>DEBUG]  show a data file");
+		err = cmdRegister("FCAT", 1, 4, sysCmdLogcat, "FCAT file [start [count]] [>DEBUG]  show a data file (name.txt|var|nvram, /sys/name.txt|var)");
 	}
 	if (err == ESP_OK) {
-		err = cmdRegister("FDIR", 0, 1, sysCmdFdir, "FDIR [txt|var|nvram|*]  list data files (name size ro|rw)");
+		err = cmdRegister("FDIR", 0, 1, sysCmdFdir, "FDIR [txt|var|nvram|*]  list data files (default *; name size ro|rw)");
 	}
 	if (err == ESP_OK) {
-		err = cmdRegister("FSTAT", 1, 1, sysCmdFstat, "FSTAT file[.var|.nvram]  size:ro|rw");
+		err = cmdRegister("FSTAT", 1, 1, sysCmdFstat, "FSTAT file  size:ro|rw (name.txt|var|nvram, /sys/name.txt|var)");
 	}
 	if (err == ESP_OK) {
-		err = cmdRegister("FDELETE", 1, 1, sysCmdFdelete, "FDELETE file[.var|.nvram]  delete a data file");
+		err = cmdRegister("FDELETE", 1, 1, sysCmdFdelete, "FDELETE file  delete a data file (name.txt|var|nvram, /sys/name.txt|var)");
 	}
 	if (err == ESP_OK) {
 		err = cmdRegister("REBOOT", 0, 0, sysCmdReboot, "REBOOT  restart the device");
@@ -119,7 +122,7 @@ void sysTimestamp(char *out, size_t n)
 	if (now >= SYS_CLOCK_SET) {			/* clock set by a browser (POST /time) */
 		struct tm t;
 		gmtime_r(&now, &t);			/* the browser sent local time */
-		snprintf(out, n, "%04d%02d%02d-%02d%02d%02d", t.tm_year + 1900, t.tm_mon + 1, t.tm_mday,
+		snprintf(out, n, "%04d%02d%02d_%02d%02d%02d", t.tm_year + 1900, t.tm_mon + 1, t.tm_mday,
 		         t.tm_hour, t.tm_min, t.tm_sec);
 		return;
 	}
@@ -138,7 +141,7 @@ const char *sysTimestampFile(const char *dir, const char *ext, char *out, size_t
 		if (i == 0) {
 			snprintf(out, n, "%s%s", base, ext);
 		} else {
-			snprintf(out, n, "%s-%d%s", base, i, ext);
+			snprintf(out, n, "%s_%d%s", base, i, ext);
 		}
 		snprintf(path, sizeof(path), "%s/%s", dir, out);
 		if (stat(path, &st) != 0) {
@@ -337,13 +340,14 @@ static const char *sysCmdDebug(const char *args, cmdReply_t reply)
 	return NULL;
 }
 
-/* FLOG file text: file = letters, digits, '_' (max 31); one line added to
- * SD:/scripts/data/file.txt, folders and file created when missing. */
+/* FAPP file text: text + "\n" appended to file (names as FCAT: name.txt,
+ * name.var, /sys/name.txt|var, name.nvram; sysDataPath), folders and file
+ * created when missing; a read-only file is refused. */
 static const char *sysCmdAppend(const char *args, cmdReply_t reply)
 {
 	static EXT_RAM_BSS_ATTR char text[CMD_LINE_MAX + 1];
-	char        name[SYS_FILE_MAX + 1];
-	char        path[sizeof(SYS_DATA_DIR) + SYS_FILE_MAX + 8];
+	char        file[SYS_FILE_MAX + 16];
+	char        path[SYS_PATH_MAX];
 	size_t      len = 0;
 
 	while (*args == ' ' || *args == '\t') {
@@ -353,9 +357,14 @@ static const char *sysCmdAppend(const char *args, cmdReply_t reply)
 		len++;
 	}
 	if (len == 0) {
-		return "usage: FLOG file text";
+		return "usage: FAPP file text";
 	}
-	const char *err = sysFileName(args, len, name);
+	if (len >= sizeof(file)) {
+		return SYS_FILE_ERR;
+	}
+	memcpy(file, args, len);
+	file[len] = '\0';
+	const char *err = sysDataPath(file, path, sizeof(path), NULL);
 	if (err) {
 		return err;
 	}
@@ -364,7 +373,6 @@ static const char *sysCmdAppend(const char *args, cmdReply_t reply)
 	if (err) {
 		return err;
 	}
-	snprintf(path, sizeof(path), "%s/%s.txt", SYS_DATA_DIR, name);
 
 	sdLock();
 	if (sdEnsureMounted() != ESP_OK) {
@@ -372,13 +380,19 @@ static const char *sysCmdAppend(const char *args, cmdReply_t reply)
 		return "no SD card";
 	}
 	err = "write failed";
-	if ((mkdir(SD_MOUNT_POINT "/scripts", 0775) == 0 || errno == EEXIST) &&
-	    (mkdir(SYS_DATA_DIR, 0775) == 0 || errno == EEXIST)) {
-		struct stat ws;
-		FILE *f = (stat(path, &ws) == 0 && !(ws.st_mode & S_IWUSR)) ? NULL : fopen(path, "a");
-		if (!f && stat(path, &ws) == 0 && !(ws.st_mode & S_IWUSR)) {
-			err = "read-only";
-		}
+	bool dirs = true;			/* create the folders on the way: /sys, /scripts/data ... */
+	for (char *p = path + strlen(SD_MOUNT_POINT) + 1; dirs && (p = strchr(p, '/')) != NULL; p++) {
+		*p   = '\0';
+		dirs = mkdir(path, 0775) == 0 || errno == EEXIST;
+		*p   = '/';
+	}
+	struct stat ws;
+	if (!dirs) {
+		/* write failed */
+	} else if (stat(path, &ws) == 0 && !(ws.st_mode & S_IWUSR)) {
+		err = "read-only";
+	} else {
+		FILE *f = fopen(path, "a");
 		if (f) {
 			bool ok = (fprintf(f, "%s\n", text) >= 0);
 			if (fclose(f) == 0 && ok) {
@@ -407,7 +421,7 @@ static const char *sysFileName(const char *s, size_t len, char *out)
 	return NULL;
 }
 
-/* FCAT file [start,count] [>DEBUG]: show file.txt (or file.var, file.nvram)
+/* FCAT file [start [count]] [>DEBUG]: show file (name.txt, name.var, name.nvram, /sys/name.txt|var)
  * line by line (or count lines from line start), to the client or the log.
  * In a .nvram file a line starting with '!' shows as "!key=[redacted]".
  * The card is read in
@@ -427,15 +441,21 @@ static const char *sysCmdLogcat(int argc, char *argv[], cmdReply_t reply)
 	struct stat st;
 	long        from = 1, count = -1, lineNo = 1;	/* lines to show (count -1 = all) */
 
+	int nums = 0;
 	for (int i = 1; i < argc; i++) {
 		char *e;
+		long  v;
 		if (strcasecmp(argv[i], ">DEBUG") == 0 && i == argc - 1) {
 			debug = true;
-		} else if (i == 1 && (from = strtol(argv[1], &e, 10)) >= 1 && e != argv[1] &&
-		           (*e == '\0' || (*e == ',' && (count = strtol(e + 1, &e, 10)) >= 0 && *e == '\0'))) {
-			/* start[,count] */
+		} else if (i == nums + 1 && nums < 2 && (v = strtol(argv[i], &e, 10)) >= (nums ? 0 : 1) &&
+		           e != argv[i] && *e == '\0') {
+			if (nums++ == 0) {
+				from = v;			/* start */
+			} else {
+				count = v;			/* count */
+			}
 		} else {
-			return "usage: FCAT file [start,count] [>DEBUG]";
+			return "usage: FCAT file [start [count]] [>DEBUG]";
 		}
 	}
 	const char *err = sysDataPath(argv[0], path, sizeof(path), &nvram);
@@ -532,66 +552,70 @@ static void sysLogLine(const char *line, bool debug, bool redact, cmdReply_t rep
 	}
 }
 
-/* FDIR [txt|var|nvram|*]: "name size ro|rw" per file, then the count.
- * txt / var: SD:/scripts/data; nvram: SD:/sys; * = all three, with the
- * extension shown (otherwise it is dropped). */
+const char *sysListDir(const char *dir, const char *ext, const char *prefix, bool keepExt,
+                       cmdReply_t reply, int *count)
+{
+	sdEntry_t *e = NULL;
+	sdLock();
+	int n = (sdEnsureMounted() == ESP_OK) ? sdListAll(dir, ext, &e) : -1;
+	sdUnlock();
+	if (n == -1) {
+		return "no SD card";
+	}
+	if (n == -2) {
+		return "out of memory";
+	}
+	char nm[SD_NAME_MAX + 8], out[SD_NAME_MAX + 32];
+	for (int i = 0; i < n; i++) {
+		if (!keepExt) {
+			e[i].name[strlen(e[i].name) - strlen(ext)] = '\0';
+		}
+		snprintf(nm, sizeof(nm), "%s%s", prefix, e[i].name);
+		snprintf(out, sizeof(out), "%-36s %8ld %s\n", nm, e[i].size, e[i].ro ? "ro" : "rw");
+		reply(out);
+	}
+	free(e);
+	*count += n;
+	return NULL;
+}
+
+void sysListCount(int n, cmdReply_t reply)
+{
+	char out[24];
+	snprintf(out, sizeof(out), "%d file%s\n", n, n == 1 ? "" : "s");
+	reply(out);
+}
+
+/* FDIR [txt|var|nvram|*] (default *): "name size ro|rw" per file, then the count. txt /
+ * var: SD:/scripts/data, then SD:/sys/data as /sys/name; nvram: SD:/sys;
+ * * = all. Full names (name.txt, /sys/name.var, name.nvram), as FCAT /
+ * FSTAT / FDELETE take them. No limit. */
 static const char *sysLogList(const char *type, cmdReply_t reply)
 {
-	static EXT_RAM_BSS_ATTR char names[SYS_LIST_MAX][SD_NAME_MAX];
-	static long sizes[SYS_LIST_MAX];
-	static bool ro[SYS_LIST_MAX];
-	static const struct { const char *type, *dir, *ext; } kinds[] = {
-		{ "txt", SYS_DATA_DIR, ".txt" }, { "var", SYS_DATA_DIR, ".var" }, { "nvram", SYS_NV_DIR, ".nvram" },
+	static const struct { const char *type, *dir, *ext, *prefix; } kinds[] = {
+		{ "txt", SYS_DATA_DIR, ".txt", "" },     { "txt", SYS_SDATA_DIR, ".txt", SYS_PFX },	/* names as FCAT takes them */
+		{ "var", SYS_DATA_DIR, ".var", "" },     { "var", SYS_SDATA_DIR, ".var", SYS_PFX },
+		{ "nvram", SYS_NV_DIR, ".nvram", "" },
 	};
-	char        path[sizeof(SYS_DATA_DIR) + SD_NAME_MAX + 2];
-	char        out[SD_NAME_MAX + 24];
-	struct stat st;
-	bool        all = strcmp(type, "*") == 0;
-	int         n   = 0;
-	bool        found = all;
-
-	for (int k = 0; k < 3; k++) {
+	bool all   = strcmp(type, "*") == 0;
+	bool found = all;
+	int  n     = 0;
+	for (size_t k = 0; k < sizeof(kinds) / sizeof(kinds[0]); k++) {
 		found |= strcasecmp(type, kinds[k].type) == 0;
 	}
 	if (!found) {
 		return "usage: FDIR [txt|var|nvram|*]";
 	}
-	sdLock();
-	if (sdEnsureMounted() != ESP_OK) {
-		sdUnlock();
-		return "no SD card";
-	}
-	for (int k = 0; k < 3 && n >= 0; k++) {
+	for (size_t k = 0; k < sizeof(kinds) / sizeof(kinds[0]); k++) {
 		if (!all && strcasecmp(type, kinds[k].type) != 0) {
 			continue;
 		}
-		int m = sdListFiles(kinds[k].dir, kinds[k].ext, names + n, SYS_LIST_MAX - n);
-		if (m < 0) {
-			n = -1;
-			break;
+		const char *err = sysListDir(kinds[k].dir, kinds[k].ext, kinds[k].prefix, true, reply, &n);
+		if (err) {
+			return err;
 		}
-		for (int i = n; i < n + m; i++) {
-			snprintf(path, sizeof(path), "%s/%s", kinds[k].dir, names[i]);
-			sizes[i] = (stat(path, &st) == 0) ? (long)st.st_size : -1;
-			ro[i]    = (sizes[i] >= 0) && !(st.st_mode & S_IWUSR);
-			if (!all) {
-				names[i][strlen(names[i]) - strlen(kinds[k].ext)] = '\0';	/* drop the extension */
-			}
-		}
-		n += m;
 	}
-	sdUnlock();
-	if (n < 0) {
-		return "no SD card";
-	}
-
-	for (int i = 0; i < n; i++) {
-		snprintf(out, sizeof(out), "%-31s %8ld %s\n", names[i], sizes[i], ro[i] ? "ro" : "rw");
-		reply(out);
-	}
-	snprintf(out, sizeof(out), "%d file%s%s\n", n, n == 1 ? "" : "s",
-	         n == SYS_LIST_MAX ? " (list full: there may be more)" : "");
-	reply(out);
+	sysListCount(n, reply);
 	return NULL;
 }
 
@@ -632,21 +656,42 @@ static const char *sysCmdMem(int argc, char *argv[], cmdReply_t reply)
 
 static const char *sysCmdFdir(int argc, char *argv[], cmdReply_t reply)
 {
-	return sysLogList(argc ? argv[0] : "txt", reply);
+	return sysLogList(argc ? argv[0] : "*", reply);
 }
 
-/* file -> SD:/scripts/data/file.txt; file.txt, file.var the same folder;
- * file.nvram -> SD:/sys/file.nvram (*nvram set). file: letters, digits,
- * '_', max 31. */
+/* FAPP / FCAT / FSTAT / FDELETE file names, always with the extension:
+ *   name.txt, name.var        <data>: the home data/ folder (SD:/scripts/data;
+ *                             in a /sys/ script SD:/sys/data)
+ *   /sys/name.txt|var         SD:/sys/data (console only: scripts take no folder)
+ *   name.nvram                SD:/sys/name.nvram (*nvram set; console and
+ *                             /sys/ scripts only)
+ * name: letters, digits, '_', max 31. */
 static const char *sysDataPath(const char *file, char *path, size_t n, bool *nvram)
 {
 	char        name[SYS_FILE_MAX + 1];
-	const char *dot = strchr(file, '.');
-	const char *ext = dot ? dot : ".txt";
-	const char *dir = SYS_DATA_DIR;
-	bool        nv  = false;
+	const char *dir = scriptDataDir(NULL);
+	bool        nv  = false, pfx = false;
 
-	if (strcasecmp(ext, ".nvram") == 0) {
+	bool        script = scriptIsCaller(), sysHome;
+	scriptDataDir(&sysHome);
+	if (strncasecmp(file, SYS_PFX, SYS_PFX_LEN) == 0) {
+		if (script) {
+			return "file: no folder in a script (its home data/ folder is used)";
+		}
+		file += SYS_PFX_LEN;
+		dir = SYS_SDATA_DIR;
+		pfx = true;
+	}
+	const char *dot = strchr(file, '.');
+	const char *ext = dot ? dot : "";
+	if (dot == file) {
+		return SYS_FILE_ERR;			/* no name */
+	}
+
+	if (strcasecmp(ext, ".nvram") == 0 && !pfx) {
+		if (script && !sysHome) {
+			return "file: .nvram files only from /sys/ scripts";
+		}
 		dir = SYS_NV_DIR;
 		ext = ".nvram";
 		nv  = true;
@@ -655,9 +700,9 @@ static const char *sysDataPath(const char *file, char *path, size_t n, bool *nvr
 	} else if (strcasecmp(ext, ".txt") == 0) {
 		ext = ".txt";
 	} else {
-		return "file: name, name.var or name.nvram";
+		return SYS_FILE_ERR;
 	}
-	const char *err = sysFileName(file, dot ? (size_t)(dot - file) : strlen(file), name);
+	const char *err = sysFileName(file, (size_t)(dot - file), name);
 	if (!err) {
 		snprintf(path, n, "%s/%s%s", dir, name, ext);
 	}

@@ -117,7 +117,7 @@ conversation context. Keep it current, like the README.
     resetBootFile, after sdInit; mainAutorunFlash moved after it). nv.c:
     nvExport public, nvResetAll, nvBackup, nvResetImport (dry-run check via
     s_dry in nvSetMany). script.c: scriptHas, scriptRunWait. sysTimestamp:
-    YYYYMMDD-HHMMSS when time() >= 2020 (set by POST /time), else
+    YYYYMMDD_HHMMSS when time() >= 2020 (set by POST /time), else
     b<boot>_<uptime>. fm.html: ".." double-click. MODE line shows only the
     selected mode; a failed backup never stops a reset (screen or boot).
   Per-board defaults (nv.c NV_GEN, nvDefault): wifi.ssid / ble.name
@@ -370,8 +370,9 @@ conversation context. Keep it current, like the README.
             ionParse handles "quoted names"; '*' lines are not used.
             Viewer (hlIon): a "quoted name" is one name; '*' lines are
             shown whole in the comment colour.
-    scrcard scrtest SD name: scripts from SD/scripts (sys/x from SD/sys),
-            data files real in SD/scripts/data (cardCmd for FLOG FSTAT
+    scrcard scrtest SD name: scripts from SD/scripts (/sys/x from SD/sys),
+            data files real in SD/scripts/data or SD/sys/data (/sys/ main
+            script) (cardCmd for FLOG FSTAT
             FDELETE FCAT XRO). -test = old layout + in-memory files (run.sh).
             -i: keyboard INPUT via select() with real time-out, plain
             PRINT, real-time WAIT / events / timers. tests/scrtest/Makefile

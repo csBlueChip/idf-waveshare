@@ -23,13 +23,14 @@ Needs gcc (Linux, macOS, WSL or MSYS2 on Windows).
   ./scrtest SD name [args] [options]
 
   SD      the card's root folder - normally the project's sd/ (../../sd)
-  name    script name without .s: scripts/name.s, or sys/name for
+  name    script name without .s: scripts/name.s, or /sys/name for
           SD/sys/name.s (as RUN on the device); CALL file.fn and INSERT
-          files come from the same places
+          files always come from SD/scripts
   args    become $arg, as with RUN name args
 
-  Data files are the real files in SD/scripts/data: FREAD / FSEEK read
-  them, FWRITE / FLOG / VARS SAVE write them, FDELETE deletes them -
+  Data files are the real files in SD/scripts/data (SD/sys/data when name
+  is /sys/name): FREAD / FSEEK read
+  them, FWRITE / FAPP / VARS SAVE write them, FDELETE deletes them -
   exactly where the device would.
 
   ./scrtest ../../sd boast a -i         play boast.s (mode a) at the keyboard;
@@ -86,7 +87,8 @@ last line [result END|STOPPED|ERROR|NOFN].
 
   Commands: device commands are printed as "CMD: line" and reply OK.
     These work on the data files (real files, or in memory with -test):
-      FLOG f text, FSTAT f, FDELETE f, FCAT f (f, f.txt or f.var)
+      FAPP f text, FSTAT f, FDELETE f, FCAT f (f.txt or f.var; f.nvram when
+      the main script is /sys/name; no folder - as in a script on the device)
       FWRITE FREAD FTELL FSEEK FCLOSE, VARS SAVE / LOAD
   Extra lines a test script can use (they are commands, so they work
   as script lines):
@@ -124,7 +126,9 @@ last line [result END|STOPPED|ERROR|NOFN].
   card/card_check.s checks the card layout: run.sh copies the project's
   sd/ to a temporary folder, runs the script there (real data files),
   lists what is left in scripts/data and compares with
-  card/card_check.out. The project's sd/ is never written.
+  card/card_check.out. card/sys_check.s runs the same way as
+  /sys/sys_check and checks that its files land in sys/data
+  (card/sys_check.out). The project's sd/ is never written.
 
   The last line is "passed n, failed n".
 

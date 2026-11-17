@@ -16,8 +16,8 @@ TEXT 1 "q=$q"
 TLEN 1 "q=$q"
 GET $w = TLEN 1 x=$x
 PRINT tlen ok=$.ok
-FLOG log $x and \$
-FCAT log
+FAPP log.txt $x and \$
+FCAT log.txt
 LED WHITE
 LED 1 WHITE MAXN
 IF $x > MAXN ; PRINT const in expr ok ; END

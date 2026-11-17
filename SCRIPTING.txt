@@ -26,8 +26,11 @@ implementation:
     a load error (naming the line).
   - File names: max 31 characters, not counting .s.
   - System scripts live in /sys/ (onBoot.s, onWait.s, onConnect.s;
-    section 13); by hand they are named sys/name (RUN sys/onBoot,
-    LIST sys/onBoot, BPT sys/onBoot:4, messages sys/onBoot:4).
+    section 13); by hand they are named /sys/name (RUN /sys/onBoot,
+    LIST /sys/onBoot, BPT /sys/onBoot:4, messages /sys/onBoot:4).
+  - A script's data files live in data/ of its home: /scripts/data, or
+    /sys/data for a /sys/ script (section 7a). Libraries (CALL / ON
+    file.x) always come from /scripts.
   - Max file size, including INSERTed text: 32 KB
   - Edit the files on a PC (FILES gives USB disk access).
 
@@ -35,8 +38,8 @@ implementation:
 2. CONSOLE COMMANDS
 -------------------
 
-  RUN                   list the scripts in /scripts
   RUN name [args]       start name.s; args become $arg (section 4)
+                        (RUN alone: ERR usage; LIST lists the scripts)
   STOP                  kill the running script at once ("kill -9");
                         only the command in progress finishes (WAIT ms
                         and WAIT EVENT end at once)
@@ -57,7 +60,7 @@ implementation:
   inspection, plus STOP, CONT and the debug commands).
   Only one script runs at a time.
 
-  RUN can start any script, including system scripts (RUN sys/onWait).
+  RUN can start any script, including system scripts (RUN /sys/onWait).
 
   LOG [UART|USB|BOTH|AUTO]   where log messages go (no argument: show).
                         AUTO = the normal rule (UI = UART -> USB, UI = USB
@@ -102,6 +105,8 @@ implementation:
   Breakpoints are kept between runs, until BPT DEL or reboot.
   VARS                  list the variables of the paused script (locals of
                         the current function, then globals)
+  LIST                  no active script: all /scripts/*.s, then /sys/*.s
+                        as /sys/name (name size ro|rw, then the count)
   LIST [name [from [to]]]
                         list the active script (or name.s) with line
                         numbers, all or lines from..to; '>' marks the
@@ -247,7 +252,7 @@ implementation:
     $.ret               value from the last RETURN / WAIT EVENT / FSTAT
     $.event             full text of the last event, e.g. "BTN 1 SHORT"
                         (WAIT EVENT; empty after a time-out)
-    $.time              timestamp as used for file names: 20261113-142530
+    $.time              timestamp as used for file names: 20261113_142530
                         (clock set by a browser) or b002A_001523 (not set)
     $.uptime            ms since boot
     $.runtime           ms since the script started
@@ -384,31 +389,39 @@ implementation:
         \1..\9    font 1..9 for the rest of this TEXT (TEXT / TLEN only;
                   PRINT and DEBUG drop them)
 
-  FLOG file text   add text plus a new line at the end of
-                   SD:/scripts/data/file.txt (folder and file created if
-                   missing; same text rules as PRINT; file: letters,
-                   digits, '_'). Also a console command.
+  FAPP file text   append text plus a new line to file (name.txt or
+                   name.var in <data>, section 7a; name.nvram in /sys/
+                   scripts only; no folder; folder and file created if
+                   missing; same text rules as PRINT). Also a console
+                   command.
 
 7a. DATA FILES
 --------------
 
-  Text files SD:/scripts/data/file.txt (file = letters, digits, '_', max
-  31, given without .txt; only FCAT / FSTAT / FDELETE also take
-  name.var and name.nvram, below).
+  Text files <data>/file.txt (file = letters, digits, '_', max 31, given
+  without .txt). <data> is data/ in the home of the script started by
+  RUN / LOAD: SD:/scripts/data, or SD:/sys/data for a /sys/ script (code
+  CALLed from a /scripts library still uses the caller's folder).
+  FAPP / FCAT / FSTAT / FDELETE always take the full name: name.txt /
+  name.var = <data>; name.nvram = SD:/sys/name.nvram (only from /sys/
+  scripts). A script never gives a folder: it is tied to the home of its
+  root script (RUN root). On the console /sys/name.txt|var reaches
+  SD:/sys/data. FDIR lists both data folders with full names.
 
   Console and scripts:
-    FLOG file text                  append text + new line (section 7)
-    FCAT file [start,count] [>DEBUG]
-                                    show the file / count lines from line
-                                    start; error if the file is missing
-    FDIR [txt|var|nvram|*]          list: name size ro|rw (default txt;
-                                    * = all, with extensions)
+    FAPP file text                  append text + new line (section 7)
+    FCAT file [start [count]] [>DEBUG]
+                                    show the file / from line start, count
+                                    lines; error if the file is missing
+    FDIR [txt|var|nvram|*]          list: name size ro|rw (default *;
+                                    full names)
     FSTAT file                      size:ro|rw (ro = read-only attribute,
                                     set on a PC); in a script -> $.ret
     FDELETE file                    delete (not a read-only file)
-    FCAT / FSTAT / FDELETE also take name.var (VARS SAVE files) and
-    name.nvram (SD:/sys; FCAT shows a '!' line as !key=[redacted]):
-      FDELETE persist.var
+    FAPP / FCAT / FSTAT / FDELETE: full names - name.txt, name.var (VARS
+    SAVE files), name.nvram (/sys/ scripts; FCAT shows a '!' line as
+    !key=[redacted]):
+      FSTAT notes.txt    FDELETE persist.var    FCAT log.txt 5 3
 
   Scripts only (each file has a position). The file may be given as a
   name, a constant or a variable ($f $$f ${f}); the value must be a
@@ -445,9 +458,9 @@ implementation:
   FREAD past the end: $v gets the bytes that were there, $.ok = 0 and the
   error "over-read n" (n = bytes missing). FREAD EOL with nothing left:
   error "EOF". Errors go through ONERROR as usual. Non-ASCII bytes read
-  as '?'. FWRITE / FLOG / FDELETE refuse a read-only file.
+  as '?'. FWRITE / FAPP / FDELETE refuse a read-only file.
 
-  VARS SAVE name [$a $$b ...]       write SD:/scripts/data/name.var, a new
+  VARS SAVE name [$a $$b ...]       write <data>/name.var, a new
                                     file each time. No list: all GLOBALS
                                     ($$) only; locals only when listed.
   VARS LOAD name [$a $$b ... | ALL] set the listed variables (no list =
@@ -762,7 +775,7 @@ implementation:
 
   onBoot never sees a UI event: no interface is running while it runs.
 
-  RUN can start a system script by hand (e.g. RUN sys/onWait, for testing).
+  RUN can start a system script by hand (e.g. RUN /sys/onWait, for testing).
 
 
 13a. BOOT ORDER

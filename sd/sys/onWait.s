@@ -1,4 +1,4 @@
-# sys/onWait.s - system script around each Wait screen (NV sys.autorun 1)
+# /sys/onWait.s - system script around each Wait screen (NV sys.autorun 1)
 # $arg = the details, e.g. UI:WEB:80|SSID:x|Pwd:y|IP:192.168.4.1|Mask:/24|Link:Waiting
 #
 # All three functions are optional; they are here as a template.

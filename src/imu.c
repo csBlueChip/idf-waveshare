@@ -106,6 +106,7 @@ static const char *TAG = "imu";
 #define IMU_CMD_MOTION		0x0E
 #define IMU_CMD_RESET_PEDO	0x0F
 #define IMU_CMD_COD		0xA2
+#define IMU_CMD_APPLY_GAINS	0xAA	/* gyro gains from CAL1..CAL3 */
 
 #define IMU_FIFO_STREAM_128	0x0E	/* FIFO_CTRL: 128 samples, stream mode */
 #define IMU_FIFO_OVFLOW		0x20	/* FIFO_STATUS */
@@ -138,8 +139,11 @@ static const char *TAG = "imu";
 #define IMU_REC_FILE_MS		600000
 #define IMU_REC_DIR		SD_MOUNT_POINT "/imu"
 #define IMU_REC_EXT		".csv"
-#define IMU_REC_HEADER		"t ax ay az gx gy gz\n"
-#define IMU_REC_LINE		72
+#define IMU_CAL_LOG		IMU_REC_DIR "/imu_cal.log"	/* IMU CAL / TEST results */
+/* CSV: decimal points aligned; widths fit 600000.000 ms, -16.000 g, -2048.000 dps */
+#define IMU_REC_HEADER		"         t,      ax,      ay,      az,        gx,        gy,        gz\n"
+#define IMU_REC_FMT		"%10.3f,%8.3f,%8.3f,%8.3f,%10.3f,%10.3f,%10.3f\n"
+#define IMU_REC_LINE		80
 #define IMU_FIFO_SAMPLES	128
 #define IMU_TASK_STACK		6144	/* RAD wake restarts Wi-Fi from this task */
 #define IMU_TASK_PRIO		4
@@ -236,6 +240,8 @@ static const char *imuCmdOrient(int argc, char *argv[], cmdReply_t reply);
 static const char *imuCmdSet(int argc, char *argv[], cmdReply_t reply);
 static const char *imuCmdSleep(int argc, char *argv[], cmdReply_t reply);
 static const char *imuCmdCal(cmdReply_t reply);
+static void        imuApplyGains(void);
+static void        imuCalLog(const char *what, const char *result);
 static const char *imuCmdTest(cmdReply_t reply);
 static const char *imuCmdRec(int argc, char *argv[], cmdReply_t reply);
 
@@ -255,6 +261,7 @@ esp_err_t imuInit(void)
 	}
 	ESP_RETURN_ON_ERROR(imuSoftReset(), TAG, "reset");	/* also leaves WoM after deep sleep */
 	imuLoadNv();
+	imuApplyGains();
 	ESP_RETURN_ON_ERROR(imuApply(), TAG, "configure");
 
 	ESP_RETURN_ON_FALSE(xTaskCreate(imuTask, "imu", IMU_TASK_STACK, NULL, IMU_TASK_PRIO, NULL) == pdPASS,
@@ -867,7 +874,7 @@ static const char *imuCmdAcc(int argc, char *argv[], cmdReply_t reply)
 		return "IMU read failed";
 	}
 	char text[64];
-	snprintf(text, sizeof(text), "aX:%7.3f\naY:%7.3f\naZ:%7.3f\n", x, y, z);
+	snprintf(text, sizeof(text), "aX:%.3f aY:%.3f aZ:%.3f\n", x, y, z);
 	reply(text);
 	return NULL;
 }
@@ -885,7 +892,7 @@ static const char *imuCmdGyr(int argc, char *argv[], cmdReply_t reply)
 		return "IMU read failed";
 	}
 	char text[64];
-	snprintf(text, sizeof(text), "gX:%8.2f\ngY:%8.2f\ngZ:%8.2f\n", x, y, z);
+	snprintf(text, sizeof(text), "gX:%.3f gY:%.3f gZ:%.3f\n", x, y, z);
 	reply(text);
 	return NULL;
 }
@@ -941,6 +948,7 @@ static const char *imuCmd(int argc, char *argv[], cmdReply_t reply)
 		esp_err_t e = imuSoftReset();
 		imuLoadNv();
 		if (e == ESP_OK) {
+			imuApplyGains();
 			e = imuApply();
 		}
 		xSemaphoreGive(s_lock);
@@ -1329,7 +1337,8 @@ static const char *imuCmdSleep(int argc, char *argv[], cmdReply_t reply)
 /* IMU CAL: gyro calibration-on-demand (keep still ~1.5 s). */
 static const char *imuCmdCal(cmdReply_t reply)
 {
-	uint8_t st = 0xFF;
+	uint8_t st = 0xFF, raw[6];
+	char    gcal[16] = "";
 
 	xSemaphoreTake(s_lock, portMAX_DELAY);
 	imuWrite(IMU_REG_CTRL7, 0);
@@ -1337,16 +1346,73 @@ static const char *imuCmdCal(cmdReply_t reply)
 	if (err == ESP_OK) {
 		imuRead(IMU_REG_COD_STATUS, &st, 1);
 	}
+	if (st == 0 && imuRead(IMU_REG_DVX_L, raw, sizeof(raw)) == ESP_OK) {	/* gains X,Y,Z */
+		snprintf(gcal, sizeof(gcal), "%04x,%04x,%04x",
+		         raw[0] | raw[1] << 8, raw[2] | raw[3] << 8, raw[4] | raw[5] << 8);
+		const char *k[] = { "imu.gcal" }, *v[] = { gcal };
+		const char *e = nvSetMany(1, k, v, NULL);
+		if (e) {
+			ESP_LOGW(TAG, "imu.gcal not stored: %s", e);
+			gcal[0] = 0;
+		}
+	}
 	imuApply();
 	xSemaphoreGive(s_lock);
 
 	if (err != ESP_OK) {
+		imuCalLog("CAL", "result:timeout\n");
 		return "calibration timed out";
 	}
-	char text[40];
-	snprintf(text, sizeof(text), "COD 0x%02X %s\n", st, st == 0 ? "PASS" : "FAIL (keep still)");
+	char text[64];
+	snprintf(text, sizeof(text), "cod:0x%02X result:%s gcal:%s\n", st,
+	         gcal[0] ? "pass" : "fail", gcal[0] ? gcal : "none");
 	reply(text);
+	imuCalLog("CAL", text);
 	return NULL;
+}
+
+/* Append "<timestamp> : what result" to SD:/imu/imu_cal.log (result ends in \n).
+ * No card / write error: a warning on the log port only. */
+static void imuCalLog(const char *what, const char *result)
+{
+	char        stamp[24];
+	const char *e = NULL;
+
+	sysTimestamp(stamp, sizeof(stamp));
+	sdLock();
+	if (sdEnsureMounted() != ESP_OK) {
+		e = "no SD card";
+	} else if (mkdir(IMU_REC_DIR, 0777) != 0 && errno != EEXIST) {
+		e = "cannot create /imu";
+	} else {
+		FILE *f = fopen(IMU_CAL_LOG, "a");
+		if (!f || fprintf(f, "%s : %s %s", stamp, what, result) < 0) {
+			e = "write failed";
+		}
+		if (f && fclose(f) != 0) {
+			e = "write failed";
+		}
+	}
+	sdUnlock();
+	if (e) {
+		ESP_LOGW(TAG, "imu_cal.log: %s", e);
+	}
+}
+
+/* Restore the gyro gains stored by IMU CAL (lost on chip reset). Caller holds
+ * s_lock (or runs before the task starts); sensors off; imuApply() follows. */
+static void imuApplyGains(void)
+{
+	const char *g = nvGet("imu.gcal");
+	unsigned    x, y, z;
+	if (!g || sscanf(g, "%4x,%4x,%4x", &x, &y, &z) != 3) {
+		return;
+	}
+	uint8_t cal[8] = { x, x >> 8, y, y >> 8, z, z >> 8, 0, 0 };
+	imuWrite(IMU_REG_CTRL7, 0);
+	if (imuCtrl9(IMU_CMD_APPLY_GAINS, cal, IMU_CTRL9_MS) == ESP_OK) {
+		ESP_LOGI(TAG, "gyro gains %s applied", g);
+	}
 }
 
 /* Self-test of one sensor: set the ST bit in reg, wait for STATUSINT.0,
@@ -1395,21 +1461,15 @@ static const char *imuCmdTest(cmdReply_t reply)
 	imuApply();
 	xSemaphoreGive(s_lock);
 
-	char text[72];
-	if (ea == ESP_OK) {
-		bool ok = fabsf(a[0]) > 200 && fabsf(a[1]) > 200 && fabsf(a[2]) > 200;
-		snprintf(text, sizeof(text), "ACC %.0f %.0f %.0f mg %s\n", a[0], a[1], a[2], ok ? "PASS" : "FAIL");
-	} else {
-		snprintf(text, sizeof(text), "ACC FAIL (no result)\n");
-	}
+	const char *ar = (ea != ESP_OK) ? "none"
+	               : (fabsf(a[0]) > 200 && fabsf(a[1]) > 200 && fabsf(a[2]) > 200) ? "pass" : "fail";
+	const char *gr = (eg != ESP_OK) ? "none"
+	               : (fabsf(g[0]) > 300 && fabsf(g[1]) > 300 && fabsf(g[2]) > 300) ? "pass" : "fail";
+	char text[128];
+	snprintf(text, sizeof(text), "acc:%s ax:%.0f ay:%.0f az:%.0f gyr:%s gx:%.0f gy:%.0f gz:%.0f\n",
+	         ar, a[0], a[1], a[2], gr, g[0], g[1], g[2]);
 	reply(text);
-	if (eg == ESP_OK) {
-		bool ok = fabsf(g[0]) > 300 && fabsf(g[1]) > 300 && fabsf(g[2]) > 300;
-		snprintf(text, sizeof(text), "GYR %.0f %.0f %.0f dps %s\n", g[0], g[1], g[2], ok ? "PASS" : "FAIL");
-	} else {
-		snprintf(text, sizeof(text), "GYR FAIL (no result)\n");
-	}
-	reply(text);
+	imuCalLog("TEST", text);
 	return NULL;
 }
 
@@ -1424,6 +1484,27 @@ static bool imuRecWrite(const char *path, const char *buf, size_t len)
 	}
 	sdUnlock();
 	return ok;
+}
+
+/* "# <timestamp> arange:4 arate:224 grange:512 grate:224 gcal:x/y/z|none\n"
+ * ('/' in gcal so a spreadsheet keeps it in one cell). */
+static void imuRecMeta(char *out, size_t n)
+{
+	char stamp[24], gcal[16];
+	sysTimestamp(stamp, sizeof(stamp));
+	const char *g = nvGet("imu.gcal");
+	if (g && g[0]) {
+		strlcpy(gcal, g, sizeof(gcal));
+		for (char *c = gcal; *c; c++) {
+			if (*c == ',') {
+				*c = '/';
+			}
+		}
+	} else {
+		strcpy(gcal, "none");
+	}
+	snprintf(out, n, "# %s arange:%d arate:%d grange:%d grate:%d gcal:%s\n", stamp, s_arange,
+	         nvGetInt("imu.arate"), s_grange, nvGetInt("imu.grate"), gcal);
 }
 
 /* Create SD:/imu/<name>.csv (* = timestamp) with the header line; an
@@ -1446,13 +1527,11 @@ static const char *imuRecOpen(const char *name, bool force, char *file, size_t f
 			return e;
 		}
 	} else {
-		size_t len    = strlen(name);
-		bool   hasExt = len >= 4 && strcasecmp(name + len - 4, IMU_REC_EXT) == 0;
-		if (strpbrk(name, "/\\:*?") || len + (hasExt ? 0 : 4) >= fileSize) {
+		const char *e = sdNameMake(name, IMU_REC_EXT, file, fileSize);
+		if (e) {
 			sdUnlock();
-			return "bad file name";
+			return e;
 		}
-		snprintf(file, fileSize, "%s%s", name, hasExt ? "" : IMU_REC_EXT);
 	}
 	snprintf(path, pathSize, "%s/%s", IMU_REC_DIR, file);
 	struct stat st;
@@ -1460,8 +1539,10 @@ static const char *imuRecOpen(const char *name, bool force, char *file, size_t f
 		sdUnlock();
 		return "file exists (-f to overwrite)";
 	}
+	char meta[96];
+	imuRecMeta(meta, sizeof(meta));
 	FILE *f  = fopen(path, "w");
-	bool  ok = f && fputs(IMU_REC_HEADER, f) >= 0;
+	bool  ok = f && fputs(meta, f) >= 0 && fputs(IMU_REC_HEADER, f) >= 0;
 	if (f && fclose(f) != 0) {
 		ok = false;
 	}
@@ -1523,6 +1604,9 @@ static const char *imuCmdRec(int argc, char *argv[], cmdReply_t reply)
 		return "out of memory";
 	}
 	if (!toFile) {
+		char meta[96];
+		imuRecMeta(meta, sizeof(meta));
+		reply(meta);
 		reply(IMU_REC_HEADER);
 	}
 
@@ -1575,7 +1659,7 @@ static const char *imuCmdRec(int argc, char *argv[], cmdReply_t reply)
 			for (int k = 0; k < 6; k++) {
 				d[k] = (int16_t)(p[2 * k] | (p[2 * k + 1] << 8));
 			}
-			len += snprintf(buf + len, bufMax - len, "%.1f %.4f %.4f %.4f %.2f %.2f %.2f\n",
+			len += snprintf(buf + len, bufMax - len, IMU_REC_FMT,
 			                idx * 1000.0f / odr, d[0] * as, d[1] * as, d[2] * as,
 			                d[3] * gs, d[4] * gs, d[5] * gs);
 		}

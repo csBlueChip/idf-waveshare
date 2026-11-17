@@ -38,7 +38,8 @@
  *                             still.thr mot.thr wom step.thr step.min (key:value)
  *   IMU WOM [thr]             wake-on-motion threshold, mg (NV imu.wom); shows mg:n
  *   IMU SLEEP [SCR|RAD|CPU] [thr]  sleep until motion or BOOT (<<IMU WAKE>>)
- *   IMU CAL | IMU TEST        gyro calibration / self-test
+ *   IMU CAL | IMU TEST        gyro gain calibration (stored in NV imu.gcal,
+ *                             re-applied at boot / IMU RESET) / self-test
  *   IMU DEBUG [0|1]           dbgf lines "IMU <ms> ...": raw STATUS1 / TAP_STATUS on
  *                             every change, CTRL8 on every reconfiguration, a copy of
  *                             every <<IMU ...>> event (this boot only)

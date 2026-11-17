@@ -67,6 +67,8 @@
  *                                             (step.*: unused, IMU STEP not implemented)
  *   imu.orient.hold 500         0..5000 ms    (orientation must hold this long)
  *   imu.orient.flat 30          5..80 deg     (tilt from horizontal still FLAT)
+ *   imu.gcal   ""               xxxx,yyyy,zzzz (gyro gains X,Y,Z from IMU CAL, hex;
+ *                                             applied at boot / IMU RESET)
  *   run.files  4                1..16         data files with a position per script
  *                                             (default when the script has no .FILES)
  *   sys.autorun 0               0|1           run system scripts (onBoot ...);
@@ -121,7 +123,8 @@ float       nvGetFloat(const char *key);
  * pair's index, or -1 for a cross-check error (e.g. wifi.ip vs wifi.cidr). */
 const char *nvSetMany(int n, const char *keys[], const char *vals[], int *badIndex);
 
-/* NV EXPORT: write SD:/sys/<name>[.nvram]. NULL or an error. */
+/* NV EXPORT: write SD:/sys/<name>[.nvram]; name: letters, digits, '_', max 31
+ * (sdNameMake). NULL or an error. */
 const char *nvExport(const char *name);
 
 /* NV IMPORT: set the keys in SD:/sys/<name>[.nvram] (all checked first;
@@ -133,7 +136,7 @@ const char *nvImport(const char *name, cmdReply_t reply);
 const char *nvResetAll(void);
 
 /* Export to a free timestamp name in SD:/sys (sysTimestampFile(), e.g.
- * "20261113-142530.nvram" or "b002A_001523.nvram"); name gets that file name.
+ * "20261113_142530.nvram" or "b002A_001523.nvram"); name gets that file name.
  * NULL or an error ("no SD card", "cannot write file" ...). */
 const char *nvBackup(char *name, size_t n);
 

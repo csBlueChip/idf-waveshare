@@ -1,6 +1,9 @@
 #include "sd.h"
 
 #include <dirent.h>
+#include <stdio.h>
+#include <sys/stat.h>
+#include "esp_heap_caps.h"
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
@@ -126,6 +129,60 @@ int sdListFiles(const char *path, const char *ext, char (*names)[SD_NAME_MAX], i
 	return n;
 }
 
+int sdListAll(const char *path, const char *ext, sdEntry_t **out)
+{
+	*out = NULL;
+	DIR *dir = opendir(path);
+	if (!dir) {
+		DIR *root = opendir(SD_MOUNT_POINT);
+		if (root) {				/* card fine, folder missing: no files */
+			closedir(root);
+			return 0;
+		}
+		ESP_LOGW(TAG, "card not readable - unmounting");
+		sdUnmount();
+		return -1;
+	}
+
+	size_t         extLen = strlen(ext);
+	int            n = 0, cap = 0;
+	sdEntry_t     *list = NULL;
+	char           full[300];		/* path + d_name (up to 255) */
+	struct stat    st;
+	struct dirent *e;
+	while ((e = readdir(dir)) != NULL) {
+		size_t len = strlen(e->d_name);
+		if (e->d_type != DT_REG || len <= extLen || len >= SD_NAME_MAX ||
+		    strcasecmp(e->d_name + len - extLen, ext) != 0) {
+			continue;
+		}
+		if (n == cap) {
+			int        c2 = cap ? cap * 2 : 32;
+			sdEntry_t *l2 = heap_caps_realloc(list, c2 * sizeof(*list), MALLOC_CAP_SPIRAM);
+			if (!l2) {
+				free(list);
+				closedir(dir);
+				return -2;
+			}
+			list = l2;
+			cap  = c2;
+		}
+		memcpy(list[n].name, e->d_name, len + 1);
+		snprintf(full, sizeof(full), "%s/%s", path, e->d_name);
+		bool ok      = stat(full, &st) == 0;
+		list[n].size = ok ? (long)st.st_size : -1;
+		list[n].ro   = ok && !(st.st_mode & S_IWUSR);
+		n++;
+	}
+	closedir(dir);
+
+	if (n) {
+		qsort(list, n, sizeof(*list), sdCompare);
+	}
+	*out = list;
+	return n;
+}
+
 esp_err_t sdOpenRaw(sdmmc_card_t **out)
 {
 	sdUnmount();
@@ -209,4 +266,24 @@ static void sdUnmount(void)
 static int sdCompare(const void *a, const void *b)
 {
 	return strcasecmp((const char *)a, (const char *)b);
+}
+
+const char *sdNameMake(const char *name, const char *ext, char *out, size_t n)
+{
+	size_t len = strlen(name), el = strlen(ext);
+	if (len > el && strcasecmp(name + len - el, ext) == 0) {
+		len -= el;
+	}
+	if (len == 0 || len > SD_BASE_MAX || len + el >= n) {
+		return SD_NAME_ERR;
+	}
+	for (size_t i = 0; i < len; i++) {
+		char c = name[i];
+		if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_')) {
+			return SD_NAME_ERR;
+		}
+	}
+	memcpy(out, name, len);
+	strcpy(out + len, ext);
+	return NULL;
 }

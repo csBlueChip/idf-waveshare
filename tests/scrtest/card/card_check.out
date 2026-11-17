@@ -5,6 +5,9 @@
 CMD: LINE 15 10 8 14 255,255,255
 CMD: LINE 8 14 7 6 255,255,255
 CMD: LINE 7 6 15 10 255,255,255
+> no extension: 0 file: name.txt, name.var, name.nvram or /sys/name.txt|var
+> folder in a script: 0 file: no folder in a script (its home data/ folder is used)
+> nvram from /scripts: 0 file: .nvram files only from /sys/ scripts
 <<SCRIPT card_check END>>
 [result END]
 [card.var]

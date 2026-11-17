@@ -16,7 +16,7 @@ t_example.s the spec example (demo + shapes)
 t_expr.out expected output of t_expr.s
 t_expr.s expressions, numbers, text, functions, formats
 t_flow.out expected output of t_flow.s
-t_files.s data files FWRITE FREAD FTELL FSEEK FCLOSE FLOG FSTAT, VARS SAVE / LOAD
+t_files.s data files FWRITE FREAD FTELL FSEEK FCLOSE FAPP FSTAT, VARS SAVE / LOAD
 t_files.out expected output of t_files.s
 t_fvar.s FSTAT / FDELETE on name.var (VARS SAVE file)
 t_fvar.out expected output of t_fvar.s
