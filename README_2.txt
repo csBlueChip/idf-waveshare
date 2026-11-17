@@ -22,9 +22,11 @@ hold the BOOT button for 3 seconds to kill it and set  sys.autorun=0
 The system often requires a timestamp.
 This device does NOT have a Real Time Clock [RTC]
 If it has been connected to a Web Browser it will know the real time
-	YYYYMMDD_HHMMSS
+	YYYYMMDD_HHMMSS[_n]
 Otherwise it uses the boot counter, and the uptime
-	bXXXX_HHMMSS
+	bXXXX_HHMMSS[_n]
+
+If required, _n will be appended to resolve naming clashes.
 
 The boot counter is read-only and increments every time the device boots.
 
@@ -289,6 +291,9 @@ Android:
 		Press the connect button  "-<| |>-"  (next to the dustbin)
 		Press Send [=>] a couple of times
 
+iPhone:
+	USB Serial is not supported
+
 Windows:
 	Run:  cmd.exe
 	Run:  mode | findstr /B Status
@@ -453,6 +458,9 @@ After being applied, it will then be renamed to either:  reset.done
 |	+--	onBoot.s     : onBoot script .. after early boot
 |	+--	onWait.s     : before/instead/after functions for the Wait screen
 |	+--	onConnect.s  : before/instead/after functions for the Splash Screen
+|	+--	/data/
+|	|	+-- *.txt    : script assets
+|	|	+-- *.var    : script state files
 |	|
 |	+--	splash.png   : splash screen shown when a client connects
 |	+--	usbdrive.png : splash screen shown when USB Flash Drive is active
@@ -1128,11 +1136,16 @@ To reboot the device from the UI:
 The battery voltage can be retrieved from the hardware:
 	BAT      # Vb:4.19  (two decimal places)
 
+
  ,---------------------------------.
 (  IMU : Inertial Measurement Unit  )==================================================================================
  `---------------------------------'
 
 The Waveshare is equipped with a QMI8658A "IMU".
+
+==========
+ Features |------------------------------------------------------------------------------------------------------------
+==========
 
 It offers four features:
 	# Accelerometer
@@ -1141,11 +1154,15 @@ It offers four features:
 	# Step Counter (pedometer - click) [DISABLED]
 
 It can generate interrupts:
-	# Tap                - peak
+	# Tap                - short sharp movement
 	# Motion start       - when motion starts
 	# Motion stop        - when motion stops
 	# Wake-on-Motion     - stop hibernating
 	# Significant motion - Ignored - re-implemented in firmware (for greater control)
+
+========
+ Events |--------------------------------------------------------------------------------------------------------------
+========
 
 And we can generate inferred events for:
 	# Tap Events:
@@ -1163,17 +1180,21 @@ And we can generate inferred events for:
 
 ..."Tap Events" and "Motion Events" are exclusive - one or the other, but not both.
 
-The firmware parameters are set with the IMU command:
-	IMU TAP <s d t|NONE>              # sdt=<0|1> .. enable Single/Double/Triple .. "NONE" == "0 0 0"
+===============
+ Configuration |-------------------------------------------------------------------------------------------------------
+===============
+
+The Events are set with the `IMU` command:
+	IMU TAP    <s d t|NONE>           # sdt=<0|1> .. enable Single/Double/Triple .. "NONE" == "0 0 0"
 	IMU ORIENT <L|P|ROT|NONE> [AUTO]  # Landscape/Portrait orientation events [AUTO flip screen]
-	IMU STILL <ms>                    # {0..60000} [0 = off] .. enable Still detection
+	IMU STILL  <ms>                   # {0..60000} [0 = off] .. enable Still detection
 	IMU MOTION <0|1>                  # enable Motion detection
-	IMU SIGMO <ms> [REPEAT]           # {0, 100..60000} [0 = off] .. enable Significant Motion detection
+	IMU SIGMO  <ms> [REPEAT]          # {0, 100..60000} [0 = off] .. enable Significant Motion detection
 
 The IMU settings can be configured with:
-	IMU ACC <g>   <hz>  # { 2,  4,  8,  16}                       .. {28, 56, 112, 224, 448, 896}
-	IMU GYR <dps> <hz>  # {16, 32, 64, 128, 256, 512, 1024, 2048} .. {28, 56, 112, 224, 448, 896}
-	IMU WOM <mg>        # {1..255}
+	IMU ACC <range> <rate>  # { 2,  4,  8,  16}g                         .. {28, 56, 112, 224, 448, 896}hz
+	IMU GYR <range> <rate>  # {16, 32, 64, 128, 256, 512, 1024, 2048}dps .. {28, 56, 112, 224, 448, 896}hz
+	IMU WOM <peak>          # {1..255}mg
 
 Running any of those commands without argument will return the current settings:
 	IMU TAP     # single:<0|1> double:<0|1> triple:<0|1>
@@ -1186,7 +1207,7 @@ Running any of those commands without argument will return the current settings:
 	IMU GYR     # range:<n> rate:<hz>
 	IMU WOM     # mg:<n>
 
-...TAP, MOTION, STILL, SIGMO and ORIENT settings are all DISABLED at boot.
+NB.	TAP, ORIENT, STILLM MOTION and SIGMO are all DISABLED at boot.
 
 The IMU core settings can be retrieved:
 	IMU SET     # tap.thr:1.3   tap.gap:500  orient.hold:500   orient.flat:30       [a single line
@@ -1215,53 +1236,263 @@ NVRAM variables [imu]:
 	imu.step.thr    = <mg>   [200]  # {50..2000}   - [DISABLED] peak-to-peak change
 	imu.step.min    = <n>    [10]   # {1..255}     - [DISABLED] steps before counting starts
 
+=============
+ Calibration |---------------------------------------------------------------------------------------------------------
+=============
 
-Commands not mentioned: if this page is the IMU reference, ACC, GYR, TEMP, IMU SLEEP, IMU CAL, IMU TEST, IMU REC, IMU RESET and IMU DEBUG are missing. A one-line pointer to them would do.
+The gyroscope may be calibrated.
+
+Place the device flat on a steady surface and run:
+	IMU CAL
+
+Any movement during calibration will cause calibration errors.
+Too much movement will cause the calibration to fail.
+
+The process will take approximately 1.5 of your Earth seconds.
+
+Calibration results are stored in NVRAM and restored
+	# at boot
+	# during an IMU RESET.
+
+Every time you run CAL or TEST, the results are written to SD:/imu/imu_cal.log
+
+==============
+ Quick Access |--------------------------------------------------------------------------------------------------------
+==============
+
+The Accelerometer, Gyroscope, and Temperature have Quick Access commands:
+	ACC   # aX:-0.008 aY:-0.916 aZ:0.045  (3 decimal places)  .. range set by IMU ACC
+	GYR   # gX:7.529 gY:3.482 gZ:0.444    (3 decimal places)  .. range set by IMU GYR
+	TEMP  # ^C:37.1 ^F:98.8 ^K:310.3      (1 decimal place)
+
+===========
+ Recording |-----------------------------------------------------------------------------------------------------------
+===========
+
+Recording
+	IMU REC [<filemame>|*  [-f]]
+
+<filename> can be any {letters, numbers, underscore}[31] ... ".csv" is appended
+*          means: use <timestamp>
+-f         force overwrite if file already exists
+
+If no filename is specified, the output goes to the active UI.
+
+Sanity limits are imposed (in code).
+	BLE/UART       :   3000mS (  3s          ) ... Slow UI - FIFO errors may occur
+	Web/Telnet/USB :  60000mS ( 60s ->  1min ) ... Fast UI - data captured reliably
+	SDCard/File    : 600000mS (600s -> 10mins) ... Fast    - data captured reliably
+
+The CSV output looks like this:
+         t,      ax,      ay,      az,        gx,        gy,        gz
+     0.000,  -0.553,  -0.034,   1.215,   193.641,     2.703,   129.219
+     4.460,  -0.556,  -0.002,   1.264,   191.875,    12.953,   131.109
+     8.921,  -0.582,   0.055,   1.362,   189.062,    23.656,   132.172
+
+========
+ Sleeep |--------------------------------------------------------------------------------------------------------------
+========
+
+The IMU is able to put the device to sleep (for power saving).
+	IMU SLEEP [SCR|RAD|CPU] <mg>  # {1..255}mg change to wake
+
+In this case, the device will be awoken by physical movement [WoM - "Wake on Motion"].
+The depth of the sleep can be:
+	SCR - Screen, and LED off    [default]
+	RAD - SCR + 2.4GHz radio off
+	CPU - RAD + CPU Deep Sleep
+
+...Obviously, the deeper the sleep, the longer it takes to wake up, and the more State is lost.
+
+On wake, an Event will be issued:
+	<<IMU WAKE>>
+
+==============
+ Device Reset |--------------------------------------------------------------------------------------------------------
+==============
+
+To reset the device
+	IMU RESET
+
+This will:
+	# Reset the chip
+	# Reload the nvram defaults
+	# Apply the most recent Gyro gain calibration values
+	# Disable: TAP, ORIENT, STILL, MOTION, and SIGMO
+
+===========
+ Self Test |-----------------------------------------------------------------------------------------------------------
+===========
+
+The device has a built-in self-test command which can be triggered with:
+	IMU TEST     # acc:pass ax:775 ay:665 az:678 gyr:pass gx:1040 gy:1028 gz:1204
+
+The important bits are:
+	acc:pass
+	gyr:pass
+
+So long as {ax,ay,az} are all >200
+       and {gx,gy,gz} are all >300
+You can trust the results.
+
+If you see a drastic change in one of these numbers (over time),
+the device has probably been dropped and damaged.
+
+Every time you run TEST or CAL, the results are written to SD:/imu/imu_cal.log
+
+============================
+ Engineering Debug features |------------------------------------------------------------------------------------------
+============================
+
+Advanced debugging output is available
+	IMU DEBUG <0|1>
+
+This setting is lost on reboot/
+Lines go to the log port(s), not the console client, each starting with milliseconds since boot:
+	# The chip’s raw event registers (STATUS1, TAP_STATUS, in hex) every time they change
+	# The engine configuration (CTRL8) every time it’s reconfigured
+	# A copy of every <<IMU ...>> event.
+
+It is VERY noisy. and mostly useful to locating Tap and Step Counter [DISABLED] quirks.
+
+ ,-------.
+(  Files  )============================================================================================================
+ `-------'
+
+There are several ways to modify the contents of the SDCard.
+
+The SDCard MUST be formatted to FAT32 - *not* XFAT
+
+MacOS:
+	In Disk Utility, select the card, click Erase, and choose MS-DOS (FAT) with Master Boot Record.
+
+Linux:
+	lsblk                           <-- find device name
+	sudo mkfs.vfat -F 32 /dev/sdX1  <-- use correct device name
+
+Windows does not like to format an SDCard larger than 32GB as FAT32 [oh the irony]. Try:
+	Rufus
+	guiformat
+
+=============
+ Flash Drive |---------------------------------------------------------------------------------------------------------
+=============
+
+The device may be mounted as a Flash Drive - to then use as you would do any other flash drive.
+
+	UI Selection : MSC / Flash Drive
+
+	UI Command   : FILES
+
+=======================
+ Web UI - File Manager |-----------------------------------------------------------------------------------------------
+=======================
+
+The Web UI has a built in File Manager. Start it with:
+	FILES WEB
+
+The File Manager code & Syntax Highlighter definitions may be exported:
+	FILES FMEXPORT    # -> SD:/sys/fm_builtin.html
+	FILES SYNEXPORT   # -> SD:/sys/syntax_builtin.cfg
+
+Features include:
+	# DESCRIPT.ION file support
+	# Drag'n'drop Uploads
+	# Script files can be RUN (with arguments)
+	# Script file viewer has syntax highlighting (also .cfg files)
+	# NVRAM files have an Import option
+	# Images are displayed
+	# Text files can be edited ... a simple textarea - with line & column indicators
+	
+You must press [Exit] to let the interface know you are finished with the File Manager
+If you see "ERR SD manager active", you can kill it with:
+	FILES WEB STOP|EXIT
+
+==========
+ Commands |------------------------------------------------------------------------------------------------------------
+==========
+
+The file commands are restricted to specific files:
+	*.txt      - user script data files
+	*.var      - user script State files
+	*.nvram    - nvram backups
+	/sys/*.txt - system script data files
+	/sys/*.var - system script State files
+
+Script files themselves are handled by:
+	LIST
+
+There are a number of commands for file manipulation:
+	FDIR    [*|txt|var|nvram]     # [default: *]
+
+List all files (of the specified type)
+	FDIR [*]             # list    all    files
+	FDIR txt|var|nvram   # list requested filetype
+
+		txt   = script data  \__ system data/States are prefixed /sys/
+		var   = script State /
+		nvram = nvram backup
+
+Names for FSTAT, FCAT, FAPP and FDELETE, always require the file extension
+The handling is different based on the origin of the request
+
+     Name           | Console         | User Script     | System Script
+    ====================================================================
+          *.txt|var | /scripts/data/* | /scripts/data/* | /sys/data/*
+          *.nvram   | /sys/*.nvram    | ERROR           | /sys/*.nvram
+                    |                 |                 |
+     /sys/*.txt|var | /sys/data       | ERROR           | ERROR
+     /sys/*.nvram   | ERROR           | ERROR           | ERROR
+                    |                 |                 |
+
+Get the size and r/w status of a file
+	FSTAT <filename>.txt|.var|.nvram         # --> <bytes>:<ro|rw>
+
+Show some-or-all of a file to the UI or DEBUG console [USB/UART]:
+	FCAT <filename>.txt|.var|.nvram [start [count]] [>DEBUG]
+
+		start - the first line to be shown
+		count - the number of lines to be shown
+
+You can append a line of text to any file SD:/scripts/data/<filename>.txt
+	FAPP <filename>.txt|.var|.nvram <text>   # append  <text>"\n" to specified file
+
+CARFUL : Erase a file:
+WARNING: There is no confirmation, and no trashcan!
+	FDELETE <filename>.txt|.var|.nvram       # Permanently delete a file
 
 
+ ,----------------------.
+(  System/Debug Logging  )=============================================================================================
+ `----------------------'
 
+The early boot debug info is forced to both UART and USB.
 
- ,-------------.
-(  Temperature  )======================================================================================================
- `-------------'
+Once the system is stable, debug logging can be redirected.
+	LOG  # log:AUTO debug:0
+	LOG <UART|USB|BOTH|AUTO>
 
-The Waveshare has a temperature sensor on it.
+$ log debug [all]
+BLE=4
+WIFI=4
+WEB=4
+SD=4
+SCRIPT=4
+IMU=4
+SYS=4
 
-You can read the current value with:
-	TEMP     # ^C:37.1 ^F:93.7 ^K:301.1  (one decimal place)
+$ log debug ble
+BLE=4
 
+$ log debug ble <0..4> [save]
 
+0=silent
+1=errors
+2=warnings
+3=info
+4=debug
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+LOG DEBUG SAVE
 
 
 
@@ -1278,24 +1509,30 @@ You can read the current value with:
 
 
 
-LOG [UART|USB|BOTH|AUTO] | DEBUG [SAVE | device|ALL [0..4 [SAVE]]]  log port(s) / volume
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 PRINT text  reply text {\n \\ \# \$}
 DEBUG text  text to the log port(s)
 
-FLOG file text  add a line to SD:/scripts/data/file.txt
-FCAT file[.var|.nvram] [start,count] [>DEBUG]  show a data file
-FDIR [txt|var|nvram|*]  list data files (name size ro|rw)
-FSTAT file[.var|.nvram]  size:ro|rw
-FDELETE file[.var|.nvram]  delete a data file
 
 
-ACC  accelerometer aX,aY,aZ (g)
-GYR  gyroscope gX,gY,gZ (dps)
-IMU [ACC|GYR|RESET|TAP|MOTION|STILL|SIGMO|STEP|ORIENT|SET|WOM|SLEEP|CAL|TEST|REC ...]
-
-
-
-FILES [WEB [STOP|EXIT] | FMEXPORT | SYNEXPORT]  USB disk / web SD manager / export page, colours
 
 
 EVENTS [BTN|IMU|UI|SCRIPT|ALL 0|1]  events sent to the client
