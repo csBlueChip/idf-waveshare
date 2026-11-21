@@ -106,9 +106,9 @@ LOOP FOREVER
 
 	VARS SAVE FN_BOAST $$kP $$kC $$kR  # save the Game State
 
-	IF   $$scPl > $$scPC ; PRINT "\n----- [Score] $$scPl:$$scPC to you -----\n"
-	ELIF $$scPl < $$scPC ; PRINT "\n----- [Score] $$scPC:$$scPl to the $$porc -----\n"
-	ELSE                 ; PRINT "\n----- [Score] drawing $$scPC all -----\n"
+	IF   $$scPl > $$scPC ; PRINT "\n\ily-----\ilg [Score]\id $$scPl:$$scPC to you \ily-----\n"
+	ELIF $$scPl < $$scPC ; PRINT "\n\ily-----\ilr [Score]\id $$scPC:$$scPl to the $$porc \ily-----\n"
+	ELSE                 ; PRINT "\n\ily-----\ily [Score]\id drawing $$scPC all \ily-----\n"
 	END
 
 	WAIT 500
@@ -119,21 +119,21 @@ LOOP FOREVER
 			IF ABS($$scPl - $$scPC) >= $$winN  # winner is set by a points difference
 				IF $$scPl > $$scPC
 					LET $win = 1
-					PRINT "*** The Pirate looks at you in fear, dives overboard, and swims back to the ship."
+					PRINT "\ily*** The Pirate looks at you in fear, dives overboard, and swims back to the ship."
 				ELSE
 					LET $win = 0
-					PRINT "!!! The Pirate looks at you with pity. Turn around now, go back to where ye came from."
+					PRINT "\ilw!!! The Pirate looks at you with pity. Turn around now, go back to where ye came from."
 				END
 				BREAK
 			END
 		d)
 			IF $$scPl >= $$winN  # you can never win, you can just survive long enough
 				LET $win = 1
-				PRINT "*** The Captain stutters, lost for words. The crew panic, dive in to the sea, and turn in to dolphins."
+				PRINT "\ily*** The Captain stutters, lost for words. The crew panic, dive in to the sea, and turn in to dolphins."
 				BREAK
 			ELIF $$scPC >= $$scPl+2
 				LET $win = 0
-				PRINT '!!! The captain scoffs at you: "You are not ready for what lies ahead. Enjoy your life on Keos."'
+				PRINT '\ilw!!! The captain scoffs at you: "You are not ready for what lies ahead. Enjoy your life on Keos."'
 				BREAK
 			END
 		*)
@@ -145,7 +145,7 @@ END
 
 LET $b = $$kP[0] + $$kC[0]
 LET $r = $$kR[0] - 1        # -1 cos we don't count the 'free' (losing) retort
-PRINT "(You now know $b boasts and $r retorts)"
+PRINT "\ib(You now know $b boasts and $r retorts)"
 EXIT
 
 ###############################################################################
@@ -160,7 +160,7 @@ FN getText $n $f
 			RETURN MID($l, 3, LEN($l))     # return the text
 		END
 	END
-	RETURN "I'm utterly lost for words!"  # entry not found
+	RETURN "\ilrI'm utterly lost for words!"  # entry not found
 END
 
 ###############################################################################
@@ -176,13 +176,12 @@ FN gameBoasts
 	LET $$uB = $$uB $b                            # track used boasts
 
 	LET $t = CALL getText $b $$porc               # get the Pirate/Captain boast text
-#	PRINT 'The $$porc stares you down: "$t"'
 	LET $r = RND(1,3)
 	IF   $r == 1   ; LET $r = "Allez..."
 	ELIF $r == 2   ; LET $r = "Defend your ego..."
 	ELSE           ; LET $r = "En Garde.."
 	END
-	PRINT '> "$r $t"'
+	PRINT '> "$r \ilm$t\id"'
 
 	# --- Track the number of every known boast
 	# --- You just heard boast $b - add it to the list now
@@ -206,10 +205,12 @@ FN gameBoasts
 
 	# --- List the player's known retorts [$krx]
 	PRINT "* Choose your retort: "
+	INK g
 	LOOP $i = 1 TO $krx[0]
 		LET $r = CALL getText $krx[$i] Retort
 		PRINT "   $i) $r"
 	END
+	INK d
 
 	# --- Get player's retort choice
 	LET $end = $.runtime + ($$secs * 1000)  # some rounds are timed
@@ -249,13 +250,13 @@ FN gameBoasts
 	ELIF $i == 2   ; LET $i = "With an air of pride you"
 	ELSE           ; LET $i = "You laugh mockingly and"
 	END
-	PRINT '   $i retort "$t"'
+	PRINT '   $i retort \ilg"$t"'
 
 	# --- Decide the outcome
 	IF $r == $b
 		LET $$scPl += 1
 	ELSE
-		PRINT '...The $$porc scoffs "Is that the best you\'ve got - LOL"'
+		PRINT '...The $$porc scoffs \iy"Is that the best you\'ve got - LOL"'
 		LET $$scPC += 1
 	END
 END
@@ -269,6 +270,7 @@ FN youBoast
 	# --- list player options
 	PRINT "* You look the $$porc in the eye and say:"
 	LET $rCnt = 0
+	INK m
 	LOOP $i = 1 TO $$kP[0]  # Pirate boasts
 		$rCnt++
 		LET $t = CALL getText $$kP[$i] Pirate
@@ -279,6 +281,7 @@ FN youBoast
 		LET $t = CALL getText $$kC[$i] Captain
 		PRINT "  $rCnt) $t"
 	END
+	INK d
 
 	# --- get player's boast
 	LET $end = $.runtime + ($$secs * 1000)  # some rounds are timed
@@ -304,8 +307,8 @@ FN youBoast
 	LET $b = $known[$in]  # input value -> boast number
 
 	LET $txt = CALL getText $b $$porc
-#	PRINT 'You reprise and boast: "$txt"'
-	PRINT '   "$txt"'
+	PRINT 'You reprise and boast: \ilm"$txt"'
+#	PRINT '   \ilm"$txt"'
 
 	# --- There is a 1-in-$$prob that a Pirate will get the wrong retort (captain never does)
 	LET $r = $b
@@ -318,7 +321,7 @@ FN youBoast
 	END
 
 	LET $txt = CALL getText $r Retort
-	PRINT '   $$pg[1] retorts: "$txt"'
+	PRINT '   $$pg[1] retorts: \ilg"$txt"'
 
 	# --- If you just learned a new retort, add it to $$kR [known retorts]
 	IF   $$kR == ""              ; LET $$kR = $r
@@ -329,7 +332,7 @@ FN youBoast
 	IF $r == $b
 		LET $$scPC += 1
 	ELSE
-		PRINT '...You look at the Pirate, confused. "What? And I though I was new to this! LOL"'
+		PRINT '...You look at the Pirate, confused. \iy"What? And I though I was new to this! LOL"'
 		LET $$scPl += 1
 	END
 END
