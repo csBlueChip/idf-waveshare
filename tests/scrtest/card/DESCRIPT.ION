@@ -4,3 +4,4 @@ card_check.out expected output (with the list of files left in scripts/data)
 sys_check.s runs as /sys/sys_check: data files in sys/data, CALLs shapes.s from scripts/
 sys_check.out expected output (with the list of files in sys/data)
 DESCRIPT.ION file descriptions for this folder
+tz_check.out expected output of tz_check.s

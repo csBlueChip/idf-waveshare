@@ -1,10 +1,10 @@
 WAVEDEMO - Waveshare ESP32-S3-LCD-1.47B resource demo
 =====================================================
 
-Firmware 0.5.0, ESP-IDF v6.1. Command console over BLE, telnet or web.
+Firmware 0.7.77, ESP-IDF v6.1. Command UI over BLE, telnet or web.
 
 
-1. CONSOLE
+1. UI
 ----------
 
 Interfaces (one active at a time, boot choice in NV sys.ui):
@@ -14,7 +14,7 @@ Interfaces (one active at a time, boot choice in NV sys.ui):
            pairing is refused ("pairing not supported"). The client counts
            as connected (splash, <<UI CONNECT>>) once it subscribes to TX
   TELNET   Wi-Fi AP, telnet port NV telnet.port (23)
-  WEB      Wi-Fi AP, web console at http://<wifi.ip>/ (port NV web.port,
+  WEB      Wi-Fi AP, web UI at http://<wifi.ip>/ (port NV web.port,
            80; captive portal unless NV web.captive 0)
   UART     UART0 on the header (NV uart.tx / uart.rx, default TX GPIO43,
            RX GPIO44), 8N1, NV uart.baud
@@ -41,6 +41,15 @@ Rules:
       \"text / \'text    not quoted, starts with a quote
       escapes            \n new line, \\ \# \$ literal; \1..\9 font
                          (TEXT / TLEN only, dropped elsewhere)
+      colour             (PRINT / DEBUG; ANSI codes, see ANSI below)
+                         \iN ink, \pN paper; N a digit or a letter:
+                         0/k black 1/r red 2/g green 3/y yellow 4/b blue
+                         5/m magenta 6/c cyan 7/w white 8/d default (a
+                         script's INK / PAPER); 9 or l before 0..7 /
+                         k..w = light (bright): \ir \ilr \i91 \pb \pd;
+                         \ip = \id\pd. Lower case only. They end with
+                         the line. Bad ones (\ix, \iR, \ild): ERR. FAPP /
+                         FWRITE drop them; TEXT / TLEN ignore them
     '#' starts a comment even inside quotes: write \#.
   - Max line 200 chars, max 18 arguments.
   - All I/O is ASCII ('^' is used for degrees).
@@ -53,6 +62,19 @@ Rules:
 General
 
   HELP                          list commands
+  ALIAS                         UI aliases, one name=text per line
+  ALIAS ADD name text           add / replace an alias (stored in
+                                /sys/alias.cfg; quotes optional on both:
+                                ALIAS ADD nvg "NV GET $1")
+  ALIAS DEL name                remove it (from the file too)
+  ALIAS LOAD                    read /sys/alias.cfg again; skipped lines:
+                                "warning: line 4: ls ignored (built-in
+                                command)"
+  Aliases: a UI line (any UI) whose first word is an alias is
+  replaced: $1..$9 = the arguments, $* = all of them; without any $n / $*
+  the arguments are appended ("fm x" -> "FILES WEB x"). Names: 1..15
+  letters, digits, '_', not a command; text max 63; up to 32. Not chained
+  (the replacement is not looked up again); scripts never use them.
   INFO                          chip, memory, MACs, firmware, partition,
                                 App (image size of the OTA slot, %), Boot
                                 (boot count), reset reason, timestamp,
@@ -65,12 +87,12 @@ General
   MEM                           RAM: internal / PSRAM free, lowest, largest
                                 block; each task's lowest free stack
   PRINT text                    reply text (text rules: section 1)
-  DEBUG text                    text to the log port(s), as dbgf()
+  DEBUG text                    text to the console, as dbgf()
 Data files (name = letters, digits, '_', max 31). <data> = the data/
 folder in the home of the script started by RUN / LOAD: SD:/scripts/data,
-or SD:/sys/data for a /sys/ script; on the console SD:/scripts/data.
+or SD:/sys/data for a /sys/ script; on the UI SD:/scripts/data.
 FAPP / FCAT / FSTAT / FDELETE always take the full name:
-                                console               script
+                                UI                    script
   name.txt, name.var            <data>                <data>
   /sys/name.txt, /sys/name.var  SD:/sys/data          ERR (no folder)
   name.nvram                    SD:/sys/name.nvram    /sys/ scripts only
@@ -82,7 +104,7 @@ FAPP / FCAT / FSTAT / FDELETE always take the full name:
   FCAT file [start [count]] [>DEBUG]
                                 show the file, from line start (1-based),
                                 count lines (default: to the end); e.g.
-                                FCAT notes.txt 5 3; to the log port(s) with
+                                FCAT notes.txt 5 3; to the console with
                                 >DEBUG; CR dropped, non-ASCII shown as '?',
                                 lines over 200 chars split
   FDIR [txt|var|nvram|*]        list the files: name, size, ro|rw, then the
@@ -102,18 +124,31 @@ FAPP / FCAT / FSTAT / FDELETE always take the full name:
   LOG                           show where logs go (section 7):
                                 log:AUTO debug:0
   LOG UART|USB|BOTH|AUTO        set it (this boot only; default AUTO)
-  LOG DEBUG [device]            log volume of every device / one
+  LOG DEBUG [device]            log volume of every device / one, as
+                                field:value words: ble:4 wifi:4 web:4
+                                sd:4 script:4 imu:4 sys:4 (one: ble:4)
   LOG DEBUG device n [SAVE]     set it 0..4 (this boot; SAVE: also in
                                 /sys/debug.cfg) - section 7
   LOG DEBUG SAVE                show the old /sys/debug.cfg, then write
                                 all current settings to it
   LOG DEBUG ALL n [SAVE]        every device to n (SAVE: as LOG DEBUG
-                                SAVE); LOG DEBUG ALL lists them
+                                SAVE); LOG DEBUG ALL lists them (every
+                                LOG DEBUG form replies the line above)
+  ANSI                          colour codes per interface, one line:
+                                print.uart:1 print.usb:1 print.telnet:1
+                                print.web:1 print.ble:0 debug.uart:1
+                                debug.usb:1
+  ANSI PRINT|DEBUG              that half only
+  ANSI PRINT ALL|UART|USB|TELNET|WEB|BLE 0|1
+                                PRINT colour on that UI (NV <if>.ansi.ui,
+                                stored, at once); 0 = escapes stripped
+  ANSI DEBUG ALL|UART|USB 0|1   DEBUG colour on the console on that port (NV
+                                <if>.ansi.con)
   EVENTS                        show which events the client receives:
-                                BTN:1 IMU:1 UI:1 SCRIPT:1
-  EVENTS src 0|1                src = BTN IMU UI SCRIPT ALL; 0 = the client
+                                BTN:1 IMU:1 UI:1 SYS:1 SCRIPT:1
+  EVENTS src 0|1                src = BTN IMU UI SYS SCRIPT ALL; 0 = the client
                                 gets no <<src ...>> events (this boot only;
-                                scripts will always get every event)
+                                in a script EVENTS sets its own sources)
 
 Interface
 
@@ -123,10 +158,10 @@ Interface
   UI TELNET                     reply SSID/PWD/IP/PORT (telnet.port), switch
                                 to telnet
   UI WEB                        reply SSID/PWD/URL (with :port unless 80),
-                                switch to web console
-  UI UART                       reply BAUD/PINS, switch to the UART console
-  UI USB                        switch to the USB serial console
-  UI MSC                        MSC Wait screen: no console; hold BOOT
+                                switch to web UI
+  UI UART                       reply BAUD/PINS, switch to the UART UI
+  UI USB                        switch to the USB serial UI
+  UI MSC                        MSC Wait screen: no UI; hold BOOT
                                 to start USB disk mode (as FILES)
   UI <interface> DEFAULT        the same, and make it the boot default:
                                 stores NV sys.ui, replies sys.ui=<name>
@@ -163,14 +198,20 @@ LED
 Screen
 
   CLS colour                    clear to colour, reply W/H
+  ROT                           current rotation: rot:1
   ROT n                         drawing rotation n mod 4 (0/2 portrait,
                                 1/3 landscape); screen unchanged; replies W/H
-  BL pct                        backlight 0..100
+  BL n                          backlight level 0..scr.bl.steps (0 = off);
+                                the steps are perceptually even (CIE L*:
+                                duty = Y(L), L = 100 x n / steps)
   SCR AUTO 0|1                  update screen after every command (default 1)
   SCR UPD                       update screen now
   SCR FLIP                      show flip setting: NONE, P, L or PL
   SCR FLIP P|L|PL|NONE          device upside down: P swaps ROT 0/2,
-                                L swaps ROT 1/3; stored in NV, applied now
+                                L swaps ROT 1/3; applied now, this boot
+                                only (off at every boot: for a board
+                                mounted upside down put SCR FLIP in
+                                /sys/onBoot.s, sys.autorun 1)
   SCR SHOT                      save screen as /scrshots/<timestamp>.png
   SCR SHOT name                 save screen as /scrshots/name.png
                                 (name: letters, digits, '_', max 31; see 4)
@@ -257,6 +298,10 @@ Images (PNG in /images on the SD card)
   IMG name|n                    draw image at 0,0 (n: 1..20; a name finds
                                 any image, also past the first 20)
   IMG name|n x y                draw image at x,y (-1000..1000)
+  Images: any PNG type and size, clipped at the screen edges (172 x 320,
+  320 x 172 at ROT 1/3). Alpha is blended with what is on the screen
+  (0 = not drawn, 255 = solid), so PNGs work as sprites. Interlaced PNGs
+  are refused.
 
 Sensors
 
@@ -280,7 +325,8 @@ IMU (QMI8658A; see section 8)
   IMU GYR [range rate]          gyro range 16..2048 dps, rate 28..896 Hz
                                 (stored in NV, applied now)
   IMU RESET                     chip reset, NV settings, all detectors off
-  IMU TAP [s d t | NONE]        tap events: single, double, triple 0|1
+  IMU TAP s d t                 tap events: single, double, triple 0|1
+  IMU TAP NONE                  all off
   IMU MOTION [0|1]              event when movement starts
   IMU STILL [ms]                event after ms of quiet following a motion
                                 (0 = off, max 60000)
@@ -328,14 +374,14 @@ IMU (QMI8658A; see section 8)
     20261116_181005 : CAL cod:0x00 result:pass gcal:1a3f,207c,4e12
     20261116_181140 : TEST acc:pass ax:775 ay:665 az:678 gyr:pass ...
     b002A_001523 : CAL result:timeout
-  (no card / write error: warning on the log port, reply unchanged)
-  IMU DEBUG [0|1]               to the log port(s), each line starting with
+  (no card / write error: warning on the console, reply unchanged)
+  IMU DEBUG [0|1]               to the console, each line starting with
                                 ms since boot: the chip's raw event status
                                 (STATUS1, TAP_STATUS, hex) on every change,
                                 CTRL8 on every reconfiguration and a copy of
                                 every <<IMU ...>> event; this boot only
                                 (default 0)
-  IMU REC ms                    record to the console (max 3000 ms on BLE
+  IMU REC ms                    record to the UI (max 3000 ms on BLE
                                 and UART, 60000 ms on telnet/web/USB)
   IMU REC ms name|* [-f]        record to /imu/name.csv (* = timestamp;
                                 name: letters, digits, '_', max 31),
@@ -351,34 +397,52 @@ IMU (QMI8658A; see section 8)
 Buttons (n = 1..count of NV btn.gpio, default 10 on GPIO 0 2 4 5 6 7 8 9
 10 11; 1 = BOOT, tact only; TOUCH only on GPIO1..14)
 
-  BTN                           list buttons (n GPn ...) and global timings
+  BTN                           global timings and which buttons are on,
+                                one line: deb:30 long:600 dbl:300 rpt:0
+                                b1:1 b2:0 ... bN:0 (N = buttons in NV
+                                btn.gpio)
+  BTN *                         BTN n for every button, one line each
   BTN n                         one button: n:2 gpio:2 type:tact|touch|off
                                 short:1 long:0 double:0 t_deb:30
                                 t_long:600 t_dbl:300 t_rpt:0
   BTN LIST                      the enabled buttons, e.g. 1 2 5
   BTN n s l d                   enable tact button n: short/long/double 0|1
   BTN n s l d TACT|TOUCH        same, choose switch or touch pad
-  BTN n 0 0 0                   disable button n
-  BTN SET deb|long|dbl|rpt ms   global timing (for buttons enabled later)
-  BTN n SET deb|long|dbl|rpt ms timing for button n only
+  BTN n 0 0 0                   disable button n (its timings are kept)
+  BTN SET deb|long|dbl|rpt ms   global timing: used when a button's own
+                                timings are unset (all 0)
+  BTN n SET deb|long|dbl|rpt ms timing for button n only (an active one:
+                                else ERR button not enabled)
+  BTN * SET deb|long|dbl|rpt ms the same for every active button
+  BTN n RESET | BTN * RESET     button n / every button off, timings 0
+                                (the next BTN n s l d takes the global ones)
+  BTN RESET                     as BTN * RESET, and the global timings
+                                back to NV btn.deb/long/dbl/rpt
   BTN CAL                       recalibrate touch pads (hands off)
 
   Timings: deb debounce, long long-press, dbl double-click window,
   rpt repeat (boot values: NV btn.deb/long/dbl/rpt).
   Events arrive unprompted:
 
-    <<BTN n SHORT>>  <<BTN n DOUBLE>>
-    <<BTN n DOWN>> <<BTN n UP>> a long press: DOWN once held for long, UP on
-                                release (rpt = 0)
-    <<BTN n REPEAT>>            long on, rpt > 0: at long, then every rpt ms
+    <<BTN n SHORT>>             a short press; when it is sent:
+                                  short only      at the press
+                                  short + long    at release, if released
+                                                  before long
+                                  short + double  when dbl has passed with
+                                                  no second press
+    <<BTN n DOUBLE>>            a second press within dbl (double on)
+    <<BTN n DOWN>>              long on: held for long (once)
+    <<BTN n REPEAT>>            long on, rpt > 0: every rpt ms after DOWN
+                                while held
+    <<BTN n UP>>                long on: released after a DOWN
     typematic SHORT             short only, rpt > 0: at press, at long,
                                 then every rpt ms
 
 Settings (stored in flash, used at the next boot)
 
-  NV GET                        list all settings
+  NV GET                        list all settings (sorted by name)
   NV GET key                    show one setting
-                                - the value only, e.g. NV GET scr.bl -> 100
+                                - the value only, e.g. NV GET scr.bl -> 20
   NV GET prefix                 every key starting with prefix, as
                                 key=value lines (NV GET btn, NV GET wifi.p)
                                 (NV is privileged: GET shows secrets such
@@ -390,7 +454,8 @@ Settings (stored in flash, used at the next boot)
   NV RESET key                  one setting to default
   NV EXPORT name                write /sys/name.nvram (name: letters,
                                 digits, '_', max 31; wifi.pwd is written
-                                as !wifi.pwd=...: FCAT shows [redacted])
+                                as !wifi.pwd=...: FCAT shows [redacted];
+                                keys sorted by name)
   NV IMPORT name                load /sys/name.nvram (all lines checked,
                                 nothing stored if any is bad; sys.bootcnt
                                 is skipped: "warning: sys.bootcnt ignored";
@@ -398,7 +463,9 @@ Settings (stored in flash, used at the next boot)
                                 of exactly [redacted] - copied from FCAT or
                                 the viewer - is skipped, the key keeps its
                                 value: "warning: wifi.pwd ignored
-                                (redacted)")
+                                (redacted)"; keys this firmware does not
+                                have are skipped: "warning: scr.pflip
+                                ignored (unknown)")
   In values "\#" stands for '#'.
 
 USB disk
@@ -413,7 +480,7 @@ USB disk
 
 SD card manager (web UI only)
 
-  FILES WEB                     from the web console: the page opens
+  FILES WEB                     from the web UI: the page opens
                                 http://<wifi.ip>/fm (built-in page, or
                                 SD:/sys/fm.html if present):
                                 folder tree left, files right (name,
@@ -471,7 +538,7 @@ SD card manager (web UI only)
   selected; no / or \) and Desc: (optional DESCRIPT.ION description), then
   creates an empty (0 byte) file in this folder; an existing name is
   never replaced ("<name> exists").
-  Keys (? shows them): Up/Down move (list or tree), Tab switches tree /
+  Keys (F1 or ? shows them; F1 also in the viewer / editor): Up/Down move (list or tree), Tab switches tree /
   list, Left/Right fold / unfold (tree), Enter open / View / Download,
   Ctrl+Enter Download, Backspace parent, F5 Refresh, + New folder, N Create,
   Ctrl+U Upload, F2 Rename, I Info, E Edit, Del Delete, Ctrl+X Exit; viewer:
@@ -492,7 +559,7 @@ SD card manager (web UI only)
   Viewer extras: Import (lightbulb, /sys/*.nvram files) = NV IMPORT, with a
   "reboot now" choice and the result (warnings / error) in a dialog; Run (play, .s files in /scripts or /sys) asks for
   the arguments, leaves the SD manager and runs the script once the
-  console page is back (or after 5 s), so its output shows there.
+  web UI page is back (or after 5 s), so its output shows there.
   Saving, uploading, deleting or renaming /sys/debug.cfg reloads the log
   volumes at once.
   FILES SYNEXPORT               write the built-in viewer colours to
@@ -509,6 +576,11 @@ Scripts (SD:/scripts/name.s; language: SCRIPTING.txt, section 9 here)
 
   RUN name [args]               start name.s (OK at once, output follows);
                                 system scripts: RUN /sys/name
+  CALL file.fn [args]           run only function fn of file.s, args as
+                                its parameters (OK at once, output
+                                follows; <<SCRIPT file.fn END>>); e.g.
+                                CALL shapes.drawPoly 6 86 160 40 255,0,0 1.
+                                ERR not found / no function fn in file
   LOAD name [args]              load and pause before the first line
   STOP [NOW]                    stop the script; NOW also cuts a long
                                 command short (IMU REC, screen transition)
@@ -561,17 +633,24 @@ Scripts (SD:/scripts/name.s; language: SCRIPTING.txt, section 9 here)
                                start-up messages always use GPIO43
   uart.rx      44              UART RX GPIO (next boot), same rules
   ser.echo     1               1 = serial UIs echo what you type
+  uart.ansi.ui 1               colour codes (PRINT \i \p, INK / PAPER) on
+  usb.ansi.ui  1               that UI; 0 = stripped (the terminal or app
+  telnet.ansi.ui 1             cannot show them). The web UI decodes
+  web.ansi.ui  1               them itself (colours: ansi.* in syntax.cfg)
+  ble.ansi.ui  0
+  uart.ansi.con 1              the same for DEBUG lines on the console
+  usb.ansi.con 1               (see ANSI)
   web.name     (empty)         web page title, 0..32 chars, no spaces;
                                empty: "wavedemo". SD:/sys/uiname.txt (first
                                line, spaces allowed) wins over it
-  web.port     80              web console port 1..65535
+  web.port     80              web UI port 1..65535
   web.captive  1               1 = captive portal: DNS answers every name,
-                               unknown URLs redirect to the console;
+                               unknown URLs redirect to the web UI;
                                0 = no DNS server, unknown URLs get 404
-  telnet.port  23              telnet console port 1..65535
-  scr.bl     100             backlight at boot, 0..100 %
-  scr.pflip  0               1 = portrait upside down (ROT 0 <-> 2)
-  scr.lflip  0               1 = landscape upside down (ROT 1 <-> 3)
+  telnet.port  23              telnet UI port 1..65535
+  scr.bl     20              backlight level at boot, 0..scr.bl.steps
+  scr.bl.steps 20            backlight levels 2..100 (BL n: n of steps,
+                             perceptually even; next BL / boot)
   btn.deb    30              global debounce 0..200 ms
   btn.long   600             global long-press 50..5000 ms
   btn.dbl    300             global double-click window 50..5000 ms
@@ -582,7 +661,7 @@ Scripts (SD:/scripts/name.s; language: SCRIPTING.txt, section 9 here)
                              0, 2..11, 43, 44, the first 0 (BOOT); no
                              repeats, no UART pin. GP3 is allowed (a
                              strapping pin: don't hold it at reset)
-  web.hist   50              web console history entries 10..500
+  web.hist   50              web UI history entries 10..500
   disk.read  0,255,0         LED colour for USB disk reads
   disk.write 255,0,0         LED colour for USB disk writes
                              (colour keys: r,g,b, RRGGBB or @h,s,l, kept
@@ -664,11 +743,14 @@ Created automatically when first needed: /scrshots/, /sys/, /imu/,
 them).
 
 Timestamp (automatic file names, INFO, $.time): once a browser has set the
-clock (web console or SD manager page connected) YYYYMMDD_HHMMSS, e.g.
+clock (web UI or SD manager page connected) YYYYMMDD_HHMMSS, e.g.
 20261113_142530 (the PC's local time); before that bNNNN_hhmmss = boot
 count in hex (NV sys.bootcnt, +1 every boot) and time since boot, e.g.
 b002A_001523 = boot 42, 0 h 15 min 23 s. The clock is lost at every
 reboot. A name already taken gets _1, _2 ... added.
+Each time a browser sets the clock the event <<SYS TIME 20261113_142530
+adj:+3>> is sent (adj = seconds the clock moved; adj:new = it was not
+set; EVENTS SYS 0 hides it; scripts: EVENTS SYS 1 / ON SYS fn).
 
 File names given to commands that create files (IMU REC, SCR SHOT, NV
 EXPORT) follow the script rule, so a script can use them: letters, digits
@@ -683,13 +765,25 @@ Create /images/ and /www/ yourself (missing = none).
   Boot        SCR AUTO 1, black, backlight scr.bl, boot square (a
               random-colour square on the bottom edge of the glass), Wait.
   Wait        ROT 0/2 -> 1/3, SCR AUTO 0, details fade in (0.2 s),
-              IMU ORIENT L AUTO (details turn 180 deg with the device).
-  Connect     IMU ORIENT NONE (view flip off), SCR AUTO 0, ROT 0, fade
+              IMU ORIENT (below).
+  Connect     IMU ORIENT (below), SCR AUTO 0, ROT 0, fade
               to black (0.2 s), /sys/splash.png
               fades in (0.8 s; "sys/splash.png" printed if missing),
               SCR AUTO 1.
   Disconnect  SCR AUTO 1, fade to black (0.2 s), Wait.
   (also on UI switch)
+  Disk mode   (UI MSC, BOOT held) /sys/usbdrive.png, ROT 0; IMU ORIENT
+              (below).
+  IMU ORIENT on these screens - the firmware sets it only when the system
+  script does not run (sys.autorun 0, or the file is missing):
+    screen      firmware default   set instead by (autorun 1)
+    Wait        L AUTO             onWait before
+    Disk mode   P AUTO             onWait after (runs on the switch)
+    Connect     P AUTO             onConnect before
+    RESET!      L AUTO             (always the firmware)
+  A script's setting stays until something changes it (e.g. L AUTO from
+  onWait before lasts through the splash unless onConnect before sets
+  another).
   Fade times: UISCR_FADE_OUT_MS, UISCR_FADE_IN_MS, UISCR_SPLASH_FADE_MS
   in src/uiscr.c. The UI command waits 300 ms before switching (its
   reply must reach the client); a BOOT double press switches at once.
@@ -747,10 +841,10 @@ Create /images/ and /www/ yourself (missing = none).
                              reboot. Export fails: "No backup: <reason>",
                              reset anyway.
                              No card: reset without a backup.
-      Script                 run SD:/sys/reset.s ($arg = SCRIPT) as a
+      Script                 run SD:/sys/onReset.s ($arg = SCRIPT) as a
                              system script, then back to RESET!
-      FULL                   export, reset, run reset.s ($arg = FULL),
-                             reboot (no reset.s: error, nothing done)
+      FULL                   export, reset, run onReset.s ($arg = FULL),
+                             reboot (no onReset.s: error, nothing done)
   - SD:/sys/reset.nvram at boot (before NV is used): settings exported to
     SD:/sys/b<boot>_<uptime>.nvram, every key to its default (except
     sys.bootcnt), then the file's settings (empty file = defaults only);
@@ -760,7 +854,7 @@ Create /images/ and /www/ yourself (missing = none).
   - Lines too long for the screen end in '~'.
 
 
-6. WEB CONSOLE
+6. WEB UI
 --------------
 
   - Join the AP; phones open the portal by themselves (needs wifi.gw 1
@@ -780,12 +874,27 @@ Create /images/ and /www/ yourself (missing = none).
     history - tap a command to put it in the input.
   - History is kept in the browser's local storage (max web.hist
     entries); it is never sent to the board.
-  - F5 clears the reply box.
+  - F5 clears the reply box. F1 shows the keys (Esc closes).
+  - LCD mirror: a box always in the top right shows the board's screen,
+    upright for the current ROT (also with SCR FLIP; the ORIENT AUTO view
+    flip is not shown). Its title bar shows LCD ROT n; "v" / "^" rolls it
+    down / up (rolled up by default); drag the bottom-left corner to
+    resize it (aspect kept: portrait at ROT 0/2, landscape at 1/3).
+    Rolled / size are kept in the browser. Its frame is the board's LED
+    colour, softened (70 % LED + 30 % grey #999; 6 px, 2 px rolled up;
+    LED off = black #000000): the board sends
+    <<LED r,g,b>> when the page connects and when the LED changes (at most
+    every 100 ms; not shown, not an event). While it is rolled down the
+    board sends each screen update's changed area
+    (binary WebSocket frames: 'M', rotation 0..3, x y w h u16 LE in the
+    native 172 x 320 panel, RGB565 u16 LE; bands of at most 16 KB, merged
+    while the link is busy); <<SCR ON>> / <<SCR OFF>> from the page start
+    / stop it (not commands). Web UI only.
   - Page source: assets/index.html (embedded in the firmware).
   - Files in /www on the SD card are served first; /www/index.html
     replaces the built-in page. /cfg and /ws are always built in
     (settings and the command WebSocket) - a custom page needs /ws.
-  - Anything not found redirects to the console page (web.captive 1;
+  - Anything not found redirects to the web UI page (web.captive 1;
     with 0 it gets 404 "not found").
   - Reconnect: the page checks /cfg first (2 s limit) and only then opens
     the WebSocket (3 s limit), retrying every 2 s; leaving or reloading
@@ -797,12 +906,12 @@ Create /images/ and /www/ yourself (missing = none).
     is busy; neither is shown, scripts never see them). No answer within
     3 s: "[disconnected - no reply]" and the page reconnects.
   - REBOOT closes the page first (WebSocket code 4001): "[disconnected -
-    device rebooting]", then it reconnects. (FILES stops the web console
+    device rebooting]", then it reconnects. (FILES stops the web UI
     when it starts: plain "[disconnected]".)
     A custom page should do the same with <<PING>> and code 4001.
 
 
-7. SERIAL CONSOLE (UART / USB) AND LOGS
+7. SERIAL UI (UART / USB) AND CONSOLE
 ---------------------------------------
 
   Terminal: 8N1 at uart.baud (UART) or any speed (USB). Replies end in CR LF.
@@ -844,7 +953,7 @@ Create /images/ and /www/ yourself (missing = none).
   bootloader messages, start-up messages before the log hook, crash
   reports, and any plain printf inside ESP-IDF.
 
-  FILES takes over the USB port: a USB console session ends there
+  FILES takes over the USB port: a USB UI session ends there
   (followed by the usual reboot).
 
   Code: dbgf("fmt", ...) - printf-style log line, '\n' added, max 200
@@ -890,8 +999,8 @@ Create /images/ and /www/ yourself (missing = none).
                 up again. ROT, drawing, text boxes and SCR SHOT are not
                 changed. A 90 deg turn (ROT mode) only sends the event.
                 ORIENT without AUTO, NONE or IMU RESET end the view flip.
-                The Wait screen turns on ORIENT L AUTO by itself; a client
-                connecting turns ORIENT off (each client starts clean).
+                The Wait, disk mode and connect screens set ORIENT
+                themselves unless a system script does (section 5).
   SLEEP         The IMU goes to wake-on-motion (accel only, 21 Hz).
                 SCR: backlight and LED off; commands still work (IMU
                      commands reply ERR IMU asleep; LED colour is stored
@@ -923,12 +1032,16 @@ Create /images/ and /www/ yourself (missing = none).
   Full language: SCRIPTING.txt (quick reference: SCRIPTING_REF.txt).
   Examples: the project's sd/ folder (sd/scripts/, sd/sys/).
 
-  - PRINT goes to the client; DEBUG to the log port(s).
+  - PRINT goes to the client; DEBUG to the console.
     <<SCRIPT name END|STOPPED|ERR ...|PAUSED ...>> tell the client what
-    happened (EVENTS SCRIPT 0 hides them).
-  - QUIET (in the script, default 2) sets what else the client sees:
-      0 everything, 1 no command replies / OKs, 2 also no <<BTN|IMU|UI>>
-      events, 3 also no command ERRs. The script always gets every event.
+    happened (name = file.fn when only a function runs: UI CALL, the
+    system scripts' before / instead / after; EVENTS SCRIPT 0 hides them).
+  - UI EVENTS (in the script, default 1) sets what else the client sees:
+      3 everything, 2 no command replies / OKs, 1 also no events of the
+      sources the script turned on, 0 also no command ERRs.
+  - Event sources start off in every script: EVENTS src 1|0, ON src fn
+    (on) / ON src OFF (off), TIMER n ms (on). Events of sources that are
+    off are not queued and go to the client as usual.
   - System scripts, NV sys.autorun 1 (start-up LED flash: sys.aron green,
     sys.aroff red):
     In SD:/sys/ (by hand: RUN sys/onBoot, LIST sys/onBoot, BPT sys/onBoot:4):
@@ -937,7 +1050,7 @@ Create /images/ and /www/ yourself (missing = none).
       onConnect.s    FN before / instead / after around the connect splash
     While onBoot or onWait runs, holding BOOT for 3 s sets
     sys.autorun 0 and reboots (a broken system script can't lock you out).
-    onWait before/after and all of onConnect run while the console
+    onWait before/after and all of onConnect run while the UI
     waits: the new client's lines are taken after onConnect ends.
   - Data files in scripts (<data>/file.txt: SD:/scripts/data, or
     SD:/sys/data when the script started by RUN / LOAD is a /sys/ one;
@@ -965,7 +1078,7 @@ Create /images/ and /www/ yourself (missing = none).
     VARS LOAD name [$a $$b ... | ALL] sets the listed variables (all when
     there is no list); a listed name not in the file is an error.
   - BPT! in a script with no client connected: the USB serial port is the
-    console while it is paused (VARS, STEP, CONT ... typed there).
+    UI while it is paused (VARS, STEP, CONT ... typed there).
   - STOP NOW cuts IMU REC and screen transitions short; an image decode
     still finishes.
   - PC tests of the interpreter: tests/scrtest (sh run.sh).

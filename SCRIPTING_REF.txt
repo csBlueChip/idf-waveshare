@@ -2,7 +2,7 @@ WAVEDEMO SCRIPT - QUICK REFERENCE        (full rules: SCRIPTING.txt)
 ====================================
 
 FILES     SD:/scripts/name.s     name: letters digits _ (max 31)   /sys/x = system
-CONSOLE   RUN [name args]  STOP [NOW]  PAUSE  CONT  LOAD name [args]
+UI        RUN [name args]  CALL file.fn [args]  STOP [NOW]  PAUSE  CONT  LOAD name [args]
           STEP [IN|OUT]  BPT [[file:]n | DEL ALL|#n|[file:]n]  VARS
           LIST [name [from [to]]]  STACK  LOG [UART|USB|BOTH|AUTO]
           EVENTS [src 0|1]
@@ -27,13 +27,15 @@ FUNCTIONS INT ROUND ABS MIN MAX SQRT SIN COS ATAN2 (degrees) LEN UPPER
           LOWER MID(t,s,n) FIND(t,p) RND(a,b)
 
 OUTPUT    TEXT n text  TLEN n text  PRINT text  DEBUG text  FAPP file text
+COLOUR    \iN \ilN \pN \plN \id \pd \ip (PRINT / DEBUG)  INK [l]N  PAPER [l]N
+          N: 0/k 1/r 2/g 3/y 4/b 5/m 6/c 7/w, 8/d default; l (or 9) = light
 FILES     <home>/data/file.txt (/scripts/data, /sys/data), positions from 1
           FAPP FCAT file [start [count]] [>DEBUG]  FDIR [txt|var|nvram|*]
           FSTAT file ($.ret)  (FAPP/FCAT/FSTAT/FDELETE: name.txt|var; .nvram: /sys/ scripts; no folder)
           FDELETE file  FWRITE file text  FREAD $v file n|EOL  FTELL $v file
           FSEEK file START|END [n]|SET n|OFFS n|TAG text  FCLOSE file
           VARS SAVE name [$v ...] (no list = globals)  VARS LOAD name [$v ...|ALL]
-          QUIET 0|1|2|3 (def 2)  TRACE 0|1           escapes \n \\ \# \$ \1..\9
+          UI EVENTS 0..3 (def 1)  TRACE 0|1          escapes \n \\ \# \$ \1..\9
 
 CONTROL   IF e / ELIF e / ELSE / END
           LOOP $v = a TO b [STEP n] / END      LOOP WHILE e / END
@@ -46,7 +48,8 @@ FUNCTIONS FN name [$a ...] / RETURN [e] / END
 SETTINGS  .STACK n    .FILES n (def NV run.files)    .CONST NAME value... | "text"
           (top of script)
 
-EVENTS    ON BTN|IMU|UI|TIMER fn    ON src OFF    WAIT EVENT [ms]
+EVENTS    sources start off: EVENTS src 1|0 (BTN IMU UI TIMER SYS ALL), ON src fn (on),
+          ON src OFF (off), TIMER n ms (on)    WAIT EVENT [ms]
           WAIT ms   INPUT ["prompt"] $v [ms] (no line end; meanwhile !!STOP [NOW] / !!PAUSE)
           TIMER n ms (n 1..4, 0 = off)
           BTN n SHORT|DOUBLE|DOWN|UP|REPEAT   IMU TAP|2TAP|3TAP|MOTION|STILL|

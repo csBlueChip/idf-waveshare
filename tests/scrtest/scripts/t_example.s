@@ -1,5 +1,5 @@
 # demo.s (spec example; events faked with EVT)
-QUIET 1
+UI EVENTS 2
 ON BTN onBtn
 ON IMU onImu
 BTN 1 1 1 0
@@ -16,7 +16,7 @@ EXIT
 
 FN onBtn
   SWITCH $arg[2]
-  SHORT)  CALL shapes.drawPoly 6 86 160 40
+  SHORT)  CALL shapes.drawPoly 6 86 160 40 255,255,255
   DOUBLE) LET $$run = 0
   END
 END

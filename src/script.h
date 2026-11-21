@@ -39,8 +39,9 @@ esp_err_t scriptInit(void);
 /* Main task: a console line from the client (instead of cmdExecute). */
 void scriptConsoleLine(const char *line);
 
-/* uiSend() hook: queue <<BTN|IMU|UI ...>> events for the running script.
- * true = don't send it to the client (the script's QUIET is 2 or 3). */
+/* uiSend() hook: queue <<BTN|IMU|UI|SYS ...>> events for the running script.
+ * Only sources the script turned on are queued; true = don't send it to the
+ * client (the script's UI EVENTS is 0 or 1). */
 bool scriptEvent(const char *text);
 
 /* End of start-up: run onBoot (sys.autorun 1), blocking. */
@@ -56,6 +57,14 @@ void scriptWaitEnd(void);
 
 /* Main task, client connected: onConnect before / instead (or builtin) / after. */
 void scriptConnect(const char *uiName, void (*builtin)(void));
+
+/* onWait ran (before) for the current Wait screen: it, not the firmware,
+ * sets IMU ORIENT for the Wait screen (before) and disk mode (after). */
+bool scriptWaitRan(void);
+
+/* scriptConnect() would run onConnect (autorun on, no script running, the
+ * file exists): onConnect before, not the firmware, sets the splash ORIENT. */
+bool scriptConnectRuns(void);
 
 /* Main task, the client went away: a RUN script with ON UI is waited for, one
  * without is stopped; a paused one is stopped. */

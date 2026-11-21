@@ -30,7 +30,7 @@ static const char *TAG = "usbdisk";
 #define USB_DISK_TASK_STACK	4096
 #define USB_DISK_TASK_PRIO	5
 #define USB_DISK_FAT_PATH	"/usbdisk"	/* used by the library if it remounts for the app */
-#define USB_DISK_BACKLIGHT	30		/* % while in disk mode */
+#define USB_DISK_LIGHTNESS	60		/* lightness % while in disk mode (~28 % duty) */
 #define USB_DISK_IMG_FILE	SD_MOUNT_POINT "/sys/usbdrive.png"	/* replaces the built-in image */
 #define USB_DISK_IMG_MAX	(512 * 1024)	/* larger files are ignored */
 
@@ -97,7 +97,7 @@ static void usbDiskTask(void *arg)
 	/* 3. drive image, LED off, backlight down */
 	usbDiskShowImage();
 	ledOff();
-	lcdBacklight(USB_DISK_BACKLIGHT);
+	lcdBacklightLightness(USB_DISK_LIGHTNESS);
 
 	/* 4. hand the raw card to USB; from here card access lights the LED */
 	usbDiskLoadColour("disk.read", s_readRgb);

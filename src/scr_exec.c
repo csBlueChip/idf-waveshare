@@ -15,7 +15,7 @@ static bool s_stopped;			/* a wait returned "stopped" */
 
 void scrDoCall(scrFrame_t *f, const char *c, int ret, const char *rv);
 
-static const char *const s_srcNames[4] = { "BTN", "IMU", "UI", "TIMER" };
+static const char *const s_srcNames[SCR_SRCS] = { "BTN", "IMU", "UI", "TIMER", "SYS" };
 
 #define F()	(&scr.frames[scr.depth - 1])
 #define ST(f)	(&(f)->mod->st[(f)->pc])
@@ -32,7 +32,7 @@ bool scrEnsureCtx(void)
 
 int scrEventSource(const char *text)
 {
-	for (int i = 0; i < 4; i++) {
+	for (int i = 0; i < SCR_SRCS; i++) {
 		size_t l = strlen(s_srcNames[i]);
 		if (strncmp(text, s_srcNames[i], l) == 0 && (text[l] == ' ' || text[l] == '\0')) {
 			return 1 << i;
@@ -43,7 +43,7 @@ int scrEventSource(const char *text)
 
 static int srcIndex(int mask)
 {
-	for (int i = 0; i < 4; i++) {
+	for (int i = 0; i < SCR_SRCS; i++) {
 		if (mask == (1 << i)) {
 			return i;
 		}
@@ -56,7 +56,7 @@ bool scrHasHandler(int mask)
 	if (!scrCtxP || !scr.active) {
 		return false;
 	}
-	for (int i = 0; i < 4; i++) {
+	for (int i = 0; i < SCR_SRCS; i++) {
 		if ((mask & (1 << i)) && scr.handlers[i][1] >= 0) {
 			return true;
 		}
@@ -64,14 +64,19 @@ bool scrHasHandler(int mask)
 	return false;
 }
 
-int scrQuiet(void)
+int scrUiVol(void)
 {
-	return (scrCtxP && scr.active) ? scr.quiet : 0;
+	return (scrCtxP && scr.active) ? scr.uivol : 3;
+}
+
+int scrEvMask(void)
+{
+	return (scrCtxP && scr.active) ? scr.evmask : 0;
 }
 
 const char *scrActiveName(void)
 {
-	return (scrCtxP && scr.active) ? scr.name : "";
+	return (scrCtxP && scr.active) ? scr.dname : "";
 }
 
 /* text after the keyword and ONE space (PRINT / DEBUG keep further spaces) */
@@ -273,7 +278,7 @@ static void cmdCb(void *ctx, const char *text)
 		return;
 	}
 	bool err = strncmp(text, "ERR ", 4) == 0;
-	if (scr.quiet == 0 || (err && scr.quiet <= 2)) {	/* QUIET 1, 2: ERR only; 3: nothing */
+	if (scr.uivol == 3 || (err && scr.uivol >= 1)) {	/* UI EVENTS 1, 2: ERR only; 0: nothing */
 		scrHostPrint(text);
 	}
 }
@@ -339,6 +344,73 @@ static char rawQuote(const char *line, int skipWords)
 	return (*p == '"' || *p == '\'') ? *p : 0;
 }
 
+/* Script-only commands, run here instead of the console:
+ *   EVENTS [src 1|0]   the script's event sources (src BTN IMU UI TIMER SYS ALL)
+ *   UI EVENTS [0..3]   what the client sees of the script
+ * Replies like a command (through cmdCb). false = not one of them. */
+static bool localCmd(const char *line, cmdCtx_t *c)
+{
+	char        w[3][12];
+	int         n = 0;
+	const char *p = scrSkip(line);
+	while (*p && n < 3) {
+		int l = 0;
+		while (p[l] && p[l] != ' ' && p[l] != '\t') {
+			l++;
+		}
+		snprintf(w[n++], sizeof(w[0]), "%.*s", l > 11 ? 11 : l, p);
+		p = scrSkip(p + l);
+	}
+	bool more = *p != '\0';
+	char out[80];
+	if (n >= 1 && strcasecmp(w[0], "EVENTS") == 0) {
+		if (n == 1) {
+			int k = 0;
+			for (int i = 0; i < SCR_SRCS; i++) {
+				k += snprintf(out + k, sizeof(out) - k, "%s%s:%d", i ? " " : "", s_srcNames[i],
+				              (scr.evmask >> i) & 1);
+			}
+			snprintf(out + k, sizeof(out) - k, "\n");
+			cmdCb(c, out);
+			cmdCb(c, "OK\n");
+			return true;
+		}
+		int bit = strcasecmp(w[1], "ALL") == 0 ? SCR_SRC_ALL : 0;
+		for (int i = 0; i < SCR_SRCS && !bit; i++) {
+			if (strcasecmp(w[1], s_srcNames[i]) == 0) {
+				bit = 1 << i;
+			}
+		}
+		if (n != 3 || more || !bit || (strcmp(w[2], "0") != 0 && strcmp(w[2], "1") != 0)) {
+			cmdCb(c, "ERR usage: EVENTS [BTN|IMU|UI|TIMER|SYS|ALL 1|0]\n");
+			return true;
+		}
+		if (w[2][0] == '1') {
+			scr.evmask |= bit;
+		} else {
+			scr.evmask &= ~bit;
+		}
+		cmdCb(c, "OK\n");
+		return true;
+	}
+	if (n >= 2 && strcasecmp(w[0], "UI") == 0 && strcasecmp(w[1], "EVENTS") == 0) {
+		if (n == 2) {
+			snprintf(out, sizeof(out), "vol:%d\n", scr.uivol);
+			cmdCb(c, out);
+			cmdCb(c, "OK\n");
+			return true;
+		}
+		if (more || strlen(w[2]) != 1 || w[2][0] < '0' || w[2][0] > '3') {
+			cmdCb(c, "ERR usage: UI EVENTS [0|1|2|3]\n");
+			return true;
+		}
+		scr.uivol = w[2][0] - '0';
+		cmdCb(c, "OK\n");
+		return true;
+	}
+	return false;
+}
+
 /* Build and run a console command line; returns true if it replied OK. */
 static bool runCmd(const char *text, cmdCtx_t *c)
 {
@@ -353,7 +425,9 @@ static bool runCmd(const char *text, cmdCtx_t *c)
 		scrFail("line too long after substitution");
 	}
 	c->last[0] = '\0';
-	scrHostCmd(line, cmdCb, c);
+	if (!localCmd(line, c)) {
+		scrHostCmd(line, cmdCb, c);
+	}
 	if (strncmp(c->last, "ERR ", 4) == 0) {
 		scr.ok = false;
 		snprintf(scr.err, sizeof(scr.err), "%s", c->last + 4);
@@ -365,10 +439,10 @@ static bool runCmd(const char *text, cmdCtx_t *c)
 	}
 	scr.ok     = true;
 	scr.err[0] = '\0';
-	/* UI switch ends the script (UI alone and UI DEFAULT don't switch) */
+	/* UI switch ends the script (UI alone, UI DEFAULT and UI EVENTS don't switch) */
 	if (scrWordIs(line, "UI")) {
 		const char *a = scrSkip(line + 2);
-		if (*a && !scrWordIs(a, "DEFAULT")) {
+		if (*a && !scrWordIs(a, "DEFAULT") && !scrWordIs(a, "EVENTS")) {
 			scr.exitReq = true;
 		}
 	}
@@ -899,8 +973,8 @@ static long seekTag(const char *fname, const char *arg)
 {
 	const char *t   = scrUnquote(arg);
 	const char *sub = scrSubst(t, SUB_TEXT, 0);
-	char       *tag = scrArenaStr(sub, strlen(sub));
-	scrUnescape(tag);
+	char       *tag = scrUnescape(sub);
+	ansiStrip(tag);
 	int tl = strlen(tag);
 	while (tl > 0 && (tag[tl - 1] == ' ' || tag[tl - 1] == '\t' || tag[tl - 1] == '\r')) {
 		tag[--tl] = '\0';
@@ -1075,8 +1149,8 @@ static void stFile(scrFrame_t *f, scrStmt_t *s)
 		}
 		const char *t   = scrUnquote(p);
 		const char *sub = scrSubst(t, SUB_TEXT, 0);
-		char       *o   = scrArenaStr(sub, strlen(sub));
-		scrUnescape(o);
+		char       *o   = scrUnescape(sub);
+		ansiStrip(o);				/* files never get colour codes */
 		int         l   = strlen(o);
 		const char *e   = scrHostFileWrite(fname, *pos - 1, o, l, false);
 		if (e) {
@@ -1577,17 +1651,18 @@ static void execStmt(scrFrame_t *f, scrStmt_t *s)
 			sl++;
 		}
 		int si = -1;
-		for (int i = 0; i < 4; i++) {
+		for (int i = 0; i < SCR_SRCS; i++) {
 			if ((int)strlen(s_srcNames[i]) == sl && strncasecmp(a, s_srcNames[i], sl) == 0) {
 				si = i;
 			}
 		}
 		const char *h = scrSkip(a + sl);
 		if (si < 0 || !*h) {
-			scrFail("usage: ON BTN|IMU|UI|TIMER function|OFF");
+			scrFail("usage: ON BTN|IMU|UI|TIMER|SYS function|OFF");
 		}
 		if (scrWordIs(h, "OFF")) {
 			scr.handlers[si][0] = scr.handlers[si][1] = -1;
+			scr.evmask &= ~(1 << si);		/* and the source off */
 		} else {
 			int         l   = strlen(h);
 			const char *dot = memchr(h, '.', l);
@@ -1614,6 +1689,7 @@ static void execStmt(scrFrame_t *f, scrStmt_t *s)
 			}
 			scr.handlers[si][0] = mi;
 			scr.handlers[si][1] = fi;
+			scr.evmask |= 1 << si;			/* and the source on */
 		}
 		f->pc++;
 		break;
@@ -1644,18 +1720,12 @@ static void execStmt(scrFrame_t *f, scrStmt_t *s)
 		break;
 	}
 
-	case K_QUIET:
 	case K_TRACE: {
 		double d;
-		int    max = s->kind == K_QUIET ? 3 : 1;
-		if (!scrToNum(scrEvalAll(s->arg), &d) || d < 0 || d > max || d != floor(d)) {
-			scrFail(s->kind == K_QUIET ? "usage: QUIET 0|1|2|3" : "usage: TRACE 0|1");
+		if (!scrToNum(scrEvalAll(s->arg), &d) || d < 0 || d > 1 || d != floor(d)) {
+			scrFail("usage: TRACE 0|1");
 		}
-		if (s->kind == K_QUIET) {
-			scr.quiet = (int)d;
-		} else {
-			scr.trace = (int)d;
-		}
+		scr.trace = (int)d;
 		f->pc++;
 		break;
 	}
@@ -1664,17 +1734,40 @@ static void execStmt(scrFrame_t *f, scrStmt_t *s)
 	case K_DEBUG: {
 		const char *t   = scrUnquote(rawArg(s));
 		const char *sub = scrSubst(t, SUB_TEXT, 0);
-		char       *o   = scrArenaStr(sub, strlen(sub));
-		scrUnescape(o);
+		char       *o   = scrUnescape(sub);
 		if (s->kind == K_PRINT) {
 			int   l = strlen(o);
 			char *pl = scrArena(l + 2);
 			memcpy(pl, o, l);
 			pl[l]     = '\n';
 			pl[l + 1] = '\0';
-			scrHostPrint(pl);
+			o = pl;
+		}
+		size_t fl = ansiFrame(o, scr.ink, scr.paper, NULL, 0);	/* INK / PAPER, line ends */
+		char  *fo = scrArena(fl + 1);
+		ansiFrame(o, scr.ink, scr.paper, fo, fl + 1);
+		if (s->kind == K_PRINT) {
+			scrHostPrint(fo);
 		} else {
-			scrHostDebug(o);
+			scrHostDebug(fo);
+		}
+		f->pc++;
+		break;
+	}
+
+	case K_INK:
+	case K_PAPER: {
+		int c;
+		const char *a = scrSubst(s->arg, SUB_CMD, 0);
+		char        w[8];
+		snprintf(w, sizeof(w), "%.*s", (int)strcspn(a, " \t"), a);
+		if (!ansiParseColour(w, &c) || *scrSkip(a + strlen(w))) {
+			scrFail(s->kind == K_INK ? "usage: INK [9|l]0..8|k r g y b m c w d" : "usage: PAPER [9|l]0..8|k r g y b m c w d");
+		}
+		if (s->kind == K_INK) {
+			scr.ink = c;
+		} else {
+			scr.paper = c;
 		}
 		f->pc++;
 		break;
@@ -1714,6 +1807,9 @@ static void execStmt(scrFrame_t *f, scrStmt_t *s)
 		    !scrToNum(ms, &dm) || dm < 0 || dm > 86400000) {
 			scrFail("usage: TIMER n ms (n 1..%d, ms 0 = off)", SCR_TIMERS);
 		}
+		if (dm > 0) {
+			scr.evmask |= SCR_SRC_TIMER;		/* asked for timer events */
+		}
 		scrHostTimer((int)dn, (int)dm);
 		f->pc++;
 		break;
@@ -1730,7 +1826,10 @@ static void execStmt(scrFrame_t *f, scrStmt_t *s)
 			if (*t && (!scrToNum(scrEvalAll(t), &ms) || ms < 0)) {
 				scrFail("usage: WAIT EVENT [ms]");
 			}
-			int r = scrHostEvent(SCR_SRC_ALL, buf, sizeof(buf), (int)ms);
+			if (ms < 0 && !scr.evmask) {
+				scrFail("no events enabled (EVENTS src 1, ON src fn)");
+			}
+			int r = scrHostEvent(scr.evmask, buf, sizeof(buf), (int)ms);
 			f->pc++;
 			if (r < 0) {
 				s_stopped = true;
@@ -1772,9 +1871,10 @@ static void execStmt(scrFrame_t *f, scrStmt_t *s)
 			}
 			const char *t = scrUnquote(scrArenaStr(p, (int)(e - p) + 1));
 			const char *sub = scrSubst(t, SUB_TEXT, 0);
-			char       *o   = scrArenaStr(sub, strlen(sub));
-			scrUnescape(o);
-			prompt = o;
+			char       *o   = scrUnescape(sub);
+			size_t      fl  = ansiFrame(o, scr.ink, scr.paper, NULL, 0);
+			prompt = scrArena(fl + 1);
+			ansiFrame(o, scr.ink, scr.paper, (char *)prompt, fl + 1);
 			p = scrSkip(e + 1);
 		}
 		scrVar_t *v  = target(&p, true);
@@ -1847,11 +1947,11 @@ static void execStmt(scrFrame_t *f, scrStmt_t *s)
 		while (s->text[l] && s->text[l] != ' ' && s->text[l] != '\t') {
 			l++;
 		}
-		scrFail("%.*s is a console command (not allowed in a script)", l, s->text);
+		scrFail("%.*s is a UI command (not allowed in a script)", l, s->text);
 	}
 
 	case K_PAUSE:
-		scrFail("PAUSE is a console command: use BPT!");
+		scrFail("PAUSE is a UI command: use BPT!");
 
 	default:
 		scrFail("internal: statement kind %d", s->kind);
@@ -1892,9 +1992,9 @@ static void report(int src, int line, const char *reason)
 {
 	char msg[300];
 	if (src >= 0) {
-		snprintf(msg, sizeof(msg), "<<SCRIPT %s ERR %s:%d: %s>>\n", scr.name, scrSrcName(src), line, reason);
+		snprintf(msg, sizeof(msg), "<<SCRIPT %s ERR %s:%d: %s>>\n", scr.dname, scrSrcName(src), line, reason);
 	} else {
-		snprintf(msg, sizeof(msg), "<<SCRIPT %s ERR %s>>\n", scr.name, reason);
+		snprintf(msg, sizeof(msg), "<<SCRIPT %s ERR %s>>\n", scr.dname, reason);
 	}
 	scrHostNotify(msg);
 }
@@ -1961,11 +2061,12 @@ static int runOne(void)
 		/* events for handlers, between lines */
 		if (!scr.inHandler) {
 			int mask = 0;
-			for (int i = 0; i < 4; i++) {
+			for (int i = 0; i < SCR_SRCS; i++) {
 				if (scr.handlers[i][1] >= 0) {
 					mask |= 1 << i;
 				}
 			}
+			mask &= scr.evmask;
 			if (mask && scrHostEvent(mask, ev, sizeof(ev), 0) == 1) {
 				pushHandler(ev, RET_HANDLER);
 				return ONE_OK;
@@ -1973,7 +2074,7 @@ static int runOne(void)
 		}
 		if (shouldPause(s)) {
 			char msg[120];
-			snprintf(msg, sizeof(msg), "<<SCRIPT %s PAUSED %s:%d>>\n", scr.name, scrSrcName(s->src), s->line);
+			snprintf(msg, sizeof(msg), "<<SCRIPT %s PAUSED %s:%d>>\n", scr.dname, scrSrcName(s->src), s->line);
 			scrHostNotify(msg);
 			scr.pauseNext = false;
 			int go = scrHostPause();
@@ -2069,12 +2170,14 @@ static void resetRun(const char *name)
 	scr.nSrc = scr.nMod = scr.nConst = 0;
 	scr.depth = scr.nGlobals = 0;
 	scr.stackMax = SCR_STACK_DEF;
-	for (int i = 0; i < 4; i++) {
+	for (int i = 0; i < SCR_SRCS; i++) {
 		scr.handlers[i][0] = scr.handlers[i][1] = -1;
 	}
+	scr.evmask = 0;					/* every source off */
 	scr.inHandler = false;
 	scr.trace = scr.onerr = 0;
-	scr.quiet = SCR_QUIET_DEF;
+	scr.uivol = SCR_UIVOL_DEF;
+	scr.ink   = scr.paper = ANSI_NONE;
 	scr.ok = true;
 	scr.err[0] = '\0';
 	memset(&scr.ret, 0, sizeof(scr.ret));
@@ -2098,11 +2201,16 @@ static void resetRun(const char *name)
 
 scrResult_t scrRun(const char *name, const char *args, const char *fn, bool load)
 {
-	char msg[100];
+	char msg[SCR_RUNNAME_MAX + 32];
 	if (!scrEnsureCtx()) {
 		return SCR_RES_ERROR;
 	}
 	resetRun(name);
+	if (fn) {
+		snprintf(scr.dname, sizeof(scr.dname), "%s.%s", name, fn);
+	} else {
+		snprintf(scr.dname, sizeof(scr.dname), "%s", name);
+	}
 	scr.active = true;
 	scr.t0     = scrHostMs();
 	scr.aUsed  = 0;
@@ -2132,14 +2240,37 @@ scrResult_t scrRun(const char *name, const char *args, const char *fn, bool load
 
 	scrResult_t r = runLoop();
 	if (r == SCR_RES_END) {
-		snprintf(msg, sizeof(msg), "<<SCRIPT %s END>>\n", scr.name);
+		snprintf(msg, sizeof(msg), "<<SCRIPT %s END>>\n", scr.dname);
 		scrHostNotify(msg);
 	} else if (r == SCR_RES_STOPPED) {
-		snprintf(msg, sizeof(msg), "<<SCRIPT %s STOPPED>>\n", scr.name);
+		snprintf(msg, sizeof(msg), "<<SCRIPT %s STOPPED>>\n", scr.dname);
 		scrHostNotify(msg);
 	}
 	cleanup();
 	return r;
+}
+
+const char *scrFnCheck(const char *name, const char *fn)
+{
+	static char err[sizeof(((scrCtx_t *)0)->msg) + 16];
+	if (!scrEnsureCtx() || scr.active) {
+		return "script running";
+	}
+	resetRun(name);
+	scr.active = true;
+	const char *e = NULL;
+	if (setjmp(scr.jb) == 0) {
+		scrMod_t *m = scrLoadModule(name);
+		if (scrFindFn(m, fn, strlen(fn)) < 0) {
+			snprintf(err, sizeof(err), "no function %s in %s", fn, name);
+			e = err;
+		}
+	} else {
+		snprintf(err, sizeof(err), "%s", scr.msg);	/* load error */
+		e = err;
+	}
+	cleanup();
+	return e;
 }
 
 bool scrHasFn(const char *name, const char *fn, bool nonEmpty)

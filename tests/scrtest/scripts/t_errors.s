@@ -1,5 +1,5 @@
 # ONERROR GOTO across calls, run-time errors
-QUIET 1
+UI EVENTS 2
 ONERROR GOTO oops
 LET $n = 0
 :retry

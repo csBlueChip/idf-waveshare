@@ -1,4 +1,5 @@
 #include "log.h"
+#include "ansi.h"
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -16,9 +17,10 @@
 
 #include "cmd.h"
 #include "sd.h"
+#include "nv.h"
 
 #define LOG_LINE_MAX	256	/* ESP_LOGx line (longer is cut) */
-#define DBGF_MAX	200	/* dbgf text */
+#define DBGF_MAX	512	/* dbgf text (DEBUG text with colour codes) */
 #define LOG_LOCK_MS	100	/* busy: fall back to the console */
 #define LOG_CFG_DIR	SD_MOUNT_POINT "/sys"
 #define LOG_CFG		LOG_CFG_DIR "/debug.cfg"
@@ -62,7 +64,7 @@ static const char s_cfgHead[] =
 static volatile uint8_t s_vol[LOG_DEVS] = { 4, 4, 4, 4, 4, 4, 4 };	/* 0 off .. 4 full */
 
 static SemaphoreHandle_t s_lock;		/* s_buf */
-static char              s_buf[LOG_LINE_MAX + 2];
+static char              s_buf[(LOG_LINE_MAX > DBGF_MAX ? LOG_LINE_MAX : DBGF_MAX) + 2];
 static vprintf_like_t    s_console;		/* the original output */
 static volatile int      s_uiPort = -1;
 static volatile bool     s_debug;
@@ -90,7 +92,7 @@ esp_err_t logInit(void)
 	}
 	s_console = esp_log_set_vprintf(logVprintf);
 	return cmdRegister("LOG", 0, 4, logCmd,
-	                   "LOG [UART|USB|BOTH|AUTO] | DEBUG [SAVE | device|ALL [0..4 [SAVE]]]  log port(s) / volume");
+	                   "LOG [UART|USB|BOTH|AUTO] | DEBUG [SAVE | device|ALL [0..4 [SAVE]]]  console port(s) / volume");
 }
 
 /* Read SD:/sys/debug.cfg (no file: all devices at 4). Call after sdInit(). */
@@ -425,6 +427,15 @@ static void logOut(const char *text, size_t len)
 		bool fixed = (mode == LOG_BOTH) || (mode == LOG_UART && p == SER_UART) ||
 		             (mode == LOG_USB && p == SER_USB);
 		if (s_debug || (mode == LOG_AUTO ? p != ui : fixed)) {
+			if (memchr(text, ANSI_ESC, len) &&
+			    !nvGetInt(p == SER_UART ? "uart.ansi.con" : "usb.ansi.con")) {
+				static char plain[sizeof(s_buf)];	/* s_lock held */
+				memcpy(plain, text, len);
+				plain[len] = '\0';
+				size_t pl = ansiStrip(plain);
+				serWrite((serPort_t)p, plain, pl, true);
+				continue;
+			}
 			serWrite((serPort_t)p, text, len, true);
 		}
 	}
@@ -462,8 +473,7 @@ static const char *logCmd(int argc, char *argv[], cmdReply_t reply)
  * also in debug.cfg). LOG DEBUG SAVE: rewrite debug.cfg with every volume. */
 static const char *logCmdDebug(int argc, char *argv[], cmdReply_t reply)
 {
-	char text[32];
-	int  d = -1;
+	int d = -1;
 
 	if (argc >= 1 && strcasecmp(argv[0], "ALL") == 0) {	/* LOG DEBUG ALL [n [SAVE]] */
 		if (argc >= 2) {
@@ -505,11 +515,18 @@ static const char *logCmdDebug(int argc, char *argv[], cmdReply_t reply)
 		}
 		s_vol[d] = v;
 	}
+	char line[LOG_DEVS * 12 + 2];			/* one line: ble:4 wifi:4 ... */
+	int  o = 0;
 	for (int i = 0; i < LOG_DEVS; i++) {
 		if (d < 0 || i == d) {
-			snprintf(text, sizeof(text), "%s=%d\n", s_devs[i].name, s_vol[i]);
-			reply(text);
+			o += snprintf(line + o, sizeof(line) - o, "%s", o ? " " : "");
+			for (const char *c = s_devs[i].name; *c; c++) {
+				line[o++] = (char)tolower((unsigned char)*c);
+			}
+			o += snprintf(line + o, sizeof(line) - o, ":%d", s_vol[i]);
 		}
 	}
+	snprintf(line + o, sizeof(line) - o, "\n");
+	reply(line);
 	return NULL;
 }

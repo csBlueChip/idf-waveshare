@@ -1,11 +1,11 @@
 . scripts for RUN / LOAD (name.s)
 demo.s spec example: BOOT short = hexagon, double = end, tap prints
-shapes.s library: drawPoly n cx cy r
+shapes.s library: drawPoly n cx cy r colour [fill] (UI: CALL shapes.drawPoly 6 86 160 40 255,0,0 1)
 count.s counts with WAIT 500 (STOP / PAUSE / STEP tests)
 ask.s INPUT and a TIMER
 rec.s IMU REC for STOP NOW
 hang.s endless loop: copy over SD:/sys/onBoot.s to test the BOOT escape
-dbg.s BPT! with no client: copy over SD:/sys/onBoot.s (USB console)
+dbg.s BPT! with no client: copy over SD:/sys/onBoot.s (USB UI)
 persist.s remembers a name in persist.var (RUN persist forget = FDELETE it)
 boast.s boast and retort duel: RUN boast a|b|c|d|forget (duels in data/boast.txt)
 data data files: FAPP / FWRITE (.txt), VARS SAVE (.var)

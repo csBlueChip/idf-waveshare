@@ -1,0 +1,10 @@
+RESTORE.txt what was removed at 0.7.58 and how to put it back
+results.txt experiment results, findings, untried ideas, raw tap logs
+imu_tapzones.c code removed from src/imu.c (excerpts, not built)
+nv_tapzones.txt NV keys, checkers and docs removed from nv.c / nv.h / default.nvram
+README_tapzones.txt documentation removed from README / imu.h / TODO, DESCRIPT.ION lines, run.sh block
+tapzones.s the test script (was sd/scripts): RUN tapzones [X Y [taps]]
+test_tapzones.txt board test procedure (was tests/)
+tz_check.s PC test of tapzones.s functions (was tests/scrtest/card)
+tz_check.out expected output of tz_check.s
+DESCRIPT.ION file descriptions for this folder

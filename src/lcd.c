@@ -1,6 +1,7 @@
 #include "lcd.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <strings.h>
 #include "esp_log.h"
@@ -65,11 +66,20 @@ static int                       s_dx0, s_dy0, s_dx1, s_dy1;	/* dirty rect, x1/y
 static uint16_t                  s_w = LCD_NATIVE_W;
 static uint16_t                  s_h = LCD_NATIVE_H;
 static uint8_t                   s_rot;			/* requested (logical) rotation */
-static uint8_t                   s_blPct;		/* backlight as last set */
-static bool                      s_pflip, s_lflip;	/* upside-down mounting: 0<->2, 1<->3 */
+static uint8_t                   s_blLevel;		/* backlight level as last set (BL n) */
+static bool                      s_pflip, s_lflip;	/* SCR FLIP (runtime, off at boot): 0<->2, 1<->3 */
 static bool                      s_vflip;		/* view flip: panel shows the frame turned 180 */
 static int                       s_base, s_sx, s_sy;	/* logical (x,y) -> native index: base + x*sx + y*sy */
 static uint8_t                   s_bgR, s_bgG, s_bgB;	/* last CLS colour (text/background) */
+static uint8_t                   s_phys;		/* rotation as mapped (ROT, SCR FLIP applied) */
+
+/* web mirror (lcdMirror*): a copy of the panel and the part not yet taken */
+static SemaphoreHandle_t         s_mirLock;
+static uint16_t                 *s_mir;		/* PSRAM, NULL = mirror off */
+static void                    (*s_mirNotify)(void);
+static bool                      s_mirDirty;
+static int                       s_mx0, s_my0, s_mx1, s_my1;
+static int                       s_mirPhys = -1;	/* rotation last sent */
 
 /* Waveshare power/gamma settings for this panel */
 static const struct {
@@ -135,11 +145,12 @@ static esp_err_t   lcdResend(void);
 
 esp_err_t lcdInit(void)
 {
-	s_txDone = xSemaphoreCreateBinary();
+	s_txDone  = xSemaphoreCreateBinary();
+	s_mirLock = xSemaphoreCreateMutex();
 	s_buf    = heap_caps_malloc(LCD_BUF_PX * sizeof(uint16_t), MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
 	s_fb[0]  = heap_caps_calloc(LCD_FB_PX, sizeof(uint16_t), MALLOC_CAP_SPIRAM);
 	s_fb[1]  = heap_caps_calloc(LCD_FB_PX, sizeof(uint16_t), MALLOC_CAP_SPIRAM);
-	if (!s_txDone || !s_buf || !s_fb[0] || !s_fb[1]) {
+	if (!s_txDone || !s_mirLock || !s_buf || !s_fb[0] || !s_fb[1]) {
 		ESP_LOGE(TAG, "out of memory (frame buffers need PSRAM)");
 		return ESP_ERR_NO_MEM;
 	}
@@ -188,8 +199,6 @@ esp_err_t lcdInit(void)
 
 	ESP_RETURN_ON_ERROR(esp_lcd_panel_invert_color(s_panel, true), TAG, "invert");
 	ESP_RETURN_ON_ERROR(lcdPanelOrient(), TAG, "orientation");
-	s_pflip = nvGetInt("scr.pflip");
-	s_lflip = nvGetInt("scr.lflip");
 	ESP_RETURN_ON_ERROR(lcdSetRotation(0), TAG, "rotation");
 	ESP_RETURN_ON_ERROR(lcdFill(lcdRgb(0, 0, 0)), TAG, "clear");
 	s_forceFull = true;					/* panel RAM is random: send everything */
@@ -198,8 +207,8 @@ esp_err_t lcdInit(void)
 	ESP_RETURN_ON_ERROR(lcdBacklight(nvGetInt("scr.bl")), TAG, "backlight");
 
 	ESP_RETURN_ON_ERROR(cmdRegister("CLS", 1, 1, lcdCmdCls, "CLS colour  clear screen (r,g,b or RRGGBB)"), TAG, "cmd");
-	ESP_RETURN_ON_ERROR(cmdRegister("ROT", 1, 1, lcdCmdRot, "ROT n  drawing rotation (n mod 4)"), TAG, "cmd");
-	ESP_RETURN_ON_ERROR(cmdRegister("BL", 1, 1, lcdCmdBl, "BL pct  backlight (0..100)"), TAG, "cmd");
+	ESP_RETURN_ON_ERROR(cmdRegister("ROT", 0, 1, lcdCmdRot, "ROT [n]  drawing rotation (n mod 4); alone: rot:n"), TAG, "cmd");
+	ESP_RETURN_ON_ERROR(cmdRegister("BL", 1, 1, lcdCmdBl, "BL n  backlight level 0..scr.bl.steps (0 = off; perceptual steps)"), TAG, "cmd");
 	ESP_RETURN_ON_ERROR(cmdRegister("SCR", 1, 4, lcdCmdScr, "SCR AUTO 0|1 | UPD | SHOT [name] [-f] | TR|TRP [name args|CUT|NONE] | FLIP [P|L|PL|NONE]"), TAG, "cmd");
 	ESP_RETURN_ON_ERROR(cmdSetPostHook(lcdAfterCommand), TAG, "hook");
 
@@ -229,11 +238,15 @@ esp_err_t lcdSetRotation(uint8_t rot)
 	}
 
 	s_rot  = rot;
+	s_phys = phys;
 	s_w    = landscape ? LCD_NATIVE_H : LCD_NATIVE_W;
 	s_h    = landscape ? LCD_NATIVE_W : LCD_NATIVE_H;
 	s_base = s_xform[phys].base;
 	s_sx   = s_xform[phys].sx;
 	s_sy   = s_xform[phys].sy;
+	if (s_mir && s_mirNotify && (int)phys != s_mirPhys) {
+		s_mirNotify();				/* the mirror turns with it */
+	}
 	return ESP_OK;					/* buffers and panel untouched */
 }
 
@@ -242,15 +255,44 @@ uint8_t lcdGetRotation(void)
 	return s_rot;
 }
 
-esp_err_t lcdBacklight(uint8_t pct)
+/* Perceptual brightness: step i of count -> PWM duty 0..max. Lightness
+ * L = 100 * i / count (CIE L*), back to luminance Y (CIE 1976), Y * max. */
+static int lcdBlStep(int max, int count, int i)
+{
+	double L = 100.0 * i / count;
+	double Y;
+	if (L > 8.0) {
+		double t = (L + 16.0) / 116.0;
+		Y = t * t * t;
+	} else {
+		Y = L / 903.3;
+	}
+	return (int)(Y * max + 0.5);
+}
+
+static esp_err_t lcdBlDuty(uint32_t duty)
+{
+	ESP_RETURN_ON_ERROR(ledc_set_duty(LCD_BL_MODE, LCD_BL_CHANNEL, duty), TAG, "bl duty");
+	return ledc_update_duty(LCD_BL_MODE, LCD_BL_CHANNEL);
+}
+
+esp_err_t lcdBacklight(uint8_t level)
+{
+	int steps = nvGetInt("scr.bl.steps");
+	if (level > steps) {
+		return ESP_ERR_INVALID_ARG;
+	}
+	ESP_RETURN_ON_ERROR(lcdBlDuty(lcdBlStep(LCD_BL_MAX, steps, level)), TAG, "bl");
+	s_blLevel = level;
+	return ESP_OK;
+}
+
+esp_err_t lcdBacklightLightness(uint8_t pct)
 {
 	if (pct > 100) {
 		return ESP_ERR_INVALID_ARG;
 	}
-	uint32_t duty = (uint32_t)pct * LCD_BL_MAX / 100;
-	ESP_RETURN_ON_ERROR(ledc_set_duty(LCD_BL_MODE, LCD_BL_CHANNEL, duty), TAG, "bl duty");
-	s_blPct = pct;
-	return ledc_update_duty(LCD_BL_MODE, LCD_BL_CHANNEL);
+	return lcdBlDuty(lcdBlStep(LCD_BL_MAX, 100, pct));	/* BL level (lcdGetBacklight) unchanged */
 }
 
 esp_err_t lcdSetViewFlip(bool on)
@@ -268,9 +310,14 @@ bool lcdGetViewFlip(void)
 	return s_vflip;
 }
 
+bool lcdGetFlip(bool landscape)
+{
+	return landscape ? s_lflip : s_pflip;
+}
+
 uint8_t lcdGetBacklight(void)
 {
-	return s_blPct;
+	return s_blLevel;
 }
 
 void lcdDeepSleepPrep(void)
@@ -347,6 +394,38 @@ esp_err_t lcdDrawPixels(int x, int y, int w, int h, const uint16_t *pixels)
 	}
 	lcdMarkDirty(x, y, w, h);
 	return ESP_OK;
+}
+
+void lcdBlendRow(int x, int y, int w, const uint8_t *rgba)
+{
+	if (y < 0 || y >= s_h) {
+		return;
+	}
+	int i0 = x < 0 ? -x : 0;
+	int i1 = (x + w > s_w) ? s_w - x : w;
+	if (i0 >= i1) {
+		return;
+	}
+	uint16_t *back = LCD_BACK;
+	uint16_t *d    = back + s_base + (x + i0) * s_sx + y * s_sy;
+	for (int i = i0; i < i1; i++, d += s_sx) {
+		const uint8_t *p = rgba + i * 4;
+		unsigned       a = p[3];
+		if (a == 0) {
+			continue;			/* fully transparent */
+		}
+		if (a == 255) {
+			*d = lcdRgb(p[0], p[1], p[2]);
+			continue;
+		}
+		uint16_t v  = *d;			/* what is there: RGB565 -> 8 bit */
+		unsigned r5 = v >> 11, g6 = (v >> 5) & 0x3F, b5 = v & 0x1F;
+		unsigned dr = (r5 << 3) | (r5 >> 2), dg = (g6 << 2) | (g6 >> 4), db = (b5 << 3) | (b5 >> 2);
+		unsigned na = 255 - a;
+		*d = lcdRgb((p[0] * a + dr * na + 127) / 255, (p[1] * a + dg * na + 127) / 255,
+		            (p[2] * a + db * na + 127) / 255);
+	}
+	lcdMarkDirty(x + i0, y, i1 - i0, 1);
 }
 
 /* 16-step blend between bg (alpha 0) and fg (alpha 15). */
@@ -640,14 +719,110 @@ static void lcdSyncSwap(void)
 {
 	const uint16_t *back = LCD_BACK;
 	uint16_t       *dst  = LCD_FRONT;
+	size_t          n    = (s_dx1 - s_dx0) * sizeof(uint16_t);
+	void          (*notify)(void) = NULL;
 
+	xSemaphoreTake(s_mirLock, portMAX_DELAY);
 	for (int y = s_dy0; y < s_dy1; y++) {
-		memcpy(dst + y * LCD_NW + s_dx0, back + y * LCD_NW + s_dx0, (s_dx1 - s_dx0) * sizeof(uint16_t));
+		memcpy(dst + y * LCD_NW + s_dx0, back + y * LCD_NW + s_dx0, n);
+		if (s_mir) {
+			memcpy(s_mir + y * LCD_NW + s_dx0, back + y * LCD_NW + s_dx0, n);
+		}
 	}
 	s_front ^= 1;
+	if (s_mir) {					/* grow the part not yet taken */
+		if (!s_mirDirty) {
+			s_mx0 = s_dx0, s_my0 = s_dy0, s_mx1 = s_dx1, s_my1 = s_dy1;
+		} else {
+			if (s_dx0 < s_mx0) s_mx0 = s_dx0;
+			if (s_dy0 < s_my0) s_my0 = s_dy0;
+			if (s_dx1 > s_mx1) s_mx1 = s_dx1;
+			if (s_dy1 > s_my1) s_my1 = s_dy1;
+		}
+		s_mirDirty = true;
+		notify     = s_mirNotify;
+	}
+	xSemaphoreGive(s_mirLock);
 
 	s_dirty     = false;
 	s_forceFull = false;
+	if (notify) {
+		notify();
+	}
+}
+
+esp_err_t lcdMirrorSet(bool on, void (*notify)(void))
+{
+	esp_err_t err = ESP_OK;
+	xSemaphoreTake(s_mirLock, portMAX_DELAY);
+	if (on) {
+		if (!s_mir) {
+			s_mir = heap_caps_malloc(LCD_FB_PX * sizeof(uint16_t), MALLOC_CAP_SPIRAM);
+		}
+		if (s_mir) {
+			memcpy(s_mir, LCD_FRONT, LCD_FB_PX * sizeof(uint16_t));	/* what is on the panel */
+			s_mx0 = s_my0 = 0;
+			s_mx1 = LCD_NW;
+			s_my1 = LCD_NH;
+			s_mirDirty  = true;			/* everything once */
+			s_mirPhys   = -1;
+			s_mirNotify = notify;
+		} else {
+			err = ESP_ERR_NO_MEM;
+		}
+	} else {
+		free(s_mir);
+		s_mir       = NULL;
+		s_mirNotify = NULL;
+		s_mirDirty  = false;
+	}
+	xSemaphoreGive(s_mirLock);
+	if (on && s_mir && notify) {
+		notify();
+	}
+	return err;
+}
+
+size_t lcdMirrorTake(uint8_t *out, size_t max)
+{
+	size_t len = 0;
+	xSemaphoreTake(s_mirLock, portMAX_DELAY);
+	if (s_mir && max > LCD_MIR_HDR && (s_mirDirty || s_phys != s_mirPhys)) {
+		int x = 0, y = 0, w = 0, rows = 0;
+		if (s_mirDirty) {
+			x    = s_mx0;
+			y    = s_my0;
+			w    = s_mx1 - s_mx0;
+			rows = (int)((max - LCD_MIR_HDR) / (w * sizeof(uint16_t)));
+			if (rows > s_my1 - s_my0) {
+				rows = s_my1 - s_my0;
+			}
+		}
+		if (!s_mirDirty || rows > 0) {
+			uint16_t hdr[4] = { (uint16_t)x, (uint16_t)y, (uint16_t)w, (uint16_t)rows };
+			out[0] = 'M';
+			out[1] = s_phys;
+			for (int i = 0; i < 4; i++) {
+				out[2 + 2 * i] = hdr[i] & 0xFF;
+				out[3 + 2 * i] = hdr[i] >> 8;
+			}
+			len = LCD_MIR_HDR;
+			for (int r = 0; r < rows; r++) {	/* RGB565, little-endian */
+				const uint16_t *p = s_mir + (y + r) * LCD_NW + x;
+				for (int i = 0; i < w; i++) {
+					out[len++] = p[i] & 0xFF;
+					out[len++] = p[i] >> 8;
+				}
+			}
+			s_my0 += rows;
+			if (s_my0 >= s_my1) {
+				s_mirDirty = false;
+			}
+			s_mirPhys = s_phys;
+		}
+	}
+	xSemaphoreGive(s_mirLock);
+	return len;
 }
 
 void lcdReadRow(int y, uint16_t *out)
@@ -848,7 +1023,7 @@ static const char *lcdCmdCls(int argc, char *argv[], cmdReply_t reply)
 	return (lcdShowScreen(reply) == ESP_OK) ? NULL : "LCD write failed";
 }
 
-/* SCR FLIP [P|L|PL|NONE]: report, or store in NV, apply and re-send the screen. */
+/* SCR FLIP [P|L|PL|NONE]: report, or set (this boot only), apply and re-send the screen. */
 static const char *lcdCmdFlip(int argc, char *argv[], cmdReply_t reply)
 {
 	if (argc == 0) {
@@ -864,12 +1039,6 @@ static const char *lcdCmdFlip(int argc, char *argv[], cmdReply_t reply)
 		return "usage: SCR FLIP [P|L|PL|NONE]";
 	}
 
-	const char *keys[] = { "scr.pflip", "scr.lflip" };
-	const char *vals[] = { p ? "1" : "0", l ? "1" : "0" };
-	const char *err = nvSetMany(2, keys, vals, NULL);
-	if (err) {
-		return err;
-	}
 	s_pflip = p;
 	s_lflip = l;
 	lcdSetRotation(s_rot);				/* re-map the current rotation */
@@ -879,6 +1048,12 @@ static const char *lcdCmdFlip(int argc, char *argv[], cmdReply_t reply)
 static const char *lcdCmdRot(int argc, char *argv[], cmdReply_t reply)
 {
 	uint8_t rot;
+	if (argc == 0) {
+		char text[16];
+		snprintf(text, sizeof(text), "rot:%u\n", s_rot);
+		reply(text);
+		return NULL;
+	}
 	if (!cmdParseU8(argv[0], &rot)) {
 		return "value must be 0..255 (used modulo 4)";
 	}
@@ -894,11 +1069,14 @@ static const char *lcdCmdRot(int argc, char *argv[], cmdReply_t reply)
 
 static const char *lcdCmdBl(int argc, char *argv[], cmdReply_t reply)
 {
-	uint8_t pct;
-	if (!cmdParseU8(argv[0], &pct) || pct > 100) {
-		return "value must be 0..100";
+	static char err[32];
+	uint8_t     n;
+	int         steps = nvGetInt("scr.bl.steps");
+	if (!cmdParseU8(argv[0], &n) || n > steps) {
+		snprintf(err, sizeof(err), "level must be 0..%d", steps);
+		return err;
 	}
-	return (lcdBacklight(pct) == ESP_OK) ? NULL : "backlight failed";
+	return (lcdBacklight(n) == ESP_OK) ? NULL : "backlight failed";
 }
 
 static const char *lcdCmdScr(int argc, char *argv[], cmdReply_t reply)

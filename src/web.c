@@ -26,6 +26,12 @@
 #include "webpath.h"
 #include "nv.h"
 #include "fm.h"
+#include "lcd.h"
+#include "led.h"
+#include "ui.h"
+#include <limits.h>
+#include <time.h>
+#include "esp_heap_caps.h"
 
 static const char *TAG = "web";
 
@@ -42,6 +48,12 @@ static const char *TAG = "web";
 #define WEB_NAME_FILE		SD_MOUNT_POINT "/sys/uiname.txt"	/* page title (first line) */
 #define WEB_NAME_MAX		32
 #define WEB_PONG		"<<PONG>>\n"
+#define WEB_SCR_ON		"<<SCR ON>>"	/* page: send the LCD mirror */
+#define WEB_SCR_OFF		"<<SCR OFF>>"	/* page: stop it */
+#define WEB_MIR_MAX		(16 * 1024)	/* one mirror frame (a band of the change) */
+#define WEB_MIR_STACK		3072
+#define WEB_MIR_WAIT_MS		5000	/* a frame not sent by then: give up the rest */
+#define WEB_LED_MIN_MS		100	/* <<LED r,g,b>> at most this often */
 
 /* DEBUG: 1 = log every connection open/close and every GET with its timing */
 #define WEB_DEBUG		1
@@ -68,6 +80,9 @@ static SemaphoreHandle_t s_closed;		/* restart: close frame sent */
 static char              s_home[48];		/* http://<ip>[:port]/ */
 static bool              s_captive;		/* NV web.captive: DNS + redirects */
 static int               s_open;		/* DEBUG: open connections */
+static TaskHandle_t      s_mirTask;		/* sends LCD mirror frames and <<LED>> */
+static SemaphoreHandle_t s_mirSent;
+static volatile bool     s_ledDirty;		/* <<LED r,g,b>> to send */
 
 static esp_err_t webGetPage(httpd_req_t *req);
 static esp_err_t webGet(httpd_req_t *req);
@@ -86,6 +101,15 @@ static esp_err_t webDrain(httpd_req_t *req, httpd_ws_frame_t *f);
 static void      webDropAll(void *arg);
 static void      webShutdown(void);
 static void      webCloseWork(void *arg);
+static void      webTimeEvent(int adj);
+static void      webMirror(bool on);
+static void      webMirNotify(void);
+static void      webMirTask(void *arg);
+static void      webMirWork(void *arg);
+static void      webLedHook(uint8_t r, uint8_t g, uint8_t b);
+static bool      webMirTaskStart(void);
+static void      webLedSend(int64_t *last);
+static void      webLedWork(void *arg);
 
 /* ================= Public API ================= */
 
@@ -152,6 +176,9 @@ esp_err_t webStart(webRxCb_t rxCb, webConnCb_t connCb)
 	httpd_register_uri_handler(s_server, &uris[3]);
 	httpd_register_err_handler(s_server, HTTPD_404_NOT_FOUND, webRedirect);
 
+	if (webMirTaskStart()) {
+		ledOnChange(webLedHook);			/* the page's mirror frame colour */
+	}
 	ESP_LOGI(TAG, "%s at %s", s_captive ? "portal" : "console", s_home);
 	return ESP_OK;
 }
@@ -162,6 +189,7 @@ esp_err_t webStop(void)
 		return ESP_OK;
 	}
 	httpd_handle_t hd = s_server;
+	webMirror(false);
 	s_server = NULL;
 	s_fd     = -1;
 	esp_err_t err = httpd_stop(hd);
@@ -359,8 +387,12 @@ static esp_err_t webTime(httpd_req_t *req)
 		httpd_resp_set_status(req, "400 Bad Request");
 		return httpd_resp_sendstr(req, "bad time");
 	}
-	struct timeval tv = { .tv_sec = (time_t)t, .tv_usec = 0 };
+	time_t         old = time(NULL);
+	long long      d   = t - (long long)old;
+	struct timeval tv  = { .tv_sec = (time_t)t, .tv_usec = 0 };
 	settimeofday(&tv, NULL);
+	/* <<SYS TIME ...>> from the main task (uiSend here would wait on this task) */
+	uiRunMain(webTimeEvent, old < 1577836800 ? INT_MIN : d > INT_MAX - 1 ? INT_MAX - 1 : d < INT_MIN + 1 ? INT_MIN + 1 : (int)d);
 	WEB_DBG("clock set from the browser: %lld", t);
 	httpd_resp_set_hdr(req, "Cache-Control", "no-store");
 	return httpd_resp_sendstr(req, "OK");
@@ -386,6 +418,7 @@ static esp_err_t webWsOpen(httpd_req_t *req)
 	int fd  = httpd_req_to_sockfd(req);
 	int old = s_fd;
 
+	webMirror(false);					/* the page asks for it (<<SCR ON>>) */
 	s_fd = fd;
 	if (old >= 0 && old != fd) {				/* tell the old page it was replaced */
 		uint8_t close[2 + 8] = { WEB_CLOSE_REPLACED >> 8, WEB_CLOSE_REPLACED & 0xFF,
@@ -395,6 +428,7 @@ static esp_err_t webWsOpen(httpd_req_t *req)
 		httpd_sess_trigger_close(req->handle, old);
 	}
 	ESP_LOGI(TAG, "page connected (fd %d)", fd);
+	webLedHook(0, 0, 0);					/* send the current colour */
 	if (s_connCb) {
 		s_connCb(true);
 	}
@@ -435,6 +469,11 @@ static esp_err_t webWs(httpd_req_t *req)
 		                       .len = sizeof(WEB_PONG) - 1 };
 		return httpd_ws_send_frame(req, &r);
 	}
+	if ((f.len == sizeof(WEB_SCR_ON) - 1 && memcmp(buf, WEB_SCR_ON, f.len) == 0) ||
+	    (f.len == sizeof(WEB_SCR_OFF) - 1 && memcmp(buf, WEB_SCR_OFF, f.len) == 0)) {
+		webMirror(f.len == sizeof(WEB_SCR_ON) - 1);	/* LCD mirror box: not a command */
+		return ESP_OK;
+	}
 	buf[f.len++] = '\n';				/* one frame = one line */
 	if (s_rxCb && !s_rxCb(buf, f.len)) {
 		static const char busy[] = "ERR busy\n";
@@ -467,6 +506,7 @@ static void webOnClose(httpd_handle_t hd, int fd)
 	s_open--;
 	WEB_DBG("close fd %d (%d open)", fd, s_open);
 	if (fd == s_fd) {
+		webMirror(false);
 		s_fd = -1;
 		ESP_LOGI(TAG, "page disconnected");
 		if (s_connCb) {
@@ -528,4 +568,161 @@ static void webSendWork(void *arg)
 	}
 	free(m);
 	xSemaphoreGive(s_sent);
+}
+
+/* Main task: <<SYS TIME yyyymmdd_hhmmss adj:+n|-n|0|new>> after the browser
+ * set the clock (adj = seconds it moved, INT_MIN = it was not set). */
+static void webTimeEvent(int adj)
+{
+	char      stamp[20], text[64], a[16];
+	time_t    now = time(NULL);
+	struct tm tm;
+	localtime_r(&now, &tm);
+	strftime(stamp, sizeof(stamp), "%Y%m%d_%H%M%S", &tm);
+	if (adj == INT_MIN) {
+		snprintf(a, sizeof(a), "new");
+	} else {
+		snprintf(a, sizeof(a), "%+d", adj);
+	}
+	if (adj == 0) {
+		snprintf(a, sizeof(a), "0");
+	}
+	snprintf(text, sizeof(text), "<<SYS TIME %s adj:%s>>\n", stamp, a);
+	uiSend(text);
+}
+
+/* ================= LCD mirror ================= */
+
+/* The page's mirror box is open (on) or closed / rolled up / gone (off). */
+static bool webMirTaskStart(void)
+{
+	if (s_mirTask) {
+		return true;
+	}
+	if (!s_mirSent && !(s_mirSent = xSemaphoreCreateBinary())) {
+		return false;
+	}
+	if (xTaskCreate(webMirTask, "webmir", WEB_MIR_STACK, NULL, 4, &s_mirTask) != pdPASS) {
+		s_mirTask = NULL;
+		ESP_LOGW(TAG, "no memory for the mirror task");
+		return false;
+	}
+	return true;
+}
+
+static void webMirror(bool on)
+{
+	if (on && !webMirTaskStart()) {
+		return;
+	}
+	if (lcdMirrorSet(on, webMirNotify) != ESP_OK) {
+		ESP_LOGW(TAG, "no memory for the LCD mirror");
+	}
+}
+
+static void webMirNotify(void)
+{
+	TaskHandle_t t = s_mirTask;
+	if (t) {
+		xTaskNotifyGive(t);
+	}
+}
+
+/* Woken after screen updates: send the changed area in bands, one at a time
+ * (paced by the network; changes meanwhile are merged into what is left). */
+static void webMirTask(void *arg)
+{
+	int64_t ledLast = 0;
+	for (;;) {
+		ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+		webLedSend(&ledLast);
+		for (;;) {
+			int fd = s_fd;
+			if (!s_server || fd < 0) {
+				break;
+			}
+			webMsg_t *m = heap_caps_malloc(sizeof(webMsg_t) + WEB_MIR_MAX, MALLOC_CAP_SPIRAM);
+			if (!m) {
+				break;
+			}
+			m->fd  = fd;
+			m->len = lcdMirrorTake(m->data, WEB_MIR_MAX);
+			if (m->len == 0) {
+				free(m);
+				break;
+			}
+			xSemaphoreTake(s_mirSent, 0);
+			if (httpd_queue_work(s_server, webMirWork, m) != ESP_OK) {
+				free(m);
+				break;
+			}
+			if (xSemaphoreTake(s_mirSent, pdMS_TO_TICKS(WEB_MIR_WAIT_MS)) != pdTRUE) {
+				break;
+			}
+		}
+	}
+}
+
+/* Server task: one binary frame to the page. */
+static void webMirWork(void *arg)
+{
+	webMsg_t *m = arg;
+	if (s_server && m->fd == s_fd) {
+		httpd_ws_frame_t f = { .type = HTTPD_WS_TYPE_BINARY, .payload = m->data, .len = m->len };
+		httpd_ws_send_frame_async(s_server, m->fd, &f);
+	}
+	free(m);
+	xSemaphoreGive(s_mirSent);
+}
+
+/* LED colour changed (any task), or a page connected: <<LED>> wanted. */
+static void webLedHook(uint8_t r, uint8_t g, uint8_t b)
+{
+	s_ledDirty = true;
+	webMirNotify();
+}
+
+/* Mirror task: <<LED r,g,b>> to the page if wanted, at most every
+ * WEB_LED_MIN_MS (the latest colour always goes out). */
+static void webLedSend(int64_t *last)
+{
+	while (s_ledDirty) {
+		int64_t now = esp_timer_get_time() / 1000;
+		if (now - *last < WEB_LED_MIN_MS) {
+			vTaskDelay(pdMS_TO_TICKS(WEB_LED_MIN_MS - (now - *last)));
+			continue;
+		}
+		int fd = s_fd;
+		if (!s_server || fd < 0) {
+			return;					/* sent when a page connects */
+		}
+		s_ledDirty = false;
+		uint8_t c[3];
+		ledShown(c);
+		webMsg_t *m = malloc(sizeof(webMsg_t) + 24);
+		if (!m) {
+			return;
+		}
+		m->fd  = fd;
+		m->len = snprintf((char *)m->data, 24, "<<LED %u,%u,%u>>\n", c[0], c[1], c[2]);
+		xSemaphoreTake(s_mirSent, 0);
+		if (httpd_queue_work(s_server, webLedWork, m) != ESP_OK) {
+			free(m);
+			return;
+		}
+		xSemaphoreTake(s_mirSent, pdMS_TO_TICKS(WEB_MIR_WAIT_MS));
+		*last = esp_timer_get_time() / 1000;
+	}
+}
+
+/* Server task: <<LED r,g,b>> as a text frame. */
+static void webLedWork(void *arg)
+{
+	webMsg_t *m = arg;
+	if (s_server && m->fd == s_fd) {
+		httpd_ws_frame_t f = { .type = HTTPD_WS_TYPE_TEXT, .payload = m->data, .len = m->len };
+		httpd_ws_send_frame_async(s_server, m->fd, &f);
+	}
+	free(m);
+	xSemaphoreGive(s_mirSent);
 }

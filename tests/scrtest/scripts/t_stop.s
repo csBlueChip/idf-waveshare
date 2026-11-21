@@ -1,4 +1,4 @@
-QUIET 2
+UI EVENTS 1
 LET $i = 0
 LOOP FOREVER
   $i++

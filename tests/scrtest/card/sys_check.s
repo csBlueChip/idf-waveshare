@@ -9,7 +9,7 @@ FWRITE sysdata hello
 FSEEK sysdata START
 FREAD $s sysdata EOL
 PRINT "sysdata.txt: $s"
-CALL shapes.drawPoly 3 10 10 5
+CALL shapes.drawPoly 3 10 10 5 255,255,255
 GET $s = FSTAT sysdata.txt
 PRINT "home data: $s"
 GET $s = FSTAT /sys/sysdata.txt

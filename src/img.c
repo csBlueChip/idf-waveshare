@@ -22,7 +22,6 @@ static const char *TAG = "img";
 #define IMG_EXT		".png"
 #define IMG_MAX_FILES	20	/* IMG list and IMG n: the first 20 (IMG name: all) */
 #define IMG_STRIP_ROWS	16	/* fully opaque rows sent to the LCD in one go */
-#define IMG_ALPHA_MIN	128	/* pixels below this alpha are not drawn */
 #define IMG_COORD_MAX	1000
 #define IMG_DIR		SD_MOUNT_POINT "/images"
 #define IMG_SHOT_DIR	SD_MOUNT_POINT "/scrshots"
@@ -192,17 +191,17 @@ static esp_err_t imgDecode(png_structp png, png_infop info, imgBufs_t *b, int x,
 			continue;			/* above the screen */
 		}
 
-		uint16_t *out    = b->strip + stripRows * w;
-		bool      opaque = true;
-		for (png_uint_32 i = 0; i < w; i++) {
-			const uint8_t *p = b->rgba + i * 4;
-			out[i] = lcdRgb(p[0], p[1], p[2]);
-			if (p[3] < IMG_ALPHA_MIN) {
-				opaque = false;
-			}
+		bool opaque = true;
+		for (png_uint_32 i = 0; i < w && opaque; i++) {
+			opaque = b->rgba[i * 4 + 3] == 255;
 		}
 
-		if (opaque) {
+		if (opaque) {				/* fast path: rows gathered in strip */
+			uint16_t *out = b->strip + stripRows * w;
+			for (png_uint_32 i = 0; i < w; i++) {
+				const uint8_t *p = b->rgba + i * 4;
+				out[i] = lcdRgb(p[0], p[1], p[2]);
+			}
 			if (stripRows == 0) {
 				stripStart = r;
 			}
@@ -215,28 +214,15 @@ static esp_err_t imgDecode(png_structp png, png_infop info, imgBufs_t *b, int x,
 			continue;
 		}
 
-		/* row with transparency: flush pending opaque rows, then draw opaque runs */
+		/* row with transparency: flush pending opaque rows, then blend it
+		 * with what is on the screen (alpha 0 skipped, 255 solid) */
 		if (stripRows) {
 			if (lcdDrawPixels(x, y + stripStart, w, stripRows, b->strip) != ESP_OK) {
 				return ESP_FAIL;
 			}
-			memcpy(b->strip, out, w * sizeof(uint16_t));
-			out       = b->strip;
 			stripRows = 0;
 		}
-		for (png_uint_32 i = 0; i < w; ) {
-			if (b->rgba[i * 4 + 3] < IMG_ALPHA_MIN) {
-				i++;
-				continue;
-			}
-			png_uint_32 start = i;
-			while (i < w && b->rgba[i * 4 + 3] >= IMG_ALPHA_MIN) {
-				i++;
-			}
-			if (lcdDrawPixels(x + start, y + r, i - start, 1, out + start) != ESP_OK) {
-				return ESP_FAIL;
-			}
-		}
+		lcdBlendRow(x, y + r, (int)w, b->rgba);
 	}
 
 	if (stripRows && lcdDrawPixels(x, y + stripStart, w, stripRows, b->strip) != ESP_OK) {

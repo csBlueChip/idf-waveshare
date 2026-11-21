@@ -12,7 +12,7 @@ Setup
     adapter RX -> TX GPIO43, adapter TX -> RX GPIO44, GND -> GND,
     115200 8N1.
   - Both terminals: local echo OFF, send CR or CR LF on Enter.
-  - Start from telnet or web (UI TELNET / UI WEB) as the control console.
+  - Start from telnet or web (UI TELNET / UI WEB) as the control UI.
 
 
 A. NV SETTINGS
@@ -35,7 +35,7 @@ B. LOG ROUTING WITH A NETWORK UI
 
 B1  * (UI is TELNET or WEB) watch terminals A and B, then
     > UI
-    = active:TELNET (or WEB) default:... on the control console; log lines (e.g. "I (...) main:
+    = active:TELNET (or WEB) default:... on the control UI; log lines (e.g. "I (...) main:
       rx: UI") appear on BOTH A and B
 
 
@@ -43,7 +43,7 @@ C. USB UI
 ---------
 
 C1  > UI USB
-    = OK on the control console; the client drops; glass: fade to black,
+    = OK on the control UI; the client drops; glass: fade to black,
       Wait screen "UI  : USB - Serial"
 C2  * watch terminal B (UART) while switching
     = log lines continue on B; nothing new on A until you type
@@ -75,7 +75,7 @@ C13 * terminal A: type   +++   wait 1 s (debug on), then
     = OK
 C14 > UI UART
     = BAUD:115200, PINS:Tx:43 Rx:44, OK on A; glass Wait "UI  : UART",
-      "Baud: 115200 @8N1", "Pins: Tx:43 Rx:44". A is now the log port (logs
+      "Baud: 115200 @8N1", "Pins: Tx:43 Rx:44". A is now the console (logs
       keep coming there); debug ended with the UI switch
 
 
@@ -153,6 +153,6 @@ H. DBGF / LIMITS (code check)
 -----------------------------
 
 H1  * add   dbgf("dbgf test %d", 42);   anywhere at start-up, build, flash
-    = "dbgf test 42" on the log port(s), one line, CR LF ending
+    = "dbgf test 42" on the console, one line, CR LF ending
 H2  * USB UI active, run   FILES
-    = USB console ends (USB becomes the disk); reboot on eject as usual
+    = USB UI ends (USB becomes the disk); reboot on eject as usual

@@ -1,5 +1,7 @@
 #include "led.h"
 
+#include <string.h>
+
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
@@ -14,6 +16,8 @@ static led_strip_handle_t s_strip;
 static SemaphoreHandle_t  s_lock;
 static uint8_t            s_rgb[3];	/* colour as set */
 static bool               s_hidden;	/* dark until shown again (IMU SLEEP) */
+static uint8_t            s_shown[3];	/* on the LED now */
+static ledHook_t          s_hook;
 
 static esp_err_t ledShow(void);
 
@@ -88,14 +92,40 @@ esp_err_t ledHide(bool hide)
 /* Put the stored colour (or dark while hidden) on the LED. Caller holds s_lock. */
 static esp_err_t ledShow(void)
 {
+	uint8_t   c[3] = { 0, 0, 0 };
+	esp_err_t err;
 	if (s_hidden || (s_rgb[0] | s_rgb[1] | s_rgb[2]) == 0) {
-		return led_strip_clear(s_strip);
+		err = led_strip_clear(s_strip);
+	} else {
+		memcpy(c, s_rgb, 3);
+		err = led_strip_set_pixel(s_strip, 0, s_rgb[0], s_rgb[1], s_rgb[2]);
+		if (err == ESP_OK) {
+			err = led_strip_refresh(s_strip);
+		}
 	}
-	esp_err_t err = led_strip_set_pixel(s_strip, 0, s_rgb[0], s_rgb[1], s_rgb[2]);
-	if (err == ESP_OK) {
-		err = led_strip_refresh(s_strip);
+	if (memcmp(c, s_shown, 3) != 0) {
+		memcpy(s_shown, c, 3);
+		if (s_hook) {
+			s_hook(c[0], c[1], c[2]);	/* e.g. the web UI's mirror frame */
+		}
 	}
 	return err;
+}
+
+void ledOnChange(ledHook_t hook)
+{
+	s_hook = hook;
+}
+
+void ledShown(uint8_t rgb[3])
+{
+	if (s_lock) {
+		xSemaphoreTake(s_lock, portMAX_DELAY);
+	}
+	memcpy(rgb, s_shown, 3);
+	if (s_lock) {
+		xSemaphoreGive(s_lock);
+	}
 }
 
 /* ================= Commands ================= */

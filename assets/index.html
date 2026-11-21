@@ -17,25 +17,58 @@
 	#out .sys { color: #f96; }
 	#out .ok  { color: #6c6; }	/* status line: last line of a message */
 	#out .err { color: #ff6b8b; }
-	#bar { position: fixed; left: 0; right: 0; bottom: 0; display: flex; gap: 6px; padding: 6px;
+	#out .el  { display: block; }	/* ANSI line with ESC[K: the paper fills the line */
+	#bar { position: fixed; left: 0; right: 0; bottom: 0; display: flex; gap: 4px; padding: 3px;
 	       border-top: 1px solid #333; background: #1a1a1a; }
 	/* 16 px: iOS zooms the page in when a smaller input gets the focus */
-	#in { flex: 1; min-width: 0; padding: 8px; font: inherit; font-size: 16px; color: #eee; background: #000;
+	#in { flex: 1; min-width: 0; padding: 3px 6px; font: inherit; font-size: 16px; color: #eee; background: #000;
 	      border: 1px solid #444; border-radius: 4px; }
-	#send { padding: 8px 16px; font: inherit; color: #000; background: #8cf; border: 0; border-radius: 4px; }
+	#send { padding: 3px 10px; font: inherit; color: #000; background: #8cf; border: 0; border-radius: 4px; }
 	#send:disabled { background: #555; }
-	#hbtn { padding: 8px 12px; font: inherit; color: #ddd; background: #333; border: 1px solid #444; border-radius: 4px; }
+	#hbtn { padding: 3px 10px; font: inherit; color: #ddd; background: #333; border: 1px solid #444; border-radius: 4px; }
 	#hlist { position: fixed; left: 6px; right: 6px; max-height: 40vh; box-sizing: border-box; overflow-y: auto; display: none;
 	         background: #1a1a1a; border: 1px solid #444; border-radius: 4px;
 	         overscroll-behavior: contain; touch-action: pan-y; }	/* swipes stay in the list (no pull-to-refresh) */
-	#hlist div { padding: 10px 8px; border-bottom: 1px solid #2a2a2a; white-space: pre; overflow: hidden; text-overflow: ellipsis; }
+	#hlist div { padding: 3px 8px; border-bottom: 1px solid #2a2a2a; white-space: pre; overflow: hidden; text-overflow: ellipsis; }
 	#hlist div:active { background: #333; }
 	#hlist .none { color: #777; }
+	/* LCD mirror: top right, resized from the bottom-left corner */
+	/* frame in the board's LED colour (<<LED r,g,b>>, washed out: 70 % LED +
+	 * 30 % #999; off = black): 6 px, 2 px rolled up */
+	#mir { position: fixed; top: 8px; right: 8px; z-index: 5; background: #1a1a1a; overflow: hidden;
+	       border: 6px solid var(--led, #444); border-radius: 12px; box-shadow: 0 2px 8px #000; user-select: none; }
+	#mir.rolled { border-width: 2px; border-radius: 4px; }
+	#mbar { display: flex; align-items: center; gap: 4px; padding: 2px 4px; color: #aaa; font-size: 12px; }
+	#mbar span { flex: 1; }
+	#mbar button { padding: 0 6px; font: inherit; color: #ddd; background: #333; border: 1px solid #444; border-radius: 3px; }
+	#mcv { display: block; background: #000; }
+	#mgrip { position: absolute; left: 0; bottom: 0; width: 14px; height: 14px; cursor: nesw-resize;
+	         touch-action: none; }	/* invisible: the pointer shows it */
+	#mir.rolled #mcv, #mir.rolled #mgrip { display: none; }
+	/* F1 key list */
+	#keys { position: fixed; inset: 0; display: none; z-index: 10; align-items: center; justify-content: center;
+	        background: rgba(0, 0, 0, 0.6); }
+	#keys.on { display: flex; }
+	#keys div { max-width: 92vw; padding: 12px 16px; background: #1a1a1a; border: 1px solid #444; border-radius: 6px; }
+	#keys td { padding: 2px 12px 2px 0; vertical-align: top; }
+	#keys td.k { color: #8cf; white-space: nowrap; }
 </style>
 </head>
 <body>
 <div id="out"><div id="log"></div></div>
 <div id="hlist"></div>
+<div id="mir"><div id="mbar"><span id="mrot">LCD</span>
+	<button id="mroll" title="roll up / down">^</button></div>
+	<canvas id="mcv"></canvas><div id="mgrip" title="resize"></div></div>
+<div id="keys"><div><b>Keys</b> <span style="color:#888">(F1 or Esc closes)</span><table>
+	<tr><td class="k">Enter</td><td>send the line</td></tr>
+	<tr><td class="k">Up / Down</td><td>previous / next line from the history</td></tr>
+	<tr><td class="k">^ button</td><td>history list (tap a line to use it)</td></tr>
+	<tr><td class="k">LCD (top right)</td><td>screen mirror: v / ^ rolls it down / up (rolled up: nothing
+		is sent), the bottom-left corner resizes it</td></tr>
+	<tr><td class="k">F1</td><td>this list</td></tr>
+	<tr><td class="k">Esc</td><td>close this list</td></tr>
+</table></div></div>
 <div id="bar">
 	<button id="hbtn" title="history">^</button>
 	<input id="in" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
@@ -68,9 +101,77 @@
 		log.appendChild(span);
 		if (atEnd) window.scrollTo(0, pageEnd());	/* follow new output only if already at the end */
 	}
+	/* ANSI colour (PRINT / DEBUG \\i \\p escapes): SGR 0 30-37 39 40-47 49 90-97
+	 * 100-107 and ESC[K. Palette: ansi.* keys of syntax.cfg (/fm/ansi). */
+	var PAL = { 0: "#000", 1: "#c33", 2: "#3b3", 3: "#cb3", 4: "#36d", 5: "#c3c", 6: "#3bc", 7: "#ccc",
+	            90: "#777", 91: "#f66", 92: "#6f6", 93: "#ff6", 94: "#79f", 95: "#f6f", 96: "#6ff", 97: "#fff",
+	            id: "", pd: "" };
+	function ansiAdd(t) {
+		t = t.replace(/\r/g, "");
+		var atEnd = window.innerHeight + window.scrollY >= pageEnd() - 4;
+		var ink = "", paper = "", line = [], el = false, elPaper = "";
+		function span(s) {
+			if (!s) return;
+			var e = document.createElement("span");
+			e.textContent = s;
+			if (ink || PAL.id) e.style.color = ink || PAL.id;
+			if (paper || PAL.pd) e.style.background = paper || PAL.pd;
+			line.push(e);
+		}
+		function flush(nl) {
+			if (el) {				/* ESC[K: a full-width line in that paper */
+				var w = document.createElement("span");
+				w.className = "el";
+				if (elPaper) w.style.background = elPaper;
+				line.forEach(function (e) { w.appendChild(e); });
+				if (!line.length) w.textContent = "\u00a0";
+				log.appendChild(w);
+			} else {
+				line.forEach(function (e) { log.appendChild(e); });
+				if (nl) log.appendChild(document.createTextNode("\n"));
+			}
+			line = []; el = false; elPaper = "";
+		}
+		function text(s) {
+			var parts = s.split("\n");
+			parts.forEach(function (p, i) {
+				span(p);
+				if (i < parts.length - 1) flush(true);
+			});
+		}
+		var re = /\x1b\[([0-9;]*)([A-Za-z])/g, last = 0, m;
+		while ((m = re.exec(t)) !== null) {
+			text(t.substring(last, m.index));
+			last = re.lastIndex;
+			if (m[2] === "K") { el = true; elPaper = paper || PAL.pd; continue; }
+			if (m[2] !== "m") continue;
+			(m[1] === "" ? ["0"] : m[1].split(";")).forEach(function (v) {
+				var n = parseInt(v, 10);
+				if (n === 0) { ink = ""; paper = ""; }
+				else if (n >= 30 && n <= 37) ink = PAL[n - 30];
+				else if (n === 39) ink = "";
+				else if (n >= 40 && n <= 47) paper = PAL[n - 40];
+				else if (n === 49) paper = "";
+				else if (n >= 90 && n <= 97) ink = PAL[n];
+				else if (n >= 100 && n <= 107) paper = PAL[n - 10];
+			});
+		}
+		text(t.substring(last));
+		if (line.length || el) flush(false);
+		if (atEnd) window.scrollTo(0, pageEnd());
+	}
+	/* palette from syntax.cfg (SD:/sys/syntax.cfg or the built-in copy) */
+	fetch("/fm/ansi").then(function (r) { return r.ok ? r.text() : ""; }).then(function (txt) {
+		txt.split(/\r?\n/).forEach(function (l) {
+			var m = /^\s*ansi\.(\d+|id|pd)\s*=\s*(#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?)\b/.exec(l);
+			if (m) PAL[/^\d+$/.test(m[1]) ? parseInt(m[1], 10) : m[1]] = m[2];
+		});
+	}).catch(function () {});
+
 	/* one message from the board: its last line green if it starts with OK,
 	 * red if with ERR (command status); earlier lines are never coloured */
 	function addMsg(t) {
+		if (t.indexOf("\x1b") >= 0) { ansiAdd(t); return; }
 		var body = t.replace(/\n$/, ""), i = body.lastIndexOf("\n");
 		var last = body.slice(i + 1), m = /^(OK|ERR)\b/.exec(last);
 		if (!m) { add(t); return; }
@@ -143,6 +244,7 @@
 	function openSocket() {
 		var opened = false, lastRx = 0, pingAt = 0, beat = null;
 		var sock = ws = new WebSocket("ws://" + location.host + "/ws");
+		sock.binaryType = "arraybuffer";		/* LCD mirror frames */
 		var guard = setTimeout(function () {		/* not open in time: give up, retry */
 			if (!opened) sock.close();
 		}, OPEN_MS);
@@ -178,11 +280,20 @@
 				}
 			}, 500);
 			setConnected(true);
+			mirSync();				/* box open: ask for the mirror */
 		};
 		sock.onmessage = function (e) {
 			lastRx = Date.now();
 			pingAt = 0;				/* anything proves the link is alive */
+			if (typeof e.data !== "string") { mirFrame(e.data); return; }
 			if (e.data === PONG) return;
+			var led = /^<<LED (\d+),(\d+),(\d+)>>\n?$/.exec(e.data);	/* the mirror frame colour */
+			if (led) {
+				var c = [led[1], led[2], led[3]].map(Number), off = !(c[0] || c[1] || c[2]);
+				c = c.map(function (v) { return off ? 0 : Math.round(v * 0.7 + 0x99 * 0.3); });	/* softer, like the real LED */
+				mir.style.setProperty("--led", "rgb(" + c.join(",") + ")");
+				return;
+			}
 			addMsg(e.data);
 			var go = /<<GOTO (\/[^>\s]*)>>/.exec(e.data);	/* e.g. FILES WEB: open the SD manager */
 			if (go) setTimeout(function () { location.href = go[1]; }, 300);
@@ -281,6 +392,89 @@
 		pos = hist.length;
 	}).catch(function () {});
 
+	/* ---------- LCD mirror box ---------- */
+	/* The board sends the changed area of the panel as binary frames while the
+	 * box is rolled down (<<SCR ON>> / <<SCR OFF>>): 'M', rotation
+	 * as mapped (0..3), x y w h (u16 LE, native 172 x 320), RGB565 (u16 LE).
+	 * The picture is shown turned by -90 deg x rotation: upright for the ROT. */
+	var NW = 172, NH = 320, MKEY = "wdmir";
+	var mir = document.getElementById("mir"), mcv = document.getElementById("mcv");
+	var mroll = document.getElementById("mroll");
+	var mrot = document.getElementById("mrot"), mgrip = document.getElementById("mgrip");
+	var nat = document.createElement("canvas");
+	nat.width = NW; nat.height = NH;
+	var nctx = nat.getContext("2d"), mctx = mcv.getContext("2d");
+	var mst = { rolled: true, w: 172 }, mphys = 0, mOnSent = false;	/* default: rolled up */
+	try { var ms = JSON.parse(localStorage.getItem(MKEY)); if (ms) mst = { rolled: ms.rolled !== false, w: ms.w || 172 }; } catch (e) { }
+	function mirSave() { try { localStorage.setItem(MKEY, JSON.stringify(mst)); } catch (e) { } }
+	function mirSend(on) {
+		if (ws && ws.readyState === 1 && on !== mOnSent) { ws.send(on ? "<<SCR ON>>" : "<<SCR OFF>>"); mOnSent = on; }
+	}
+	function mirSync() {
+		mOnSent = false;			/* a new socket starts with the mirror off */
+		if (!mst.rolled) mirSend(true);
+	}
+	function mirSize() {
+		var land = mphys & 1, lw = land ? NH : NW, lh = land ? NW : NH;
+		var w = Math.max(80, Math.min(mst.w, window.innerWidth - 16));
+		mcv.width = lw; mcv.height = lh;
+		mcv.style.width = w + "px";
+		mcv.style.height = Math.round(w * lh / lw) + "px";
+		mrot.textContent = "LCD ROT " + mphys;
+		mirDraw();
+	}
+	function mirDraw() {
+		mctx.save();
+		mctx.setTransform(1, 0, 0, 1, 0, 0);
+		mctx.translate(mcv.width / 2, mcv.height / 2);
+		mctx.rotate(-mphys * Math.PI / 2);
+		mctx.drawImage(nat, -NW / 2, -NH / 2);
+		mctx.restore();
+	}
+	function mirFrame(buf) {
+		var b = new DataView(buf);
+		if (buf.byteLength < 10 || b.getUint8(0) !== 77) return;	/* 'M' */
+		var p = b.getUint8(1) & 3, x = b.getUint16(2, true), y = b.getUint16(4, true);
+		var w = b.getUint16(6, true), h = b.getUint16(8, true);
+		if (w && h && buf.byteLength >= 10 + w * h * 2) {
+			var img = nctx.createImageData(w, h), d = img.data, o = 10;
+			for (var i = 0; i < w * h; i++, o += 2) {
+				var v = b.getUint16(o, true);
+				d[i * 4]     = ((v >> 11) & 31) * 255 / 31;
+				d[i * 4 + 1] = ((v >> 5) & 63) * 255 / 63;
+				d[i * 4 + 2] = (v & 31) * 255 / 31;
+				d[i * 4 + 3] = 255;
+			}
+			nctx.putImageData(img, x, y);
+		}
+		if (p !== mphys) { mphys = p; mirSize(); } else mirDraw();
+	}
+	function mirShow() {
+		mir.classList.toggle("rolled", mst.rolled);
+		mroll.textContent = mst.rolled ? "v" : "^";
+		mirSize();
+		mirSend(!mst.rolled);
+		mirSave();
+	}
+	mroll.onclick = function () { mst.rolled = !mst.rolled; mirShow(); };
+	mgrip.onpointerdown = function (e) {			/* drag left / down = bigger */
+		e.preventDefault();
+		var x0 = e.clientX, w0 = mcv.offsetWidth;
+		mgrip.setPointerCapture(e.pointerId);
+		mgrip.onpointermove = function (m) { mst.w = w0 + (x0 - m.clientX); mirSize(); };
+		mgrip.onpointerup = function () { mgrip.onpointermove = mgrip.onpointerup = null; mirSave(); };
+	};
+	window.addEventListener("resize", mirSize);
+
+	/* ---------- F1: key list ---------- */
+	var keys = document.getElementById("keys");
+	document.addEventListener("keydown", function (e) {
+		if (e.key === "F1") { e.preventDefault(); keys.classList.toggle("on"); }
+		else if (e.key === "Escape" && keys.classList.contains("on")) { e.preventDefault(); keys.classList.remove("on"); }
+	});
+	keys.onclick = function () { keys.classList.remove("on"); };
+
+	mirShow();
 	setConnected(false);
 	fitBar();
 	connect();

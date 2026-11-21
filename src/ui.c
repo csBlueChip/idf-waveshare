@@ -1,8 +1,10 @@
 #include "ui.h"
+#include "ansi.h"
 
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <strings.h>
 #include "esp_log.h"
@@ -24,6 +26,7 @@
 #include "uiscr.h"
 #include "log.h"
 #include "script.h"
+#include "imu.h"
 #include "fm.h"
 #include "usbdisk.h"
 #include "reset.h"
@@ -101,7 +104,7 @@ static int64_t           s_rstArmedAt;	/* poll: first long press released (ms) *
 static volatile bool     s_rstBusy;	/* main task is carrying it out */
 
 /* EVENTS: which <<src ...>> messages the client receives (this boot) */
-static const char *const s_evNames[] = { "BTN", "IMU", "UI", "SCRIPT" };
+static const char *const s_evNames[] = { "BTN", "IMU", "UI", "SYS", "SCRIPT" };
 #define UI_EV_SOURCES		(int)(sizeof(s_evNames) / sizeof(s_evNames[0]))
 static volatile uint8_t  s_evMute;	/* bit i set = s_evNames[i] muted */
 
@@ -186,7 +189,7 @@ esp_err_t uiInit(void)
 
 	err = cmdRegister("UI", 0, 2, uiCmd, "UI [BLE|TELNET|WEB|UART|USB|MSC] [DEFAULT] | UI DEFAULT  show / switch / boot default");
 	if (err == ESP_OK) {
-		err = cmdRegister("EVENTS", 0, 2, uiCmdEvents, "EVENTS [BTN|IMU|UI|SCRIPT|ALL 0|1]  events sent to the client");
+		err = cmdRegister("EVENTS", 0, 2, uiCmdEvents, "EVENTS [BTN|IMU|UI|SYS|SCRIPT|ALL 0|1]  events sent to the client");
 	}
 	return err;
 }
@@ -310,7 +313,7 @@ void uiReadLine(char *line, size_t max)
 void uiSend(const char *text)
 {
 	if (scriptEvent(text)) {			/* <<BTN|IMU|UI ...>> for a running script */
-		return;					/* its QUIET 2/3 hides events from the client */
+		return;					/* its UI EVENTS 0/1 hides events from the client */
 	}
 	uiSendText(text);
 }
@@ -320,13 +323,34 @@ bool uiHasClient(void)
 	return s_client;
 }
 
+/* NV switch for colour codes on interface ifc (ble.ansi.ui ...). */
+bool uiAnsi(uiIf_t ifc)
+{
+	switch (ifc) {
+	case UI_BLE:    return nvGetInt("ble.ansi.ui");
+	case UI_TELNET: return nvGetInt("telnet.ansi.ui");
+	case UI_WEB:    return nvGetInt("web.ansi.ui");
+	case UI_UART:   return nvGetInt("uart.ansi.ui");
+	case UI_USB:    return nvGetInt("usb.ansi.ui");
+	default:        return false;
+	}
+}
+
 void uiSendText(const char *text)
 {
 	esp_err_t err;
 	size_t    len = strlen(text);
+	char     *plain = NULL;
 
 	if (uiEvMuted(text)) {
 		return;						/* EVENTS src 0 */
+	}
+	if (ansiHas(text) && !uiAnsi(s_active)) {		/* colour off: send it plain */
+		plain = strdup(text);
+		if (plain) {
+			len  = ansiStrip(plain);
+			text = plain;
+		}
 	}
 	xSemaphoreTake(s_sendLock, portMAX_DELAY);
 	switch (s_active) {
@@ -338,6 +362,7 @@ void uiSendText(const char *text)
 	default:        err = ESP_OK; break;
 	}
 	xSemaphoreGive(s_sendLock);
+	free(plain);
 	if (err != ESP_OK) {
 		ESP_LOGW(TAG, "reply not sent (%s)", esp_err_to_name(err));
 	}
@@ -618,6 +643,9 @@ static void uiEvent(uint8_t kind)
 		s_client = true;
 		uiSend("<<UI CONNECT>>\n");		/* the client's first message */
 		scriptWaitEnd();			/* onWait instead exits, after runs */
+		if (fmActive() || !scriptConnectRuns()) {
+			imuOrientSet(IMU_OR_P, true);		/* splash default (else onConnect before) */
+		}
 		if (fmActive()) {
 			uiScrConnect();			/* SD manager: no onConnect script */
 		} else {
@@ -629,7 +657,17 @@ static void uiEvent(uint8_t kind)
 		fmStop();
 		break;
 	case UI_EV_MSC:
-		if (s_active == UI_MSC && usbDiskBegin() != NULL) {
+		if (s_active != UI_MSC) {
+			break;
+		}
+		{
+			bool ran = scriptWaitRan();
+			scriptWaitEnd();			/* onWait after: may set ORIENT for disk mode */
+			if (!ran) {
+				imuOrientSet(IMU_OR_P, true);	/* disk mode image default */
+			}
+		}
+		if (usbDiskBegin() != NULL) {
 			ESP_LOGW(TAG, "disk mode could not start");
 		}
 		break;
@@ -952,7 +990,7 @@ static void uiResetEvent(uint8_t kind)
 			snprintf(text, sizeof(text), "ERR %s", e);
 			uiScrResetMsg(text, "");
 		} else {
-			uiScrResetMsg("reset.s done", "");
+			uiScrResetMsg("onReset.s done", "");
 		}
 		s_rstBusy = false;
 		uiBootWatch();
@@ -983,6 +1021,10 @@ static const char *uiCmd(int argc, char *argv[], cmdReply_t reply)
 		snprintf(text, sizeof(text), "active:%s default:%s\n", uiName(s_active), nvGet("sys.ui"));
 		reply(text);
 		return NULL;
+	}
+
+	if (strcasecmp(argv[0], "EVENTS") == 0) {
+		return "script only";			/* UI EVENTS n: a script statement (scr_exec.c) */
 	}
 
 	/* UI DEFAULT: the current interface becomes the boot default */
@@ -1151,7 +1193,7 @@ static const char *uiCmdEvents(int argc, char *argv[], cmdReply_t reply)
 	}
 	int on;
 	if (argc != 2 || !cmdParseInt(argv[1], 0, 1, &on)) {
-		return "usage: EVENTS [BTN|IMU|UI|SCRIPT|ALL 0|1]";
+		return "usage: EVENTS [BTN|IMU|UI|SYS|SCRIPT|ALL 0|1]";
 	}
 	uint8_t bits = 0;
 	if (strcasecmp(argv[0], "ALL") == 0) {
@@ -1164,7 +1206,7 @@ static const char *uiCmdEvents(int argc, char *argv[], cmdReply_t reply)
 		}
 	}
 	if (!bits) {
-		return "usage: EVENTS [BTN|IMU|UI|SCRIPT|ALL 0|1]";
+		return "usage: EVENTS [BTN|IMU|UI|SYS|SCRIPT|ALL 0|1]";
 	}
 	s_evMute = on ? (s_evMute & ~bits) : (s_evMute | bits);
 	return NULL;

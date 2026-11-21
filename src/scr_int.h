@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "scr.h"
+#include "ansi.h"
 #include "scr_host.h"
 #include "script_cfg.h"
 
@@ -15,9 +16,9 @@ typedef enum {
 	K_CMD, K_LET, K_INCR, K_GET, K_VARS, K_DEL, K_INS,
 	K_IF, K_ELIF, K_ELSE, K_END, K_LOOP, K_BREAK, K_NEXT,
 	K_SWITCH, K_CASE, K_GOTO, K_LABEL, K_EXIT, K_FN, K_RETURN, K_CALL,
-	K_ON, K_ONERROR, K_QUIET, K_TRACE, K_PRINT, K_DEBUG, K_RNG, K_TIMER,
+	K_ON, K_ONERROR, K_TRACE, K_PRINT, K_DEBUG, K_RNG, K_TIMER,
 	K_WAIT, K_INPUT, K_BPT, K_ACC, K_GYR, K_STACK, K_CONST,
-	K_CONSOLE, K_PAUSE,
+	K_CONSOLE, K_PAUSE, K_INK, K_PAPER,
 	K_VARSIO, K_FWRITE, K_FREAD, K_FTELL, K_FSEEK, K_FCLOSE, K_FILES,
 } scrKind_t;
 
@@ -126,14 +127,17 @@ typedef struct {
 
 	/* running */
 	bool       active;
-	char       name[SCR_PNAME_MAX + 1];
+	char       name[SCR_PNAME_MAX + 1];	/* the file (BPT n, LIST) */
+	char       dname[SCR_RUNNAME_MAX + 1];	/* in <<SCRIPT ...>>: name, or name.fn */
 	scrFrame_t frames[SCR_STACK_MAX + 1];
 	int        depth;		/* frames in use */
 	scrVar_t   globals[SCR_GLOBALS];
 	int        nGlobals;
-	int        handlers[4][2];	/* per source: module, function (-1 = none) */
+	int        handlers[SCR_SRCS][2];	/* per source: module, function (-1 = none) */
+	int        evmask;		/* sources turned on (SCR_SRC_*) */
 	bool       inHandler;
-	int        quiet, trace;
+	int        uivol, trace;
+	int        ink, paper;		/* INK / PAPER for PRINT / DEBUG (ANSI_NONE = none) */
 	int        onerr;		/* 0 STOP, 1 CONT, 2 GOTO */
 	char       onerrLabel[SCR_NAME_MAX + 1];
 	int        onerrDepth;
@@ -212,7 +216,7 @@ const char *scrSubst(const char *s, int mode, char quote);	/* arena */
  * escaped, "\$" kept (the command does quotes and escapes) */
 enum { SUB_CMD, SUB_TEXT, SUB_PLAIN, SUB_RAW };
 const char *scrUnquote(const char *in);		/* arena; fails on bad quotes */
-void  scrUnescape(char *s);			/* \n \\ \# \$ ; \1..\9 dropped */
+char *scrUnescape(const char *s);		/* \n \\ \# \$ \i.. \p.. (ANSI); \1..\9 dropped; arena copy */
 scrVal_t scrReadVarRef(const char **pp);	/* $x $$x $.x ${..} [n] at *pp */
 bool  scrConstFind(const char *name, int len, const char **val);
 bool  scrConstText(const char *name, int len);	/* a quoted (text) constant */

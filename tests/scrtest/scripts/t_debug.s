@@ -1,5 +1,5 @@
 # debugger (answers come from t_debug.opt -go)
-QUIET 2
+UI EVENTS 1
 LET $a = 1
 CALL f 5
 LET $b = 2 ; LET $c = 3

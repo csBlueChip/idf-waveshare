@@ -1,5 +1,13 @@
-# events, handlers, WAIT EVENT, TIMER, INPUT
-QUIET 1
+# events, handlers, WAIT EVENT, TIMER, INPUT; sources start off
+UI EVENTS 2
+GET $s = EVENTS
+PRINT start: $s
+ONERROR CONT
+WAIT EVENT
+PRINT none on: $.err
+ONERROR STOP
+EVENTS BTN 1
+EVENTS IMU 1
 EVT BTN 1 SHORT
 EVT IMU TAP
 WAIT EVENT
@@ -33,6 +41,16 @@ END
 TIMER 2 0
 ON TIMER OFF
 ON IMU OFF
+GET $s = EVENTS
+PRINT after OFF: $s
+EVENTS BTN 0
+EVT BTN 3 SHORT
+WAIT EVENT 50
+PRINT btn off: [$.event]
+ONERROR CONT
+EVENTS FOO 1
+PRINT bad: $.err
+ONERROR STOP
 XINPUT hello there
 INPUT $in 1000
 PRINT input: [$in] ok=$.ok

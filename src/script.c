@@ -20,8 +20,10 @@
 #include "esp_attr.h"
 
 #include "scr.h"
+#include "ansi.h"
 #include "scr_host.h"
 #include "script_cfg.h"
+#include "alias.h"
 #include "cmd.h"
 #include "nv.h"
 #include "sd.h"
@@ -38,7 +40,7 @@ static const char *TAG = "script";
 #define SCRIPT_DIR		SD_MOUNT_POINT "/scripts"
 #define SCRIPT_TASK_STACK	16384
 #define SCRIPT_TASK_PRIO	1		/* = main task: STOP is always read */
-#define SCRIPT_EV_TEXT		64
+#define SCRIPT_EV_TEXT		128		/* <<IMU TAP ...>> with tap values: ~80 */
 #define SCRIPT_WATCH_MS		50		/* BOOT escape watcher poll */
 #define SCRIPT_ESCAPE_MS	3000		/* hold BOOT this long: autorun off */
 #define SCRIPT_BOOT_GPIO	GPIO_NUM_0
@@ -75,7 +77,7 @@ static EXT_RAM_BSS_ATTR scriptEv_t s_ev[SCR_EVQ];
 static int               s_nev, s_dropped;
 
 static volatile bool     s_running, s_paused, s_system;
-static char              s_curName[SCR_FNAME_MAX + 8];	/* script being run (INFO) */
+static char              s_curName[SCR_RUNNAME_MAX + 1];	/* script being run (INFO): name or name.fn */
 static volatile bool     s_stopReq, s_pauseReq, s_abort;
 static volatile int      s_go = -1;
 static volatile bool     s_inputWait, s_inputHave;
@@ -83,6 +85,7 @@ static EXT_RAM_BSS_ATTR char s_inputLine[CMD_LINE_MAX + 1];
 static int64_t           s_lastYield;
 static int64_t           s_watchDown;
 static bool              s_waitActive, s_waitInstead;
+static bool              s_waitRan;		/* onWait ran for the current Wait screen */
 static EXT_RAM_BSS_ATTR char s_waitDetails[200];
 
 /* USB console while paused with no client */
@@ -103,6 +106,7 @@ static bool        scriptPath(const char *name, char *out, size_t n);
 static bool        scriptAutorun(void);
 static const char *scriptCmdRun(const char *args, cmdReply_t reply);
 static const char *scriptCmdLoad(const char *args, cmdReply_t reply);
+static const char *scriptCmdCall(const char *args, cmdReply_t reply);
 static const char *scriptCmdStop(int argc, char *argv[], cmdReply_t reply);
 static const char *scriptCmdPause(int argc, char *argv[], cmdReply_t reply);
 static const char *scriptCmdCont(int argc, char *argv[], cmdReply_t reply);
@@ -137,6 +141,7 @@ esp_err_t scriptInit(void)
 
 	esp_err_t err = cmdRegisterRaw("RUN", scriptCmdRun, "RUN [name [args]]  list / start a script");
 	if (err == ESP_OK) err = cmdRegisterRaw("LOAD", scriptCmdLoad, "LOAD name [args]  load, pause at the first line");
+	if (err == ESP_OK) err = cmdRegisterRaw("CALL", scriptCmdCall, "CALL file.fn [args]  run one function of file.s");
 	if (err == ESP_OK) err = cmdRegister("STOP", 0, 1, scriptCmdStop, "STOP [NOW]  stop the script");
 	if (err == ESP_OK) err = cmdRegister("PAUSE", 0, 0, scriptCmdPause, "PAUSE  pause the script");
 	if (err == ESP_OK) err = cmdRegister("CONT", 0, 0, scriptCmdCont, "CONT  resume a paused script");
@@ -226,7 +231,13 @@ void scriptConsoleLine(const char *line)
 		}
 		return;
 	}
-	cmdExecute(line, uiSend);
+	char        ex[CMD_LINE_MAX + 1];
+	const char *run = aliasExpand(line, ex, sizeof(ex));	/* console line: aliases */
+	if (!run) {
+		uiSend("ERR alias: line too long\n");
+		return;
+	}
+	cmdExecute(run, uiSend);
 }
 
 bool scriptEvent(const char *text)
@@ -236,8 +247,8 @@ bool scriptEvent(const char *text)
 	}
 	const char *t   = text + 2;
 	int         src = scrEventSource(t);
-	if (!(src & (SCR_SRC_BTN | SCR_SRC_IMU | SCR_SRC_UI))) {
-		return false;
+	if (!(src & (SCR_SRC_BTN | SCR_SRC_IMU | SCR_SRC_UI | SCR_SRC_SYS) & scrEvMask())) {
+		return false;				/* not turned on by the script: the client's */
 	}
 	const char *e = strstr(t, ">>");
 	int         n = e ? (int)(e - t) : (int)strlen(t);
@@ -254,7 +265,7 @@ bool scriptEvent(const char *text)
 	ev->cnt   = 1;
 	xSemaphoreGive(s_evLock);
 	xSemaphoreGive(s_sig);
-	return scrQuiet() >= 2;			/* QUIET 2, 3: the client does not see it */
+	return scrUiVol() <= 1;			/* UI EVENTS 0, 1: the client does not see it */
 }
 
 void scriptBoot(void)
@@ -269,9 +280,11 @@ bool scriptWaitBegin(const char *details)
 {
 	s_waitActive  = false;
 	s_waitInstead = false;
+	s_waitRan     = false;
 	if (!scriptAutorun() || s_running || !scriptExists(SCR_SYS_PREFIX "onWait")) {
 		return false;
 	}
+	s_waitRan = true;
 	snprintf(s_waitDetails, sizeof(s_waitDetails), "%s", details);
 	s_waitActive = true;
 	scriptStart(SCR_SYS_PREFIX "onWait", details, "before", false, true, true, NULL);
@@ -300,6 +313,16 @@ void scriptWaitEnd(void)
 	}
 }
 
+bool scriptWaitRan(void)
+{
+	return s_waitRan;
+}
+
+bool scriptConnectRuns(void)
+{
+	return scriptAutorun() && !s_running && scriptExists(SCR_SYS_PREFIX "onConnect");
+}
+
 void scriptConnect(const char *uiName, void (*builtin)(void))
 {
 	if (!scriptAutorun() || s_running || !scriptExists(SCR_SYS_PREFIX "onConnect")) {
@@ -322,7 +345,7 @@ void scriptClientGone(void)
 	if (!s_running || s_system) {
 		return;
 	}
-	if (s_paused || !scrHasHandler(SCR_SRC_UI)) {
+	if (s_paused || !scrHasHandler(SCR_SRC_UI & scrEvMask())) {
 		s_stopReq = true;				/* nobody left to see it */
 		s_go      = SCR_GO_STOP;
 		xSemaphoreGive(s_sig);
@@ -465,7 +488,11 @@ static void scriptTask(void *arg)
 			esp_timer_start_periodic(s_watch, SCRIPT_WATCH_MS * 1000);
 		}
 
-		snprintf(s_curName, sizeof(s_curName), "%s", job.name);
+		if (job.fn[0]) {
+			snprintf(s_curName, sizeof(s_curName), "%s.%s", job.name, job.fn);
+		} else {
+			snprintf(s_curName, sizeof(s_curName), "%s", job.name);
+		}
 		scrResult_t r = scrRun(job.name, job.args, job.fn[0] ? job.fn : NULL, job.load);
 
 		if (job.system) {
@@ -512,6 +539,9 @@ static void scriptWatchCb(void *arg)
 static void scriptTimerCb(void *arg)
 {
 	int n = (int)(intptr_t)arg;
+	if (!(scrEvMask() & SCR_SRC_TIMER)) {
+		return;					/* EVENTS TIMER 0 */
+	}
 	xSemaphoreTake(s_evLock, portMAX_DELAY);
 	bool merged = false;
 	for (int i = 0; i < s_nev; i++) {
@@ -555,6 +585,15 @@ static void scriptWaitSig(int64_t deadline)
 
 static void usbReply(const char *text)
 {
+	if (ansiHas(text) && !uiAnsi(UI_USB)) {		/* colour off: plain */
+		char *p = strdup(text);
+		if (p) {
+			size_t l = ansiStrip(p);
+			serWrite(SER_USB, p, l, true);
+			free(p);
+			return;
+		}
+	}
 	serWrite(SER_USB, text, strlen(text), true);
 }
 
@@ -911,10 +950,15 @@ int scrHostPause(void)
 			break;
 		}
 		if (s_usbHave) {				/* USB console: run the line here */
-			char line[CMD_LINE_MAX + 1];
+			char line[CMD_LINE_MAX + 1], ex[CMD_LINE_MAX + 1];
 			snprintf(line, sizeof(line), "%s", s_usbCmd);
 			s_usbHave = false;
-			cmdExecute(line, usbReply);
+			const char *run = aliasExpand(line, ex, sizeof(ex));
+			if (run) {
+				cmdExecute(run, usbReply);
+			} else {
+				usbReply("ERR alias: line too long\n");
+			}
 			continue;
 		}
 		scriptWaitSig(-1);
@@ -1109,6 +1153,63 @@ static const char *scriptCmdRun(const char *args, cmdReply_t reply)
 static const char *scriptCmdLoad(const char *args, cmdReply_t reply)
 {
 	return runOrLoad(args, reply, true);
+}
+
+/* CALL file.fn [args] (UI): run only function fn of file.s, args as its
+ * parameters. In a script CALL is the statement (scr_exec.c), never this. */
+static const char *scriptCmdCall(const char *args, cmdReply_t reply)
+{
+	static const char usage[] = "usage: CALL file.fn [args]";
+	while (*args == ' ' || *args == '\t') {
+		args++;
+	}
+	int l = 0;
+	while (args[l] && args[l] != ' ' && args[l] != '\t') {
+		l++;
+	}
+	const char *dot = NULL;
+	for (int i = 0; i < l; i++) {
+		if (args[i] == '.') {
+			dot = args + i;			/* the last one */
+		}
+	}
+	if (!dot) {
+		return usage;
+	}
+	int  nl = (int)(dot - args), fl = l - nl - 1;
+	char name[SCR_PNAME_MAX + 1], fn[SCR_NAME_MAX + 1];
+	if (nl <= 0 || nl > SCR_PNAME_MAX || fl <= 0 || fl > SCR_NAME_MAX) {
+		return usage;
+	}
+	snprintf(name, sizeof(name), "%.*s", nl, args);
+	snprintf(fn, sizeof(fn), "%.*s", fl, dot + 1);
+	if (!nameOk(name, nl)) {
+		return "name: letters, digits, '_' (max 31; system scripts: /sys/name)";
+	}
+	for (int i = 0; i < fl; i++) {
+		char c = fn[i];
+		if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_' || (i && c >= '0' && c <= '9'))) {
+			return usage;
+		}
+	}
+	if (s_running) {
+		return "script running";
+	}
+	if (!scriptExists(name)) {
+		return "not found";
+	}
+	const char *e = scrFnCheck(name, fn);
+	if (e) {
+		return e;
+	}
+	const char *a = args + l;
+	while (*a == ' ' || *a == '\t') {
+		a++;
+	}
+	if (!scriptStart(name, a, fn, false, false, false, NULL)) {
+		return "could not start";
+	}
+	return NULL;
 }
 
 static const char *scriptCmdStop(int argc, char *argv[], cmdReply_t reply)

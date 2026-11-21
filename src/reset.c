@@ -19,7 +19,7 @@ static const char *TAG = "reset";
 #define RESET_DONE		RESET_DIR "/reset.done"
 #define RESET_BAD		RESET_DIR "/reset.bad"
 #define RESET_NV_NAME		"reset"		/* nvResetImport(): SD:/sys/reset.nvram */
-#define RESET_SCR_NAME		"/sys/reset"	/* SD:/sys/reset.s */
+#define RESET_SCR_NAME		"/sys/onReset"	/* SD:/sys/onReset.s */
 #define RESET_REBOOT_MS		1500		/* "Rebooting..." stays this long */
 
 void resetBootFile(void)
@@ -61,7 +61,7 @@ const char *resetRun(resetMode_t m, bool noSd, void (*msg)(const char *a, const 
 	char name[40] = "";
 
 	if (m != RESET_NV && (noSd || !scriptHas(RESET_SCR_NAME))) {
-		return "no /sys/reset.s";		/* checked first: nothing done */
+		return "no /sys/onReset.s";		/* checked first: nothing done */
 	}
 	if (m != RESET_SCRIPT) {
 		char info[48] = "(no backup)";
@@ -85,9 +85,9 @@ const char *resetRun(resetMode_t m, bool noSd, void (*msg)(const char *a, const 
 		ESP_LOGW(TAG, "NV reset to defaults");
 	}
 	if (m != RESET_NV) {
-		msg("Running", "/sys/reset.s");
+		msg("Running", "/sys/onReset.s");
 		if (!scriptRunWait(RESET_SCR_NAME, m == RESET_FULL ? "FULL" : "SCRIPT")) {
-			return "reset.s did not start";
+			return "onReset.s did not start";
 		}
 		msg(NULL, NULL);			/* the script may have drawn over it */
 		if (m == RESET_SCRIPT) {

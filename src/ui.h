@@ -107,6 +107,10 @@ void uiSend(const char *text);
 /* Same, without passing <<...>> events to a running script (script output). */
 void uiSendText(const char *text);
 
+/* Colour codes allowed on interface ifc (NV <if>.ansi.ui); uiSendText() strips
+ * them when not. */
+bool uiAnsi(uiIf_t ifc);
+
 /* A client is connected (main task view). */
 bool uiHasClient(void);
 

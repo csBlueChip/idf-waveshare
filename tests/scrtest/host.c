@@ -399,23 +399,48 @@ bool scrHostIsCommand(const char *name)
 	return false;
 }
 
+/* ANSI codes shown readably for the .out files: ESC[33m -> <33>, ESC[K -> <K> */
+static const char *readable(const char *text)
+{
+	static char b[4096];
+	size_t      o = 0;
+	for (const char *p = text; *p && o + 8 < sizeof(b); p++) {
+		if (p[0] == '\x1b' && p[1] == '[') {
+			const char *q = p + 2;
+			while (*q && !((*q >= 'A' && *q <= 'Z') || (*q >= 'a' && *q <= 'z'))) {
+				q++;
+			}
+			if (*q == 'm') {
+				o += snprintf(b + o, sizeof(b) - o, "<%.*s>", (int)(q - p - 2), p + 2);
+			} else {
+				o += snprintf(b + o, sizeof(b) - o, "<%.*s%c>", (int)(q - p - 2), p + 2, *q ? *q : '?');
+			}
+			p = *q ? q : q - 1;
+		} else {
+			b[o++] = *p;
+		}
+	}
+	b[o] = '\0';
+	return b;
+}
+
 void scrHostPrint(const char *text)
 {
 	size_t n = strlen(text);
 	if (s_live) {
 		printf("%s", text);			/* as sent: an INPUT prompt has no line end */
 	} else {
-		printf("> %s%s", text, n && text[n - 1] == '\n' ? "" : "\n");	/* one line each */
+		printf("> %s%s", readable(text), n && text[n - 1] == '\n' ? "" : "\n");	/* one line each */
 	}
 	fflush(stdout);
 }
-void scrHostDebug(const char *text)		{ printf("DEBUG: %s\n", text); }
+void scrHostDebug(const char *text)		{ printf("DEBUG: %s\n", s_live ? text : readable(text)); }
 void scrHostNotify(const char *text)		{ printf("%s", text); }
 
 bool scrHostNv(const char *key, char *out, size_t n)
 {
 	if (!strcasecmp(key, "scr.bl")) {
-		snprintf(out, n, "50");
+		snprintf(out, n, "12");
 		return true;
 	}
 	if (!strcasecmp(key, "wifi.ssid")) {

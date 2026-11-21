@@ -19,3 +19,11 @@ esp_err_t ledOff(void);
 /* Hide (LED dark; colour changes are only stored) or show the stored colour.
  * Used by IMU SLEEP. */
 esp_err_t ledHide(bool hide);
+
+/* Called (in the task that changed it) whenever the colour actually shown
+ * changes (0,0,0 = dark, also while hidden). One hook; NULL = none. */
+typedef void (*ledHook_t)(uint8_t r, uint8_t g, uint8_t b);
+void ledOnChange(ledHook_t hook);
+
+/* The colour shown now (0,0,0 = dark). */
+void ledShown(uint8_t rgb[3]);

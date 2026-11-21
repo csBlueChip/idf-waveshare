@@ -2,7 +2,7 @@ WAVEDEMO - TODO
 ===============
 
 To do
-  1. Script board test, retest: D2 (no OKs while drawing - QUIET 2 is now
+  1. Script board test, retest: D2 (no OKs while drawing - UI EVENTS 1 is
      the default) and D4 (double press - demo.s now BTN 1 1 0 1).
   2. Script board test: sections G, H, I (system scripts now in SD:/sys/:
      onBoot.s onWait.s onConnect.s).
@@ -32,10 +32,10 @@ To do
  14. Board test - MSC: rotation ... UART -> MSC -> WEB, sys.ui MSC, UI
      MSC; "BOOT: hold to start" starts disk mode; interface name in white
      on every Wait screen.
- 15. Board test - clock: after the web console connects (or the SD
+ 15. Board test - clock: after the web UI connects (or the SD
      manager opens) new files get today's date, not 1980-01-01.
  16. Board test - page title: default "wavedemo", NV web.name, then
-     SD:/sys/uiname.txt (console page and "<name> - SD card").
+     SD:/sys/uiname.txt (web UI page and "<name> - SD card").
  17. Board test - NV renames / ports: NV IMPORT default (new key names;
      an old rad.* / ui.baud file must ERR); web.port 8080 (URL on the Wait
      screen and UI WEB reply show :8080, page works, phone portal opens);
@@ -48,7 +48,7 @@ To do
      Script -> FULL after btn.dbl; long = "Long press again...", tap / 5 s
      cancels); NVRAM: backup /sys/<stamp>.nvram + defaults + reboot
      (bootcnt kept; read-only card: "No backup: ..." and still resets);
-     no card: "NVRAM - no backup"; Script: /sys/reset.s ($arg SCRIPT),
+     no card: "NVRAM - no backup"; Script: /sys/onReset.s ($arg SCRIPT),
      missing = ERR; FULL; SD:/sys/reset.nvram at boot (empty, with
      settings, bad -> reset.bad); timestamps YYYYMMDD_HHMMSS after a
      browser connects (SCR SHOT, INFO, $.time); SD manager ".." needs a
@@ -60,7 +60,7 @@ To do
      NV IMPORT default ("*" lines); Wait screen and UI WEB show them.
 
  21. Board test - pins: NV SET btn.gpio 0 2 6 7 first, then NV SET
-     uart.tx 4 and uart.rx 5, reboot: UART console on GP4/5
+     uart.tx 4 and uart.rx 5, reboot: UART UI on GP4/5
      (Wait screen, UI UART reply, onWait show Tx:4 Rx:5); boot messages
      still on 43; buttons 1..4 only (BTN 5 = ERR); a button on 43/44
      (TACT works, TOUCH = ERR); clash rules (selftest); uart.baud rename.
@@ -96,7 +96,7 @@ To do
      name / read-only file / existing name; CRLF warning; non-ASCII file
      refused; discard prompt. Import /sys/default.nvram (with and without
      "reboot now"; a bad file gives the line error). Run a script with
-     arguments: console page comes back and shows its output. Edit
+     arguments: web UI page comes back and shows its output. Edit
      /sys/debug.cfg and save: log volumes change without a reboot.
 
  27. Board test - replies: TEMP (^C ^F ^K, 1 decimal), BAT (Vb:x.yy),
@@ -117,7 +117,7 @@ To do
      GYR 3 dp. SD:/imu/imu_cal.log gets "<timestamp> : CAL|TEST <reply>"
      per run (CAL timeout: "CAL result:timeout"; no card: reply as usual,
      warning in the log). Timestamps 20261116_181005 (underscore) in file
-     names: IMU REC *, SCR SHOT, NV EXPORT. IMU REC ms (console and *.csv):
+     names: IMU REC *, SCR SHOT, NV EXPORT. IMU REC ms (UI and *.csv):
      comma-separated, 3 dp, decimal points aligned; opens in a spreadsheet;
      first line "# <timestamp> arange:.. arate:.. grange:.. grate:..
      gcal:x/y/z" (gcal:none when imu.gcal is empty).
@@ -125,7 +125,7 @@ To do
      -> ERR name: letters, digits, '_' (max 31); x.csv / x.png / x.nvram
      accepted. Two SCR SHOT in the same second -> stamp.png, stamp_1.png.
 
- 30. Board test - web console: OK green, ERR red (last line of a reply
+ 30. Board test - web UI: OK green, ERR red (last line of a reply
      only; e.g. FDIR's lines plain, its OK green). LIST with no script:
      /scripts/*.s then /sys/*.s as /sys/name (name size ro|rw, count);
      LIST while paused: the script text. RUN alone -> ERR usage. RUN
@@ -133,9 +133,9 @@ To do
      RUN sys/onWait -> ERR. A /sys/ script's FAPP / FWRITE / VARS SAVE ->
      SD:/sys/data (CALLed library code too); FDIR lists /sys/data files
      as /sys/name; FCAT /sys/x, FSTAT /sys/x.var, FDELETE /sys/x on the
-     console; FCAT /sys/x inside a script -> ERR. FDIR with > 64 files
+     UI; FCAT /sys/x inside a script -> ERR. FDIR with > 64 files
      lists them all. SD manager Run on a /sys/ script: label /sys/<name>.
-     RESET! screen still runs /sys/reset.s.
+     RESET! screen still runs /sys/onReset.s.
 
  31. Board test - IMG lists the first 20 PNGs (sorted) + "(20 of n
      images)"; IMG 21 -> ERR not found; IMG <name past 20> draws. FDIR
@@ -157,13 +157,98 @@ To do
      x.nvram ok, also from a script; /sys/x.nvram -> ERR. FDIR txt shows
      x.txt and /sys/x.txt.
 
- 34. Board test - FAPP (was FLOG): console FAPP x.txt / x.var / /sys/x.txt
+ 34. Board test - FAPP (was FLOG): UI FAPP x.txt / x.var / /sys/x.txt
      / x.nvram text -> appended; FAPP x -> ERR file: ...; from a /scripts
      script: FAPP x.txt ok, /sys/x.txt -> ERR no folder, x.nvram -> ERR
      only from /sys/ scripts; from a /sys/ script x.nvram works (FAPP,
      FCAT, FSTAT, FDELETE). FCAT /sys/x.txt from any script -> ERR.
 
+ 35. Board test - colour: PRINT "\i3y\i93Y\p4b\p94B\ip" on UART, USB,
+     telnet (PuTTY / Windows Terminal), web UI (palette from
+     syntax.cfg ansi.*; edit SD:/sys/syntax.cfg and reload), BLE
+     (ble.ansi.ui 0: plain; ANSI PRINT BLE 1: codes). Script INK 3 /
+     PAPER 4: whole-line bar (ESC[K), OK / ERR not coloured; \i8 back to
+     INK. DEBUG "\i2x" on the console; ANSI DEBUG USB 0 -> plain. FAPP
+     / FWRITE files have no codes; TEXT 1 "\i3x" draws "x". LOG DEBUG
+     replies ble:4 ... sys:4. INPUT prompt colour. SD manager viewer:
+     \i \p escapes in the escape colour. mcedit / Notepad++ files.
+     Letters: \ir \ilg \pb \pd \ip, INK lr, PAPER k; \iR / \ild -> ERR.
+     syntax.cfg ansi.id / ansi.pd (were i8 / p8).
+ 37. Board test (0.7.59) - SCR FLIP runtime only: SCR FLIP P -> flipped;
+     reboot -> SCR FLIP = NONE, boot square on the bottom edge of the glass.
+     /sys/onBoot.s with SCR FLIP P (sys.autorun 1): Wait screen comes up
+     flipped, only after onBoot ends (onBoot with WAIT 5000: no interface
+     for 5 s). ROT -> rot:0. NV IMPORT of a file with scr.pflip=1 ->
+     "warning: scr.pflip ignored (unknown)", the other keys stored.
+ 38. Board test (0.7.60) - ORIENT on screens. sys.autorun 0: Wait
+     turns with the board (L AUTO); connect splash and disk mode image
+     (UI MSC, BOOT held) turn when held upside down (P AUTO). sys.autorun
+     1 with onConnect before "IMU ORIENT P AUTO": splash turns (~1 s
+     after it appears); onWait before "IMU ORIENT NONE": Wait screen
+     does not turn; onWait after "IMU ORIENT P AUTO": disk image turns.
+     No onConnect.s (autorun 1): splash uses P AUTO.
+ 39. Board test (0.7.61) - aliases, F1, LCD mirror.
+     fm -> SD manager opens (alias.cfg on the card). ALIAS ADD nvg "NV GET
+     $1"; nvg wifi.ssid; ALIAS lists; FCAT /sys/alias.cfg shows the line;
+     ALIAS ADD NV x -> ERR built-in command; ALIAS DEL nvg; bad line in
+     alias.cfg + ALIAS LOAD -> warning; REBOOT -> warnings in the log.
+     A script line "fm" -> ERR unknown (no aliases in scripts).
+     F1: web UI key list (Esc closes); SD manager key list in the
+     list, viewer and editor (Esc closes the list, not the editor).
+     0.7.62: tighter input bar / history rows; box always shown, rolled
+     up by default (no LCD / x buttons).
+     LCD box (roll down): IMG, CLS, TEXT appear at once; ROT 1 -> box turns
+     landscape on the next update; SCR FLIP P -> still upright; roll up
+     -> updates stop (no traffic), roll down -> whole screen again; drag
+     to resize; reload keeps open / size; a script drawing fast (RUN
+     demo) - UI still responsive.
+ 40. Board test (0.7.63) - events. Web UI connect -> <<SYS TIME
+     <stamp> adj:new>> (first time), reload -> adj:+0..; EVENTS SYS 0 ->
+     not shown; EVENTS shows SYS:1. Script: EVENTS -> all :0; BTN 1 1 0 1 +
+     WAIT EVENT -> ERR no events enabled; EVENTS BTN 1 -> BOOT gets taken;
+     without it BOOT presses show on the UI as <<BTN 1 SHORT>> (not
+     queued). ON SYS fn + reload the page -> handler runs. UI EVENTS 3 ->
+     OKs and events shown; 0 -> no ERRs; PRINT always shown. UI: UI
+     EVENTS -> ERR script only. RUN demo / ask still work.
+ 41. Board test (0.7.65) - EVENTS (UI) replies BTN IMU UI SYS SCRIPT.
+     BTN 1 1 1 0 + BTN 1 SET rpt 100, hold BOOT: DOWN at long, REPEAT
+     every ~100 ms, UP on release; rpt 0: DOWN, UP. Short press: SHORT on
+     release. RESET! Script mode runs /sys/onReset.s ("no /sys/onReset.s"
+     without it). IMG of a PNG with soft edges / 50 % alpha over a
+     coloured CLS: edges blend (no hard fringe); opaque PNGs unchanged
+     in speed.
+ 42. Board test (0.7.66) - UI CALL: CALL shapes.drawPoly 6 86 160 40
+     255,0,0 -> OK, red hexagon; ... 255,0,0 1 -> filled;
+     <<SCRIPT shapes.drawPoly END>>; CALL shapes.drawPoly 6 -> usage line; CALL shapes.nope -> ERR no function nope in shapes;
+     CALL nofile.x -> ERR not found; CALL drawPoly -> ERR usage; CALL
+     while a script runs -> ERR script running. INFO during a long CALL:
+     Script: shapes.drawPoly running. Wait screen with onWait.s: an error
+     in before shows <<SCRIPT /sys/onWait.before ERR ...>>. RUN demo
+     (CALL shapes.drawPoly inside) still draws (white).
+ 43. Board test (0.7.69) - NV GET, NV GET wifi and NV EXPORT x list keys
+     sorted by name (ble.* first, wifi.* last); FCAT x.nvram the same
+     order; NV IMPORT x still works.
+ 44. Board test (0.7.71) - backlight: BL 0..20 look evenly spaced (BL 1
+     just visible, BL 10 about half as bright as it looks); BL 21 -> ERR
+     level must be 0..20; NV SET scr.bl.steps 10 then BL 10 = full; NV
+     SET scr.bl 15 (steps 10) -> ERR scr.bl must be 0..scr.bl.steps;
+     IMU SLEEP SCR + wake restores the level; disk mode (UI MSC, BOOT
+     held) dims to ~28 %. Old stored scr.bl 100: log warning, level 20.
+ 45. Board test (0.7.72) - web UI mirror frame: LED 255,0,0 -> frame soft red
+     at once (6 px rolled down, 2 px rolled up); LED 0,0,0 -> black;
+     reload the page -> current colour straight away; IMU SLEEP SCR ->
+     black, wake -> back; a script changing the LED fast (LED in a loop)
+     - frame follows, UI stays responsive.
+ 46. Board test (0.7.75) - BTN timings: tests/test_stepb1.txt B6a..B6f (0.7.76: SET
+     only on active buttons; 0.7.77: BTN one line, BTN *).
+     Web mirror: no grip drawn; the bottom-left corner still resizes.
+
 On hold
+ 36. Tap zones (shelved 0.7.58 - unstable / unreliable): IMU tap position
+     on the screen from the gyro swing (IMU TAP XY / CAL / SAVE / LOAD,
+     RUN tapzones). Best: 2x2 89 % (top / bottom 100 %, left / right
+     79 %). Code, docs, script, tests and results: attic/tapzones/
+     (RESTORE.txt). SCRIPT_EV_TEXT 128 and the idle IMU task were kept.
  33. Trashcan (idea, parked - too messy as designed):
      FDELETE -> FTRASH; erased files and their DESCRIPT.ION line moved to
      /trash/ (mirroring the path: /trash/scripts/data/foo.txt); SD
@@ -182,7 +267,7 @@ On hold
      - names: FTRASH / FRESTORE / /trash at the card root
  28. NV SET / IMPORT / RESET of btn.deb|long|dbl|rpt also updating the
      global button timings at once (now: next boot, or BTN SET).
- 20. iPhone test - web console in the captive-portal window: page not too
+ 20. iPhone test - web UI in the captive-portal window: page not too
      wide, no zoom-in when the input gets the focus or after the "^"
      history list; first reply lines at the bottom, above the input.
      (No iPhone at hand; Chromium iPhone 13 emulation looked right.)

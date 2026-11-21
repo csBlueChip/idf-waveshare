@@ -1,0 +1,41 @@
+Tap zones - shelved at 0.7.58
+=============================
+
+Removed from the firmware at 0.7.58; last built in 0.7.57 (full sources:
+wavedemo (57).zip - easiest to diff src/imu.c, src/nv.c against it).
+Results and why: results.txt.
+
+Where it went
+  src/imu.c        -> imu_tapzones.c (excerpts with 0.7.57 line numbers):
+                      defines (IMU_ZONES_MAX, IMU_RING, IMU_CAP_*, IMU_TAP_DIR
+                      / _PFX / _EXT / _FILE_MAX), zone + capture statics,
+                      imuTapVal_t, capture (imuCapWanted, imuCapDrain, ring),
+                      imuCapPeak (spike, onset, first swing, rebound filter),
+                      classifier (imuZoneCal, imuTapCalOk, imuTapZone,
+                      imuTapN = ROT / flip mapping, imuTapUnion), zone burst
+                      counting (imuTapOne), the IMU TAP command (XY, CAL,
+                      n CAL, SAVE, LOAD, n|* s d t), hooks in imuApply,
+                      imuPoll, imuSleepRun, IMU RESET, IMU REC (s_recOn).
+                      #include <dirent.h> (imuTapLatest).
+                      cmdRegister("IMU", 0, 5, ...) - 5 args for IMU TAP n s d t.
+  src/nv.c, nv.h, sd/sys/default.nvram
+                   -> nv_tapzones.txt: imu.tap.dead / min / win / xy /
+                      zone1..16, nvChkTapXy, nvChkTapZone.
+  README.txt, src/imu.h, TODO 36, DESCRIPT.ION lines, tests/scrtest/run.sh
+                   -> README_tapzones.txt
+  sd/scripts/tapzones.s, tests/test_tapzones.txt,
+  tests/scrtest/card/tz_check.s / .out
+                   -> moved here unchanged (put back where they were).
+
+Kept in the firmware (not part of the removal)
+  - IMU TAP s d t | NONE: the chip's tap engine, imu.tap.thr / imu.tap.gap
+    (as before 0.7.50; IMU TAP alone shows single double triple).
+  - The idle IMU task: imuNeedPoll() / imuWake() (sleeps when nothing is on).
+  - SCRIPT_EV_TEXT 128 (script.c).
+
+To restore
+  1. Copy the 0.7.57 src/imu.c tap parts back (or diff and merge), the
+     nv.c / nv.h entries and the default.nvram lines.
+  2. Move the four files back; re-add the DESCRIPT.ION lines and the
+     run.sh tz_check block; re-add the README / imu.h sections.
+  3. Build; sh tests/scrtest/run.sh (tz_check passes).

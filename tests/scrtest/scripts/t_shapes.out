@@ -1,0 +1,17 @@
+CMD: LINE 15 10 8 14 255,0,0
+CMD: LINE 8 14 7 6 255,0,0
+CMD: LINE 7 6 15 10 255,0,0
+CMD: FTRI 10 10 15 10 8 14 00FF00
+CMD: FTRI 10 10 8 14 7 6 00FF00
+CMD: FTRI 10 10 7 6 15 10 00FF00
+CMD: LINE 15 10 10 15 @200,100,50
+CMD: LINE 10 15 5 10 @200,100,50
+CMD: LINE 5 10 10 5 @200,100,50
+CMD: LINE 10 5 15 10 @200,100,50
+> usage: drawPoly n cx cy r colour [fill] (n 3..64, r > 0, fill 0|1)
+> usage: drawPoly n cx cy r colour [fill] (n 3..64, r > 0, fill 0|1)
+> usage: drawPoly n cx cy r colour [fill] (n 3..64, r > 0, fill 0|1)
+> usage: drawPoly n cx cy r colour [fill] (n 3..64, r > 0, fill 0|1)
+> usage: drawPoly n cx cy r colour [fill] (n 3..64, r > 0, fill 0|1)
+<<SCRIPT t_shapes END>>
+[result END]

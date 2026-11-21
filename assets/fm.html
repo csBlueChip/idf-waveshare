@@ -88,7 +88,7 @@
 	.lb { color: var(--s-label); } .f { color: var(--s-function); } .o { color: var(--s-operator); }
 	.cm { color: var(--s-comment); } .vn { color: var(--var-name); } .vv { color: var(--var-value); }
 	.ve { color: var(--var-escape); } .in { color: var(--ion-name); } .it { color: var(--ion-text); }
-	.sv { color: var(--s-sysvar); }
+	.sv { color: var(--s-sysvar); } .es { color: var(--s-escape); }
 	#status .desc { color: var(--status-desc); }
 	tr.sys td.name, tr.sys td { color: var(--list-system); }
 	tr.hid td.name, tr.hid td { color: var(--list-hidden); }		/* hidden wins */
@@ -163,7 +163,7 @@
 		<button id="vjs" class="js" title="Run the page's scripts (they could use this manager)">JS off</button>
 		<button id="vedit" data-i="edit" title="Edit (E)">Edit</button>
 		<button id="vimp" data-i="bulb" title="Import these settings into NV (NV IMPORT)">Import</button>
-		<button id="vrun" data-i="play" title="Run this script with arguments (leaves the SD manager; output in the console)">Run</button>
+		<button id="vrun" data-i="play" title="Run this script with arguments (leaves the SD manager; output in the UI)">Run</button>
 		<button id="vdl" data-i="download" title="Download (Ctrl+Enter)">Download</button>
 		<button id="vclose" data-i="close" class="exit" title="Close (Esc)">Close</button>
 	</div>
@@ -193,7 +193,7 @@
 <div id="prog"></div>
 <div id="status"></div>
 <div id="help"><div>
-	<b>Keys</b> <span style="color:#888">(? or Esc closes)</span>
+	<b>Keys</b> <span style="color:#888">(F1, ? or Esc closes)</span>
 	<h3>Files</h3>
 	<table>
 		<tr><td class="k">Up / Down</td><td>move one row (list) or one folder (tree)</td></tr>
@@ -211,14 +211,14 @@
 		<tr><td class="k">I</td><td>Info: edit the DESCRIPT.ION description</td></tr>
 		<tr><td class="k">Del</td><td>Delete</td></tr>
 		<tr><td class="k">Ctrl+X</td><td>Exit the SD manager</td></tr>
-		<tr><td class="k">?</td><td>this list</td></tr>
+		<tr><td class="k">F1 or ?</td><td>this list (F1 also in the viewer and the editor)</td></tr>
 	</table>
 	<h3>Viewer</h3>
 	<table>
 		<tr><td class="k">L</td><td>line numbers on / off</td></tr>
 		<tr><td class="k">W</td><td>wrap on / off</td></tr>
 		<tr><td class="k">E</td><td>Edit (text files)</td></tr>
-		<tr><td class="k"></td><td>Import (bulb, /sys/*.nvram): NV IMPORT, optionally reboot; Run (play, .s): asks for the arguments, leaves the SD manager, output in the console</td></tr>
+		<tr><td class="k"></td><td>Import (bulb, /sys/*.nvram): NV IMPORT, optionally reboot; Run (play, .s): asks for the arguments, leaves the SD manager, output in the UI</td></tr>
 		<tr><td class="k">Ctrl+Enter</td><td>Download</td></tr>
 		<tr><td class="k">Esc</td><td>close</td></tr>
 	</table>
@@ -297,13 +297,16 @@
 	var SYN_KEYS = ["s.keyword", "s.directive", "s.command", "s.variable", "s.sysvar", "s.string", "s.number", "s.label",
 	                "s.function", "s.operator", "s.comment", "var.name", "var.value", "var.escape",
 	                "ion.name", "ion.text", "line.number", "line.border",
-	                "list.hidden", "list.system", "status.desc"];
+	                "list.hidden", "list.system", "status.desc", "s.escape",
+	                "ansi.0", "ansi.1", "ansi.2", "ansi.3", "ansi.4", "ansi.5", "ansi.6", "ansi.7",
+	                "ansi.90", "ansi.91", "ansi.92", "ansi.93", "ansi.94", "ansi.95", "ansi.96", "ansi.97",
+	                "ansi.id", "ansi.pd"];	/* ansi.*: the web UI's colours (not used here) */
 	/* "key=#rgb|#rrggbb [# comment]" lines -> {key: colour}; throws "line n: reason" */
 	function parseSyntax(text, into) {
 		text.split("\n").forEach(function (raw, i) {
 			var l = raw.replace(/\r$/, "").trim();
 			if (l === "" || l.charAt(0) === "#") return;
-			var m = /^([A-Za-z.]+)\s*=\s*(\S+)\s*(#.*)?$/.exec(l);
+			var m = /^([A-Za-z0-9.]+)\s*=\s*(\S+)\s*(#.*)?$/.exec(l);
 			if (!m) throw "line " + (i + 1) + ": expected key=#colour";
 			var key = m[1].toLowerCase();
 			if (SYN_KEYS.indexOf(key) < 0) throw "line " + (i + 1) + ": unknown key " + m[1];
@@ -360,7 +363,7 @@
 		x.open(method, url);
 		x.onload = function () {
 			if (x.status === 409 && x.responseText === "SD manager not active") {
-				status("SD manager closed on the device - back to the console...", true);
+				status("SD manager closed on the device - back to the UI...", true);
 				setTimeout(function () { location.href = "/"; }, 1500);
 				return;
 			}
@@ -807,10 +810,21 @@
 	/* ---------- highlighting (one line in, HTML out) ---------- */
 	function esc(t) { return t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
 	function span(cls, t) { return '<span class="' + cls + '">' + esc(t) + "</span>"; }
+	/* PRINT / DEBUG colour escapes: \iN \ilN \pN \plN \ip (N 0..8 or krgybmcwd; l = 9) */
+	var COL_ESC = /\\(?:ip|[ip][9l][0-7krgybmcw]|[ip][0-8krgybmcwd])/;
+	/* a quoted string with its colour escapes in the escape colour */
+	function hlStr(s) {
+		var re = new RegExp(COL_ESC.source, "g"), out = "", last = 0, m;
+		while ((m = re.exec(s)) !== null) {
+			out += span("st", s.substring(last, m.index)) + span("es", m[0]);
+			last = re.lastIndex;
+		}
+		return out + span("st", s.substring(last));
+	}
 	var S_KEYWORDS = ("LET GET VARS DEL INS IF ELIF ELSE END LOOP TO STEP WHILE TIMES FOREVER " +
-	                  "BREAK NEXT SWITCH GOTO EXIT FN RETURN CALL INSERT ON OFF ONERROR QUIET " +
+	                  "BREAK NEXT SWITCH GOTO EXIT FN RETURN CALL INSERT ON OFF ONERROR " +
 	                  "TRACE PRINT DEBUG FWRITE FREAD FTELL FSEEK FCLOSE RNG TIMER BPT! WAIT " +
-	                  "INPUT").split(/\s+/);
+	                  "INPUT INK PAPER").split(/\s+/);
 	var S_OPTIONS = {		/* option words, only after their statement */
 		FSEEK: "START END SET OFFS TAG", FREAD: "EOL", LOOP: "TO STEP WHILE TIMES FOREVER",
 		WAIT: "EVENT", ONERROR: "STOP CONT GOTO", RNG: "TRNG PRNG", VARS: "SAVE LOAD ALL",
@@ -842,7 +856,10 @@
 			if (c === '"' || c === "'") {
 				var j = i + 1;
 				while (j < n && line.charAt(j) !== c) j += line.charAt(j) === "\\" ? 2 : 1;
-				out += span("st", line.substring(i, j + 1)); i = j + 1; first = afterEq = false; continue;
+				out += hlStr(line.substring(i, j + 1)); i = j + 1; first = afterEq = false; continue;
+			}
+			if (c === "\\" && (m = new RegExp("^" + COL_ESC.source).exec(rest))) {	/* unquoted text */
+				out += span("es", m[0]); i += m[0].length; first = afterEq = false; continue;
 			}
 			if ((m = /^(0x[0-9A-Fa-f]+|0b[01]+|[0-9]+(\.[0-9]+)?([eE][+-]?[0-9]+)?)(?![A-Za-z0-9_])/.exec(rest))) {
 				out += span("nu", m[0]); i += m[0].length; first = afterEq = false; continue;
@@ -943,6 +960,15 @@
 	document.addEventListener("keydown", function (e) {
 		var t = e.target, k = e.key, ctrl = e.ctrlKey || e.metaKey;
 		if ($("dlg").classList.contains("on")) return;		/* the dialog handles its keys */
+		if (k === "F1") {					/* key list, from anywhere */
+			e.preventDefault();
+			help(!$("help").classList.contains("on"));
+			return;
+		}
+		if ($("help").classList.contains("on") && $("editor").classList.contains("on")) {
+			if (k === "Escape") { e.preventDefault(); help(false); }	/* not the editor's close */
+			return;
+		}
 		if ($("editor").classList.contains("on")) {		/* focus outside the text box */
 			if (ctrl && (k === "s" || k === "S")) { e.preventDefault(); eSave(); }
 			else if (k === "Escape") { e.preventDefault(); closeEdit(false); }
@@ -1033,7 +1059,7 @@
 			x.open("POST", "/fm/put?p=" + q(join(dir, n)));	/* no over=1: never replaces */
 			x.onload = function () {
 				if (x.status === 409 && x.responseText === "SD manager not active") {
-					status("SD manager closed on the device - back to the console...", true);
+					status("SD manager closed on the device - back to the UI...", true);
 					setTimeout(function () { location.href = "/"; }, 1500);
 					return;
 				}
@@ -1253,7 +1279,7 @@
 		x.open("POST", "/fm/put?p=" + q(dest) + (over ? "&over=1" : ""));
 		x.onload = function () {
 			if (x.status === 409 && x.responseText === "SD manager not active") {
-				status("SD manager closed on the device - back to the console...", true);
+				status("SD manager closed on the device - back to the UI...", true);
 				setTimeout(function () { location.href = "/"; }, 1500);
 				return;
 			}
@@ -1308,6 +1334,18 @@
 	$("esave").onclick = function () { eSave(); };
 	$("eclose").onclick = function () { closeEdit(false); };
 	$("etext").addEventListener("keydown", function (e) {
+		if (e.key === "F1") {				/* key list (the textarea keeps the focus) */
+			e.preventDefault();
+			e.stopPropagation();
+			help(!$("help").classList.contains("on"));
+			return;
+		}
+		if (e.key === "Escape" && $("help").classList.contains("on")) {
+			e.preventDefault();
+			e.stopPropagation();
+			help(false);
+			return;
+		}
 		var ctrl = e.ctrlKey || e.metaKey;
 		if (e.key === "Tab" && !ctrl && !e.altKey) {
 			e.preventDefault();
@@ -1351,7 +1389,7 @@
 			req("POST", "/fm/run?p=" + q(file) + "&a=" + q(r.value.trim()), function (ok, text) {
 				if (!ok) { tell("Run failed: " + text); return; }
 				closeView();
-				status("running " + name + " - back to the console...");
+				status("running " + name + " - back to the UI...");
 				location.href = "/";
 			});
 		});
@@ -1395,7 +1433,7 @@
 			x.onload = function () {
 				if (x.status === 200) { done++; names[file.name.toLowerCase()] = "f"; }
 				else if (x.status === 409 && x.responseText === "SD manager not active") {
-					status("SD manager closed on the device - back to the console...", true);
+					status("SD manager closed on the device - back to the UI...", true);
 					setTimeout(function () { location.href = "/"; }, 1500);
 					return;
 				} else { failed++; lastErr = file.name + ": " + x.responseText; }

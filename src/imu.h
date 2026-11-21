@@ -16,8 +16,8 @@
  *   TEMP                      ^C:23.4 ^F:74.1 ^K:296.6 (one decimal)
  *   IMU ACC|GYR [range rate]  show (range:4 rate:224) / store + apply range and rate
  *   IMU RESET                 chip reset, NV config, all detectors off
- *   IMU TAP [s d t | NONE]    <<IMU TAP>> <<IMU 2TAP>> <<IMU 3TAP>>; shows
- *                             single:0|1 double:0|1 triple:0|1
+ *   IMU TAP [s d t | NONE]    <<IMU TAP>> <<IMU 2TAP>> <<IMU 3TAP>> (single double
+ *                             triple 0|1); shows single:0|1 double:0|1 triple:0|1
  *   IMU MOTION [0|1]          <<IMU MOTION>> when movement starts; shows en:0|1
  *   IMU STILL [ms]            <<IMU STILL>> quiet for ms after a motion (0 off);
  *                             shows ms:n

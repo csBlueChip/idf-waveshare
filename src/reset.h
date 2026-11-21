@@ -22,10 +22,10 @@
  *              sys.bootcnt), reboot. No card: "NVRAM - no backup" is the
  *              only mode (reset without export). Export fails: "No backup:
  *              <reason>" shown, reset anyway.
- *      Script  run SD:/sys/reset.s ($arg = SCRIPT) as a system script, then
+ *      Script  run SD:/sys/onReset.s ($arg = SCRIPT) as a system script, then
  *              back to the RESET! screen
- *      FULL    export, reset NV, run reset.s ($arg = FULL), reboot
- *              (reset.s missing: error, nothing done)
+ *      FULL    export, reset NV, run onReset.s ($arg = FULL), reboot
+ *              (onReset.s missing: error, nothing done)
  */
 
 typedef enum {
@@ -40,7 +40,7 @@ void resetBootFile(void);
 
 /* Main task, RESET! screen: carry out mode m (noSd: no card, NVRAM without a
  * backup). msg(a, b) shows progress (two lines); msg(NULL, NULL) = redraw the
- * RESET! screen (after reset.s, which may have drawn on it). Reboots for
+ * RESET! screen (after onReset.s, which may have drawn on it). Reboots for
  * NVRAM / FULL (a failed backup does not stop them); returns NULL after
- * Script, or an error: no reset.s (nothing done) / NV write failed. */
+ * Script, or an error: no onReset.s (nothing done) / NV write failed. */
 const char *resetRun(resetMode_t m, bool noSd, void (*msg)(const char *a, const char *b));

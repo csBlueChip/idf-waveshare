@@ -13,6 +13,7 @@
 #include "esp_timer.h"
 #include "esp_sleep.h"
 #include "esp_heap_caps.h"
+#include "esp_attr.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
@@ -196,6 +197,8 @@ static volatile bool s_dbg;		/* IMU DEBUG: log raw status changes (this boot) */
 static uint16_t      s_dbgLast;		/* last logged STATUS1 << 8 | TAP_STATUS */
 static int      s_orShown = IMU_ORIENT_NONE;
 
+static TaskHandle_t    s_task;
+
 static volatile imuSleep_t s_sleepReq;
 static volatile int        s_sleepThr;
 static volatile bool       s_asleep;
@@ -222,6 +225,8 @@ static void        imuEvent(const char *text);
 static void        imuTask(void *arg);
 static void        imuPoll(int64_t now);
 static void        imuTapOne(int64_t now);
+static void        imuWake(void);
+static const char *imuCmdBody(int argc, char *argv[], cmdReply_t reply);
 static void        imuOrient(int64_t now, float x, float y, float z);
 static void        imuAutoFlip(int rot);
 static esp_err_t   imuWomEnter(int thr);
@@ -264,7 +269,7 @@ esp_err_t imuInit(void)
 	imuApplyGains();
 	ESP_RETURN_ON_ERROR(imuApply(), TAG, "configure");
 
-	ESP_RETURN_ON_FALSE(xTaskCreate(imuTask, "imu", IMU_TASK_STACK, NULL, IMU_TASK_PRIO, NULL) == pdPASS,
+	ESP_RETURN_ON_FALSE(xTaskCreate(imuTask, "imu", IMU_TASK_STACK, NULL, IMU_TASK_PRIO, &s_task) == pdPASS,
 	                    ESP_ERR_NO_MEM, TAG, "task");
 
 	ESP_RETURN_ON_ERROR(cmdRegister("ACC", 0, 0, imuCmdAcc, "ACC  accelerometer aX,aY,aZ (g)"), TAG, "cmd");
@@ -551,7 +556,7 @@ static bool imuBusy(void)
 
 static void imuEvent(const char *text)
 {
-	char msg[40];
+	char msg[176];
 	snprintf(msg, sizeof(msg), "<<IMU %s>>\n", text);
 	uiSend(msg);
 	if (s_dbg) {
@@ -559,10 +564,29 @@ static void imuEvent(const char *text)
 	}
 }
 
+/* Anything for the task to do: engines, ORIENT, a sleep request. */
+static bool imuNeedPoll(void)
+{
+	return s_sleepReq != IMU_SLEEP_NONE || (imuCtrl8() & IMU_CTRL8_ENGINES) || s_orMode != IMU_OR_OFF;
+}
+
+/* Something may have been enabled: let an idle task poll again. */
+static void imuWake(void)
+{
+	if (s_task) {
+		xTaskNotifyGive(s_task);
+	}
+}
+
 static void imuTask(void *arg)
 {
 	for (;;) {
-		vTaskDelay(pdMS_TO_TICKS(IMU_POLL_MS));
+		if (imuNeedPoll()) {
+			vTaskDelay(pdMS_TO_TICKS(IMU_POLL_MS));
+		} else {
+			ulTaskNotifyTake(pdTRUE, portMAX_DELAY);	/* idle: nothing enabled */
+			continue;
+		}
 
 		if (s_sleepReq != IMU_SLEEP_NONE) {
 			imuSleepRun(s_sleepReq, s_sleepThr);
@@ -581,11 +605,16 @@ static void imuPoll(int64_t now)
 	bool     haveAcc = false, haveSt = false;
 	uint32_t steps = 0;
 
+	int      taps = 0;
+
 	xSemaphoreTake(s_lock, portMAX_DELAY);
 	if ((imuCtrl8() & IMU_CTRL8_ENGINES) && imuRead(IMU_REG_STATUS1, &st, 1) == ESP_OK) {
 		haveSt = true;
 		if ((st & IMU_ST1_TAP) || s_dbg) {
 			imuRead(IMU_REG_TAP_STATUS, &tap, 1);
+		}
+		if (st & IMU_ST1_TAP) {
+			taps = tap & 0x03;			/* the chip may report a double */
 		}
 		if (s_dbg && (uint16_t)(st << 8 | tap) != s_dbgLast) {
 			s_dbgLast = st << 8 | tap;
@@ -601,8 +630,7 @@ static void imuPoll(int64_t now)
 	xSemaphoreGive(s_lock);
 
 	if (haveSt) {
-		int taps = (st & IMU_ST1_TAP) ? (tap & 0x03) : 0;	/* 1 single, 2 double */
-		for (int i = 0; i < taps && i < 2; i++) {
+		for (int i = 0; i < taps; i++) {
 			imuTapOne(now);
 		}
 
@@ -664,9 +692,9 @@ static void imuPoll(int64_t now)
 	}
 }
 
-/* One tap from the chip. Taps within imu.tap.gap of each other form a burst;
- * the n-th tap (1..3) is reported if that order is enabled. After the highest
- * enabled order the count starts again at 1. */
+/* One chip tap: taps closer than imu.tap.gap form a burst; the n-th tap
+ * (1..3) is reported if that order is enabled; after the highest enabled
+ * order the count starts again. */
 static void imuTapOne(int64_t now)
 {
 	static const char *names[3] = { "TAP", "2TAP", "3TAP" };
@@ -727,7 +755,7 @@ static void imuOrient(int64_t now, float x, float y, float z)
 	}
 
 	int rot = cand;						/* logical ROT that shows upright */
-	if ((rot % 2 == 0 && nvGetInt("scr.pflip")) || (rot % 2 == 1 && nvGetInt("scr.lflip"))) {
+	if (lcdGetFlip(rot % 2 == 1)) {
 		rot ^= 2;
 	}
 	char text[16];
@@ -915,7 +943,15 @@ static const char *imuCmdTemp(int argc, char *argv[], cmdReply_t reply)
 	return NULL;
 }
 
+/* every IMU command: then let an idle task see what was enabled */
 static const char *imuCmd(int argc, char *argv[], cmdReply_t reply)
+{
+	const char *err = imuCmdBody(argc, argv, reply);
+	imuWake();
+	return err;
+}
+
+static const char *imuCmdBody(int argc, char *argv[], cmdReply_t reply)
 {
 	if (imuBusy()) {
 		return "IMU asleep";
@@ -1121,7 +1157,6 @@ static const char *imuCmdRange(bool acc, int argc, char *argv[], cmdReply_t repl
 	return err;
 }
 
-/* IMU TAP [s d t | NONE] */
 /* "TAP cannot run with MOTION, SIGMO (turn them off first)": only the
  * detectors that are on. */
 static const char *imuTapClash(void)
@@ -1142,29 +1177,32 @@ static const char *imuTapClash(void)
 	return msg;
 }
 
+/* IMU TAP [s d t | NONE]: shows single:1 double:0 triple:0 */
 static const char *imuCmdTap(int argc, char *argv[], cmdReply_t reply)
 {
-	bool en[3] = { false, false, false };
 	int  v;
+	bool en[3] = { false, false, false };
 
 	if (argc == 0) {
-		char text[40];
-		snprintf(text, sizeof(text), "single:%d double:%d triple:%d\n", s_tapEn[0] ? 1 : 0, s_tapEn[1] ? 1 : 0,
-		         s_tapEn[2] ? 1 : 0);
+		char text[48];
+		snprintf(text, sizeof(text), "single:%d double:%d triple:%d\n", s_tapEn[0], s_tapEn[1], s_tapEn[2]);
 		reply(text);
 		return NULL;
 	}
-	if (argc == 3) {
+	if (argc == 1 && strcasecmp(argv[0], "NONE") == 0) {
+		/* all off */
+	} else if (argc == 3) {
 		for (int i = 0; i < 3; i++) {
 			if (!cmdParseInt(argv[i], 0, 1, &v)) {
 				return "usage: IMU TAP s d t (0|1 each) | NONE";
 			}
 			en[i] = v;
 		}
-	} else if (argc != 1 || strcasecmp(argv[0], "NONE") != 0) {
-		return "usage: IMU TAP s d t (0|1 each) | NONE";
+	} else {
+		return "usage: IMU TAP [s d t | NONE]";
 	}
-	if ((en[0] || en[1] || en[2]) && IMU_OTHERS_ON()) {
+	bool any = en[0] || en[1] || en[2];
+	if (any && IMU_OTHERS_ON()) {
 		return imuTapClash();
 	}
 	xSemaphoreTake(s_lock, portMAX_DELAY);
@@ -1172,7 +1210,7 @@ static const char *imuCmdTap(int argc, char *argv[], cmdReply_t reply)
 	s_tapN = 0;
 	const char *err = (imuEngines() == ESP_OK) ? NULL : "IMU write failed";
 	xSemaphoreGive(s_lock);
-	if (!err && imuOdr() < 200.0f && (en[0] || en[1] || en[2])) {
+	if (!err && imuOdr() < 200.0f && any) {
 		reply("warning: tap works best with imu.arate 224 or more\n");
 	}
 	return err;
@@ -1261,6 +1299,7 @@ void imuOrientSet(imuOrMode_t mode, bool autoFlip)
 	if (!autoFlip) {
 		lcdSetViewFlip(false);
 	}
+	imuWake();
 }
 
 /* IMU SET [key value]: the imu.* tuning keys (stored in NV, applied now). */

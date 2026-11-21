@@ -18,10 +18,11 @@
 #define SCR_FNAME_MAX		31		/* script / data file name, without extension */
 #define SCR_SYS_PREFIX		"/sys/"		/* system scripts: /sys/name (SD:/sys/name.s) */
 #define SCR_PNAME_MAX		(SCR_FNAME_MAX + 5)	/* script name incl. "/sys/" */
+#define SCR_RUNNAME_MAX		(SCR_PNAME_MAX + 1 + SCR_NAME_MAX)	/* "/sys/name.fn" */
 #define SCR_FILES_DEF		4		/* data files with a position: NV run.files default */
 #define SCR_FILES_MAX		16		/* run.files / .FILES upper limit */
 #define SCR_FREAD_MAX		200		/* bytes per FREAD */
-#define SCR_QUIET_DEF		2		/* QUIET at the start of a run */
+#define SCR_UIVOL_DEF		1		/* UI EVENTS at the start of a run */
 
 /* Internal sizes */
 #define SCR_SRC_MAX		24		/* source files per run (main, INSERTs, CALLed) */

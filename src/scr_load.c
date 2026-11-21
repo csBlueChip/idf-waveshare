@@ -16,7 +16,7 @@ static const struct {
 	{ "END", K_END },	{ "LOOP", K_LOOP },	{ "BREAK", K_BREAK },	{ "NEXT", K_NEXT },
 	{ "SWITCH", K_SWITCH },	{ "GOTO", K_GOTO },	{ "EXIT", K_EXIT },	{ "FN", K_FN },
 	{ "RETURN", K_RETURN },	{ "CALL", K_CALL },	{ "ON", K_ON },		{ "ONERROR", K_ONERROR },
-	{ "QUIET", K_QUIET },	{ "TRACE", K_TRACE },	{ "PRINT", K_PRINT },	{ "DEBUG", K_DEBUG },
+	{ "TRACE", K_TRACE },	{ "PRINT", K_PRINT },	{ "DEBUG", K_DEBUG },
 	{ "RNG", K_RNG },	{ "TIMER", K_TIMER },	{ "WAIT", K_WAIT },	{ "INPUT", K_INPUT },
 	{ "BPT!", K_BPT },	{ "ACC", K_ACC },	{ "GYR", K_GYR },	{ ".STACK", K_STACK },
 	{ ".FILES", K_FILES },
@@ -26,17 +26,18 @@ static const struct {
 	{ "RUN", K_CONSOLE },	{ "STOP", K_CONSOLE },	{ "CONT", K_CONSOLE },	{ "LOAD", K_CONSOLE },
 	{ "STEP", K_CONSOLE },	{ "BPT", K_CONSOLE },	{ "LIST", K_CONSOLE },	{ "STACK", K_CONSOLE },
 	{ "PAUSE", K_PAUSE },
+	{ "INK", K_INK },	{ "PAPER", K_PAPER },
 };
 
 /* Reserved words (no .CONST or function of that name) */
 static const char *const s_reserved[] = {
 	"LET", "GET", "VARS", "DEL", "INS", "IF", "ELIF", "ELSE", "END", "LOOP", "TO", "STEP",
 	"WHILE", "TIMES", "FOREVER", "BREAK", "NEXT", "SWITCH", "GOTO", "EXIT", "FN", "RETURN",
-	"CALL", "INSERT", "ON", "OFF", "ONERROR", "QUIET", "TRACE", "PRINT", "DEBUG", "FWRITE",
+	"CALL", "INSERT", "ON", "OFF", "ONERROR", "TRACE", "PRINT", "DEBUG", "FWRITE",
 	"FREAD", "FTELL", "FSEEK", "FCLOSE", "SAVE",
 	"RNG", "TIMER", "EVENT", "NOW", "INPUT", "RUN", "STOP", "PAUSE", "CONT", "LOAD", "BPT",
 	"LIST", "STACK", "LOG", "EVENTS", "AND", "OR", "INT", "ROUND", "ABS", "MIN", "MAX",
-	"SQRT", "SIN", "COS", "ATAN2", "LEN", "UPPER", "LOWER", "MID", "FIND", "RND", NULL,
+	"SQRT", "SIN", "COS", "ATAN2", "LEN", "UPPER", "LOWER", "MID", "FIND", "RND", "INK", "PAPER", NULL,
 };
 
 static void loadFail(int src, int line, const char *fmt, const char *a) __attribute__((noreturn));

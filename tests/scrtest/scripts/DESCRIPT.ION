@@ -18,6 +18,8 @@ t_expr.s expressions, numbers, text, functions, formats
 t_flow.out expected output of t_flow.s
 t_files.s data files FWRITE FREAD FTELL FSEEK FCLOSE FAPP FSTAT, VARS SAVE / LOAD
 t_files.out expected output of t_files.s
+t_ansi.s colour escapes \i \p, INK / PAPER, line ends, bad escapes, FWRITE strips
+t_ansi.out expected output of t_ansi.s (<33> = ESC[33m, <K> = ESC[K)
 t_fvar.s FSTAT / FDELETE on name.var (VARS SAVE file)
 t_fvar.out expected output of t_fvar.s
 t_ftag.s FSEEK TAG: line match, trailing blanks, errors
@@ -68,7 +70,7 @@ t_lerr_stack.s load error: stack
 t_lerr_vars.out expected output of t_lerr_vars.s
 t_lerr_vars.s load error: vars
 t_quiet.out expected output of t_quiet.s
-t_quiet.s QUIET levels
+t_quiet.s UI EVENTS volume levels (was QUIET)
 t_stop.out expected output of t_stop.s
 t_stop.s STOP while running
 t_sysfn.opt extra arguments for t_sysfn.s
@@ -81,5 +83,6 @@ t_vars.s variables, words, NV read, built-ins, GET, ACC/GYR
 inc.s INSERTed by t_text
 lerr_rec2.s second file of the recursive INSERT test
 lib.s library for CALL lib.fn tests
-shapes.s spec example library (drawPoly)
+shapes.s spec example library (drawPoly n cx cy r colour [fill]; same as sd/scripts/shapes.s)
+t_shapes.s shapes.drawPoly: outline, filled, usage cases
 DESCRIPT.ION file descriptions for this folder

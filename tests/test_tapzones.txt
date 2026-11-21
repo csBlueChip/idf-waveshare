@@ -1,0 +1,154 @@
+wavedemo - IMU tap zones test procedure (firmware 0.7.51+)
+==========================================================
+
+Manual test: type each command, check the result before the next step.
+  >  command to send
+  =  expected reply / what you should see
+  *  action on the board
+
+Setup: web console or a serial terminal (events must be visible),
+sd/scripts/tapzones.s copied to SD:/scripts/. Board flat on a table
+unless a step says otherwise. tapzones holds the board LANDSCAPE: it
+draws at ROT 1 with IMU ORIENT L AUTO; zone numbers are physical (ROT 0).
+
+
+A. COMMANDS (no script)
+-----------------------
+
+A0  > IMU ACC
+    > IMU GYR
+    = note range / rate of both (the script must put them back, D1)
+A1  > IMU TAP
+    = x:1 y:1 mode:run cal:ok
+      single:0 double:0 triple:0 zone:1 cal:0:0:0
+A2  > IMU ACC 4 224
+    > IMU GYR 512 224          (rates equal: capture on)
+    > IMU TAP * 1 0 0
+    = OK
+    * tap the board
+    = <<IMU TAP n:1 zone:1 gx:.. gy:.. gz:.. a:..>>  (a: above 1.3)
+A3  > IMU GYR 512 112          (rates differ; taps stay on)
+    * tap the board
+    = <<IMU TAP>>              (plain: no capture)
+    > IMU GYR 512 224
+A4  > IMU TAP 1 0 0
+    = ERR usage (IMU TAP n|* s d t)
+A5  > IMU TAP XY 2 4
+    = no calibration file for 2x4   (unless one was saved before)
+    > IMU TAP * 1 0 0
+    = ERR no calibration data
+A6  > IMU TAP NONE
+    > IMU TAP XY 1 1
+    = OK, OK
+
+
+B. TRAINING (RUN tapzones)
+--------------------------
+
+B1  > RUN tapzones
+    = landscape: 8 grey circles, 4 across x 2 down, text line across the
+      middle; "zone 1: tap the yellow circle 5x"; zone 1 (bottom-left as
+      held, ROT 1) yellow
+B1a > RUN tapzones 3 3     (then BOOT double)
+    = 3 rows x 3: text line on the boundary between rows 1 and 2 (1/3
+      down); circles centred in their zones
+B2  * tap the yellow circle 5 times
+    = text counts "zone 1: 1 of 5" ...; console <<IMU TAP n:0 zone:0 gx:..>>
+      per tap; then circle 1 dark green, circle 2 yellow
+B3  * part way through a later zone: BOOT short
+    = training starts again at zone 1
+B4  * train all 8 zones
+    = "trained - now tap any circle";
+      SD:/sys/imutap_2x4_0001_<timestamp>.cal exists (FILES / SD manager)
+
+
+C. TEST MODE (still in the script)
+----------------------------------
+
+C1  * tap each circle a few times
+    = that circle lights blue; text "TAP n:k zone:z"; at ROT 1 the top row
+      is zones 2 4 6 8 (n 1..4), the bottom row 1 3 5 7 (n 5..8)
+      note any wrong zones
+C1a * turn the board round (180 deg), wait 0.5 s
+    = picture turns (ORIENT L AUTO); tap zone 1 (now top-right as held)
+    = "TAP n:4 zone:1"
+C2  * tap the gap between two circles
+    = text "TAP: between zones" (zone:0)
+C3  * double-tap one circle
+    = "TAP n:k zone:k" then "2TAP n:k zone:k"
+C4  * tap one circle, then another at once
+    = two TAP lines, no 2TAP
+
+
+D. END, ROT AND FLIP
+--------------------
+
+D1  * BOOT double
+    = "tapzones: end"; IMU ACC / IMU GYR as noted in A0; IMU TAP shows x:1 y:1
+D2  > IMU TAP XY 2 4
+    = loaded imutap_2x4_0001_... x:2 y:4
+    > IMU ACC 8 896
+    > IMU GYR 2048 896
+    > IMU TAP * 1 0 0
+D3  > ROT 2
+    * tap physical zone 1 (top-left as at ROT 0)
+    = <<IMU TAP n:8 zone:1 ...>>
+D4  > ROT 1
+    * tap physical zone 1
+    = n:5 zone:1
+D5  > ROT 3
+    * tap physical zone 1
+    = n:4 zone:1
+D6  > ROT 1
+    > IMU ORIENT L AUTO
+    * hold landscape, then turn it round 180 (picture flips), tap physical
+      zone 1
+    = n:4 zone:1 (ROT 1 + flip = ROT 3)
+    > IMU ORIENT NONE
+    > ROT 0
+
+
+E. FILES
+--------
+
+E1  > IMU TAP SAVE fred
+    = saved fred.cal
+    > IMU TAP XY 1 1
+    > IMU TAP LOAD fred
+    = loaded fred.cal x:2 y:4
+E2  * on a PC copy imutap_2x4_0001_*.cal to imutap_3x3_0009_x.cal
+    > IMU TAP XY 3 3
+    = ...: name says 3x3, file says 2x4
+E3  > IMU TAP NONE
+    > IMU TAP XY 1 1
+    > RUN tapzones
+    = no training (calibration loaded): straight to test mode; BOOT double
+
+
+F. OTHER
+--------
+
+F1  > IMU TAP XY 2 4
+    > IMU TAP * 1 0 0
+    > IMU REC 2000
+    * tap during the recording
+    = REC works; taps during it give plain <<IMU TAP>>
+F2  > IMU TAP NONE
+    > IMU ORIENT NONE
+    = nothing on: the IMU task sleeps (no I2C traffic on a scope /
+      logic analyser; IMU DEBUG 1 logs nothing)
+F3  * repeat B and C hand-held instead of on the table
+    = note how well the zones separate in each case
+F4  > IMU ACC <A0 values>
+    > IMU GYR <A0 values>
+
+G. TAP LOG (tapzones.txt)
+-------------------------
+
+G1  * after B and C:  > FCAT tapzones.txt
+    = "# <time> 2 4 5", the header phase,target,zone,n,gx,gy,gz,a,sx,sy,sz, then one
+      train,<zone>,0,0,... line per training tap and one test,0,<zone>,<n>,...
+      line per test tap (only taps with data)
+G2  * copy SD:/scripts/data/tapzones.txt to a PC; plot gx/a against gy/a,
+      one colour per target (train lines): separate clusters = the data
+      can tell the zones apart; overlapping clusters = it cannot (yet)

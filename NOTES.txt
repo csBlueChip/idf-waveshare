@@ -18,6 +18,16 @@ conversation context. Keep it current, like the README.
   - Tab indentation in source. All device I/O is ASCII ('^' for degrees).
   - Keep README.txt (and header comments, nv.h) current with every change.
   - Do NOT give md5 sums (user's request).
+  - CHANGELOG.txt: add one or two lines for every version presented.
+  - A "go" is refused while a question to the user is still unanswered.
+  - Test scripts and their expected outputs are ALWAYS in scope: any
+    change that affects them updates them in the same version (broken
+    tests give false results). tests/scrtest/scripts/shapes.s must stay
+    the same as sd/scripts/shapes.s.
+  - Terms (user's rule, 0.7.64): "UI" = where the user types and reads
+    (web, telnet, BLE, UART, USB); "console" = where system debug / log
+    messages go (LOG, DEBUG, dbgf). Code names (scriptConsoleLine, ...)
+    kept.
   - Deliver files with download buttons (SendUserFile) when asked / after
     changes.
 
@@ -27,10 +37,12 @@ conversation context. Keep it current, like the README.
 
   Project (the user's copy):   /mnt/user-data/outputs/wavedemo
     src/        firmware sources (ESP-IDF component)
-    assets/     index.html (web console, embedded), usbdrive.png
+    assets/     index.html (web UI, embedded), usbdrive.png
     tests/      board test procedures (*.txt), scrtest/ (PC interpreter tests)
     sd/         SD card layout: images imu scrshots scripts(+data) sys www
     tools/      mkfont.py
+    attic/      shelved experiments, not built (attic/tapzones: IMU tap zones,
+                0.7.50..0.7.57; RESTORE.txt says how to put it back)
     README.txt  user documentation      SCRIPTING.txt  script spec
     SCRIPTING_REF.txt  quick reference  NOTES.txt      this file
     TODO.txt    todo list               .gitignore, DESCRIPT.ION (every folder)
@@ -133,9 +145,21 @@ conversation context. Keep it current, like the README.
     Found: the phone's / Windows' Bluetooth settings menu pairs and drops
     (no profile it knows); clients must connect from an app (Serial
     Bluetooth Terminal works). Forget stale pairings on phone / PC.
-  Console page (index.html): input 16 px (iOS auto-zoom), overflow-x
+  Web UI page (index.html): input 16 px (iOS auto-zoom), overflow-x
     hidden, replies in #log at the bottom of #out (flex-end). iPhone test
     on hold (TODO 20).
+  LCD mirror (0.7.61): lcd.c keeps a PSRAM copy of the panel only while the
+    page's box is open (lcdMirrorSet); lcdSyncSwap copies each update's
+    dirty rect into it and grows a pending rect; web.c task "webmir" takes
+    16 KB bands (lcdMirrorTake) and sends binary frames one at a time
+    (paced by s_mirSent), so changes during a send merge. The page turns
+    the native picture by -90 deg x rotation (ROT with SCR FLIP).
+    Playwright test: scratchpad fmweb/t50.js (fake WebSocket frames).
+    0.7.72: frame = LED colour: led.c ledOnChange hook (shown colour
+    changed) -> web.c webLedHook -> the webmir task (now started with
+    the server) sends <<LED r,g,b>> (text, <= every 100 ms); t52.js.
+  Aliases (0.7.61): alias.c; expanded in scriptConsoleLine and the paused
+    USB UI line only (never script lines). Host test: scratchpad alt/.
   Pins in NV: uart.tx / uart.rx (43 / 44) and btn.gpio "0 2 4 .. 11" (1..10
     GPIOs, first 0, from 0, 2..11, 43, 44; GP3 allowed, not default); read
     at boot (ser.c serUartPins, btn.c s_gpio/s_count). nvCrossPins: tx != rx,
@@ -166,7 +190,7 @@ conversation context. Keep it current, like the README.
   SD manager: plain editor (textarea; /fm/get raw, saves via /fm/put; ASCII
     only, 256 KB), Import (/fm/nvimport -> nvImport(), reboot=1 ->
     sysRebootLater), Run (/fm/run: fmStop, pending "RUN name args" started
-    by fmRunPending() on the console's UI_EV_CONNECT or after 5 s via
+    by fmRunPending() on the UI's UI_EV_CONNECT or after 5 s via
     uiRunMain). /sys/debug.cfg put/del/ren -> logLoadCfg(). FM_URI_COUNT 12.
   Replies made script-friendly (field:value, ':' splits words): TEMP ^C ^F
     ^K, BAT Vb:x.yy, NV GET key = value only, EVENTS, LOG, IMU status (one
@@ -199,7 +223,7 @@ conversation context. Keep it current, like the README.
     Deliver files + test results before touching the firmware.
 
   Step B - firmware integration:
-    new console commands (RUN STOP PAUSE CONT LOAD STEP BPT VARS LIST
+    new UI commands (RUN STOP PAUSE CONT LOAD STEP BPT VARS LIST
     STACK PRINT DEBUG RNG EVENTS LOG APPEND ...), boot order (interface
     starts after onBoot), system scripts + 3 s BOOT escape, event renames
     (LONG DOWN/UP/REPEAT -> DOWN/UP/REPEAT), UI events (CONNECT,
@@ -262,10 +286,10 @@ conversation context. Keep it current, like the README.
               ESP_WIFI_IRAM_OPT, ESP_WIFI_RX_IRAM_OPT, LWIP_IRAM_OPTIMIZATION
               off (~15-25 KB); FreeRTOS/ringbuf/heap functions into flash
               (~5-10 KB); ESP_WIFI_STATIC_RX_BUFFER_NUM 10->5 (~8 KB;
-              console can't out-type the UI, so fine); then BLE release
+              a user can't out-type the UI, so fine); then BLE release
               when not the UI (~25-35 KB, separate, needs testing).
     files   APPEND -> FLOG, LOGCAT -> FCAT file [start,count]; new FDIR
-            FSTAT FDELETE (console + script; FSTAT -> $.ret in scripts);
+            FSTAT FDELETE (UI + script; FSTAT -> $.ret in scripts);
             script-only FWRITE (at position, no \n) FREAD $v file n|EOL
             (max 200; over-read n / EOF errors) FTELL FSEEK START|END [n]|
             SET n|OFFS n FCLOSE; positions from 1 (end = size + 1);
@@ -422,7 +446,7 @@ conversation context. Keep it current, like the README.
             on the device, so local time = FAT time; lost at power-off.
   Notes for Step A:
     - cmd.c strips '#' comments and is NOT quote-aware: '#' inside quotes
-      needs \# at the console. The script loader has its own rules.
+      needs \# on the UI. The script loader has its own rules.
     - LINK DOWN drops the telnet/web session first, so a client never sees
       it; LINK UP is sent on every station IP (wifi.c).
   Step A + B: "go" given (both in one run). Design:
@@ -432,7 +456,7 @@ conversation context. Keep it current, like the README.
       substitution), src/scr_exec.c (frames, statements, events, debugger).
       Expressions are evaluated from statement text at run time (not
       pre-compiled; deviation from the implementation note, simpler).
-    firmware: src/script.c/.h (task, console commands, event queue, timers,
+    firmware: src/script.c/.h (task, UI commands, event queue, timers,
       system scripts, BOOT watcher, host hooks); hooks in main.c, ui.c.
     PC tests: tests/scrtest/ (host stub + scripts *.s with *.out).
   Progress:
@@ -442,19 +466,21 @@ conversation context. Keep it current, like the README.
     [done] Step B: script.c/.h (task prio 1 = main, 16 KB stack; event
            queue + TIMER merge; host hooks; RUN LOAD STOP PAUSE CONT STEP
            BPT VARS LIST STACK; system scripts; BOOT 3 s watcher; USB
-           console while paused without a client). Hooks: main.c
+           UI while paused without a client). Hooks: main.c
            (scriptInit, scriptBoot, scriptConsoleLine), ui.c (uiSend ->
            scriptEvent + uiSendText, uiHasClient, onWait/onConnect/client
            gone in uiEvent / uiStartScreen, USB rx), cmd.c cmdExists
            (CMD_MAX_COMMANDS 64), imu.c imuOrientLast + REC abort,
            scrtr.c abort. Firmware builds clean.
     [done] System scripts in SD:/sys/ (onBoot onWait onConnect), named
-           sys/name by hand; QUIET 0..3 default 2 (2 hides <<BTN|IMU|UI>>
-           from the client: scriptEvent() returns true, uiSend skips).
+           sys/name by hand; QUIET 0..3 default 2 - since 0.7.63 UI EVENTS
+           0..3 default 1 (inverted; scr_exec.c localCmd) and per-script
+           sources (scr.evmask; scriptEvent() queues only those, returns
+           true at vol 0/1 so uiSend skips).
     [todo] Board test: see TODO.txt (D2, D4 retest; G, H, I).
   Deviations (also in SCRIPTING.txt status): expressions not pre-compiled;
   onWait/onConnect functions are separate runs; onConnect and
-  onWait before/after block the console (client lines wait); image
+  onWait before/after block the UI (client lines wait); image
   decode not cut by STOP NOW; watchdog by 1-tick yield per second.
   Lesson: python str.index() on a name also finds its prototype - always
   anchor on the definition line and assert order (lost scr_exec.c once,

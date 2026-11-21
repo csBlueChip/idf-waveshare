@@ -1,4 +1,5 @@
 #include "text.h"
+#include "ansi.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -586,6 +587,7 @@ static const char *textParseText(const char *args, textBox_t **pb, textChar_t *c
 	}
 	const font_t *cur = fontGet(b->font);
 	int           cnt = 0;
+	char          sgr[ANSI_SEQ_MAX];
 	*warn = NULL;
 
 	for (const char *p = text; *p && cnt < CMD_LINE_MAX; p++) {
@@ -595,6 +597,13 @@ static const char *textParseText(const char *args, textBox_t **pb, textChar_t *c
 		} else if (p[0] == '\\' && (p[1] == '\\' || p[1] == '#' || p[1] == '$')) {
 			chars[cnt++] = (textChar_t) { p[1], cur };
 			p++;
+		} else if (p[0] == '\\' && (p[1] == 'i' || p[1] == 'p') && ansiEscape(p + 1, sgr) > 0) {
+			p += ansiEscape(p + 1, sgr);		/* console colour: not on the LCD */
+		} else if (p[0] == ANSI_ESC && p[1] == '[') {
+			p += strcspn(p + 2, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz") + 2;
+			if (!*p) {
+				break;				/* colour codes from a variable */
+			}
 		} else if (p[0] == '\\' && p[1] >= '1' && p[1] <= '9') {
 			int           id = p[1] - '0';
 			const font_t *f  = fontGet(id);
@@ -723,25 +732,43 @@ const char *textUnquote(const char *in, char *out, size_t n)
 	return NULL;
 }
 
-void textUnescape(const char *in, char *out, size_t n)
+const char *textUnescape(const char *in, char *out, size_t n)
 {
+	static EXT_RAM_BSS_ATTR char tmp[CMD_LINE_MAX * 4 + 1];	/* out may be in */
+	static char err[96];
 	size_t o = 0;
 
 	if (n == 0) {
-		return;
+		return NULL;
 	}
-	for (const char *p = in; *p && o + 1 < n; p++) {
+	for (const char *p = in; *p && o + 1 < sizeof(tmp); p++) {
 		if (p[0] == '\\' && p[1] == 'n') {
-			out[o++] = '\n';
+			tmp[o++] = '\n';
 			p++;
 		} else if (p[0] == '\\' && (p[1] == '\\' || p[1] == '#' || p[1] == '$')) {
-			out[o++] = p[1];
+			tmp[o++] = p[1];
 			p++;
 		} else if (p[0] == '\\' && p[1] >= '1' && p[1] <= '9') {
 			p++;					/* font: TEXT only */
+		} else if (p[0] == '\\' && (p[1] == 'i' || p[1] == 'p')) {
+			char sgr[ANSI_SEQ_MAX];
+			int  u = ansiEscape(p + 1, sgr);
+			if (u < 0) {
+				snprintf(err, sizeof(err), "bad colour escape \\%.3s (\\iN \\ilN \\pN \\plN \\ip; N 0..8 krgybmcwd)", p + 1);
+				return err;
+			}
+			size_t sl = strlen(sgr);
+			if (o + sl + 1 >= sizeof(tmp)) {
+				break;
+			}
+			memcpy(tmp + o, sgr, sl);
+			o += sl;
+			p += u;
 		} else {
-			out[o++] = *p;
+			tmp[o++] = *p;
 		}
 	}
-	out[o] = '\0';
+	tmp[o] = '\0';
+	snprintf(out, n, "%s", tmp);
+	return NULL;
 }

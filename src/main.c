@@ -25,6 +25,7 @@
 #include "fm.h"
 #include "script.h"
 #include "reset.h"
+#include "alias.h"
 
 static const char *TAG = "main";
 
@@ -92,6 +93,7 @@ void app_main(void)
 	ESP_ERROR_CHECK(uiInit());
 	ESP_ERROR_CHECK(btnInit());
 	ESP_ERROR_CHECK(scriptInit());
+	ESP_ERROR_CHECK(aliasInit());			/* last: checks names against every command */
 	scriptBoot();					/* onBoot (NV sys.autorun 1) */
 	uiBegin();					/* interface, Wait screen, serial banner */
 	appRun();

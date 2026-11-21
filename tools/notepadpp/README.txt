@@ -23,6 +23,8 @@ blue, built-in functions yellow, AND / OR blue bold, firmware commands
 cyan, $x $$x ${x} orange, $.x system variables pink, strings "..."
 '...' green, numbers purple, :labels and .STACK .CONST .FILES
 orange-red, # comments grey. IF / LOOP / SWITCH / FN ... END fold.
+Colour escapes (\i3 \ir \ilr \p4 \pd \ip ...) take the $. colour (pink), also
+inside strings (keyword nesting in strings, untested on Notepad++).
 
 Differences from the SD manager viewer: option words and command names
 are coloured wherever they appear (Notepad++ cannot tell the first word

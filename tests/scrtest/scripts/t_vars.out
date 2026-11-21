@@ -9,7 +9,7 @@
 > counter 2: 2
 > div0: divide by zero
 > after unset: 0 $nope is not set
-> global 6 nv 50 first X|d 6
+> global 6 nv 12 first X|d 6
 > nv write: NV settings are read-only: use NV SET
 > builtin write: $.ok is read-only
 > built-ins: 0.012 -0.5 24.5 4.1 1 172 320 0 1.0.0 b0001_000010

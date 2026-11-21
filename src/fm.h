@@ -96,7 +96,7 @@ void fmRegister(httpd_handle_t hd);
 void fmRunPending(void);
 
 /* Number of URI handlers fmRegister() adds. */
-#define FM_URI_COUNT	12
+#define FM_URI_COUNT	13
 
 /* Card-relative path p (decoded, e.g. "/a/b.txt" or "/") checked and joined
  * to root into out. false = refused or too long. Pure, host-testable. */

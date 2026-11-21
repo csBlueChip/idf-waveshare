@@ -1,0 +1,91 @@
+Tap zones - NV parts removed at 0.7.58 (from 0.7.57). See RESTORE.txt.
+
+== src/nv.c prototypes
+static const char *nvChkTapXy(const char *in, int min, int max, char *out);
+static const char *nvChkTapZone(const char *in, int min, int max, char *out);
+
+== src/nv.c table (after imu.tap.gap / the imu.* keys)
+	{ "imu.tap.dead",     "0.7",           nvChkTenth, 1,   10,    0 },
+	{ "imu.tap.min",      "1.8",           nvChkTenth, 10,  160,   0 },
+	{ "imu.tap.win",      "4",             nvChkInt,   1,   30,    0 },
+	{ "imu.tap.xy",       "1:1",           nvChkTapXy, 0,   0,     0 },
+	{ "imu.tap.zone1",      "0:0:0",         nvChkTapZone, 0, 0,    0 },
+	{ "imu.tap.zone2",      "0:0:0",         nvChkTapZone, 0, 0,    0 },
+	{ "imu.tap.zone3",      "0:0:0",         nvChkTapZone, 0, 0,    0 },
+	{ "imu.tap.zone4",      "0:0:0",         nvChkTapZone, 0, 0,    0 },
+	{ "imu.tap.zone5",      "0:0:0",         nvChkTapZone, 0, 0,    0 },
+	{ "imu.tap.zone6",      "0:0:0",         nvChkTapZone, 0, 0,    0 },
+	{ "imu.tap.zone7",      "0:0:0",         nvChkTapZone, 0, 0,    0 },
+	{ "imu.tap.zone8",      "0:0:0",         nvChkTapZone, 0, 0,    0 },
+	{ "imu.tap.zone9",      "0:0:0",         nvChkTapZone, 0, 0,    0 },
+	{ "imu.tap.zone10",     "0:0:0",         nvChkTapZone, 0, 0,    0 },
+	{ "imu.tap.zone11",     "0:0:0",         nvChkTapZone, 0, 0,    0 },
+	{ "imu.tap.zone12",     "0:0:0",         nvChkTapZone, 0, 0,    0 },
+	{ "imu.tap.zone13",     "0:0:0",         nvChkTapZone, 0, 0,    0 },
+	{ "imu.tap.zone14",     "0:0:0",         nvChkTapZone, 0, 0,    0 },
+	{ "imu.tap.zone15",     "0:0:0",         nvChkTapZone, 0, 0,    0 },
+	{ "imu.tap.zone16",     "0:0:0",         nvChkTapZone, 0, 0,    0 },
+
+== src/nv.c checkers
+/* Tap calibration grid "x:y" (ROT 0), x * y 1..16. */
+static const char *nvChkTapXy(const char *in, int min, int max, char *out)
+{
+	int  x, y;
+	char extra;
+	if (sscanf(in, "%d:%d%c", &x, &y, &extra) != 2 || x < 1 || y < 1 || x * y > 16) {
+		return "must be x:y with x * y 1..16";
+	}
+	sprintf(out, "%d:%d", x, y);
+	return NULL;
+}
+
+/* Tap zone centre "x:y:z" (gx/a : gy/a : gz/a, IMU TAP n CAL; "x:y" = z 0);
+ * 0:0:0 = none. */
+static const char *nvChkTapZone(const char *in, int min, int max, char *out)
+{
+	float x, y, z = 0.0f;
+	char  extra;
+	int   n = sscanf(in, "%f:%f:%f%c", &x, &y, &z, &extra);
+	if ((n != 2 && n != 3) || !isfinite(x) || !isfinite(y) || !isfinite(z) || fabsf(x) > 9999.0f ||
+	    fabsf(y) > 9999.0f || fabsf(z) > 9999.0f) {
+		return "must be x:y:z (numbers; 0:0:0 = not calibrated)";
+	}
+	sprintf(out, "%.3f:%.3f:%.3f", x, y, z);
+	if (strcmp(out, "0.000:0.000:0.000") == 0) {
+		strcpy(out, "0:0:0");
+	}
+	return NULL;
+}
+
+
+== src/nv.h doc
+ *   imu.tap.min 1.8             1.0..16.0 g   tap zones: weaker taps send nothing
+ *   imu.tap.win 4               1..30 ms      tap zones: first-swing window
+ *   imu.tap.dead 0.7            0.1..1.0      tap zone dead band (nearest vs second)
+ *   imu.tap.xy 1:1              x:y           grid of the stored tap calibration
+ *   imu.tap.zone1..16 0:0:0     x:y:z         tap zone centres (gx/a : gy/a : gz/a), 0:0:0 none
+
+== sd/sys/default.nvram
+imu.tap.dead=0.7
+imu.tap.min=1.8
+imu.tap.win=4
+imu.tap.xy=1:1
+imu.tap.zone1=0:0:0
+imu.tap.zone2=0:0:0
+imu.tap.zone3=0:0:0
+imu.tap.zone4=0:0:0
+imu.tap.zone5=0:0:0
+imu.tap.zone6=0:0:0
+imu.tap.zone7=0:0:0
+imu.tap.zone8=0:0:0
+imu.tap.zone9=0:0:0
+imu.tap.zone10=0:0:0
+imu.tap.zone11=0:0:0
+imu.tap.zone12=0:0:0
+imu.tap.zone13=0:0:0
+imu.tap.zone14=0:0:0
+imu.tap.zone15=0:0:0
+imu.tap.zone16=0:0:0
+
+== src/script.c (KEPT: not removed)
+42:#define SCRIPT_EV_TEXT		128		/* <<IMU TAP ...>> with tap values: ~80 */

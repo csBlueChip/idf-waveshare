@@ -30,6 +30,7 @@
 #include "sd.h"
 #include "nv.h"
 #include "log.h"
+#include "ansi.h"
 #include "text.h"
 #include "script.h"
 
@@ -56,6 +57,7 @@ static const char *sysCmdWait(int argc, char *argv[], cmdReply_t reply);
 static const char *sysCmdReboot(int argc, char *argv[], cmdReply_t reply);
 static void        sysRestart(void *arg);
 static const char *sysCmdMem(int argc, char *argv[], cmdReply_t reply);
+static const char *sysCmdAnsi(int argc, char *argv[], cmdReply_t reply);
 static const char *sysCmdFdir(int argc, char *argv[], cmdReply_t reply);
 static const char *sysCmdFstat(int argc, char *argv[], cmdReply_t reply);
 static const char *sysCmdFdelete(int argc, char *argv[], cmdReply_t reply);
@@ -90,7 +92,7 @@ esp_err_t sysInit(void)
 		err = cmdRegisterRaw("PRINT", sysCmdPrint, "PRINT text  reply text {\\n \\\\ \\# \\$}");
 	}
 	if (err == ESP_OK) {
-		err = cmdRegisterRaw("DEBUG", sysCmdDebug, "DEBUG text  text to the log port(s)");
+		err = cmdRegisterRaw("DEBUG", sysCmdDebug, "DEBUG text  text to the console");
 	}
 	if (err == ESP_OK) {
 		err = cmdRegisterRaw("FAPP", sysCmdAppend, "FAPP file text  append text + new line (name.txt|var|nvram, /sys/name.txt|var)");
@@ -112,6 +114,10 @@ esp_err_t sysInit(void)
 	}
 	if (err == ESP_OK) {
 		err = cmdRegister("MEM", 0, 0, sysCmdMem, "MEM  RAM use: internal, PSRAM, task stacks");
+	}
+	if (err == ESP_OK) {
+		err = cmdRegister("ANSI", 0, 3, sysCmdAnsi,
+		                  "ANSI [PRINT [ALL|UART|USB|TELNET|WEB|BLE 0|1] | DEBUG [ALL|UART|USB 0|1]]  colour codes per interface");
 	}
 	return err;
 }
@@ -312,31 +318,36 @@ static const char *sysText(const char *args, char *out, size_t n)
 {
 	const char *err = textUnquote(args, out, n);
 	if (!err) {
-		textUnescape(out, out, n);
+		err = textUnescape(out, out, n);
 	}
 	return err;
 }
 
+/* PRINT / DEBUG text with colour codes: each line closed (ansiFrame; no
+ * INK / PAPER on the console). */
+#define SYS_TEXT_MAX	(CMD_LINE_MAX * 4)
 static const char *sysCmdPrint(const char *args, cmdReply_t reply)
 {
-	static EXT_RAM_BSS_ATTR char text[CMD_LINE_MAX + 2];
+	static EXT_RAM_BSS_ATTR char text[SYS_TEXT_MAX + 2], out[SYS_TEXT_MAX * 2];
 	const char *err = sysText(args, text, sizeof(text) - 1);
 	if (err) {
 		return err;
 	}
 	strcat(text, "\n");
-	reply(text);
+	ansiFrame(text, ANSI_NONE, ANSI_NONE, out, sizeof(out));
+	reply(out);
 	return NULL;
 }
 
 static const char *sysCmdDebug(const char *args, cmdReply_t reply)
 {
-	static EXT_RAM_BSS_ATTR char text[CMD_LINE_MAX + 1];
+	static EXT_RAM_BSS_ATTR char text[SYS_TEXT_MAX + 1], out[SYS_TEXT_MAX * 2];
 	const char *err = sysText(args, text, sizeof(text));
 	if (err) {
 		return err;
 	}
-	dbgf("%s", text);
+	ansiFrame(text, ANSI_NONE, ANSI_NONE, out, sizeof(out));
+	dbgf("%s", out);
 	return NULL;
 }
 
@@ -345,7 +356,7 @@ static const char *sysCmdDebug(const char *args, cmdReply_t reply)
  * created when missing; a read-only file is refused. */
 static const char *sysCmdAppend(const char *args, cmdReply_t reply)
 {
-	static EXT_RAM_BSS_ATTR char text[CMD_LINE_MAX + 1];
+	static EXT_RAM_BSS_ATTR char text[SYS_TEXT_MAX + 1];
 	char        file[SYS_FILE_MAX + 16];
 	char        path[SYS_PATH_MAX];
 	size_t      len = 0;
@@ -373,6 +384,7 @@ static const char *sysCmdAppend(const char *args, cmdReply_t reply)
 	if (err) {
 		return err;
 	}
+	ansiStrip(text);				/* files never get colour codes */
 
 	sdLock();
 	if (sdEnsureMounted() != ESP_OK) {
@@ -616,6 +628,69 @@ static const char *sysLogList(const char *type, cmdReply_t reply)
 		}
 	}
 	sysListCount(n, reply);
+	return NULL;
+}
+
+/* ANSI: the colour switches (NV <if>.ansi.ui for PRINT, <if>.ansi.con for
+ * DEBUG on the log ports), one line: print.uart:1 ... debug.usb:1.
+ * ANSI PRINT|DEBUG ALL|<if> 0|1 stores (NV) and applies at once. */
+static const struct { const char *ifc, *key; bool dbg; } s_ansi[] = {
+	{ "uart", "uart.ansi.ui", false },     { "usb", "usb.ansi.ui", false },
+	{ "telnet", "telnet.ansi.ui", false }, { "web", "web.ansi.ui", false },
+	{ "ble", "ble.ansi.ui", false },
+	{ "uart", "uart.ansi.con", true },     { "usb", "usb.ansi.con", true },
+};
+#define SYS_ANSI_N	(int)(sizeof(s_ansi) / sizeof(s_ansi[0]))
+
+static void sysAnsiShow(int which, cmdReply_t reply)	/* which: -1 all, 0 PRINT, 1 DEBUG */
+{
+	char line[200];
+	int  o = 0;
+	for (int i = 0; i < SYS_ANSI_N; i++) {
+		if (which < 0 || which == (int)s_ansi[i].dbg) {
+			o += snprintf(line + o, sizeof(line) - o, "%s%s.%s:%d", o ? " " : "",
+			              s_ansi[i].dbg ? "debug" : "print", s_ansi[i].ifc, nvGetInt(s_ansi[i].key));
+		}
+	}
+	snprintf(line + o, sizeof(line) - o, "\n");
+	reply(line);
+}
+
+static const char *sysCmdAnsi(int argc, char *argv[], cmdReply_t reply)
+{
+	static const char usage[] = "usage: ANSI [PRINT [ALL|UART|USB|TELNET|WEB|BLE 0|1] | DEBUG [ALL|UART|USB 0|1]]";
+	if (argc == 0) {
+		sysAnsiShow(-1, reply);
+		return NULL;
+	}
+	int dbg = strcasecmp(argv[0], "DEBUG") == 0 ? 1 : strcasecmp(argv[0], "PRINT") == 0 ? 0 : -1;
+	if (dbg < 0 || argc == 2) {
+		return usage;
+	}
+	if (argc == 1) {
+		sysAnsiShow(dbg, reply);
+		return NULL;
+	}
+	if ((strcmp(argv[2], "0") != 0 && strcmp(argv[2], "1") != 0)) {
+		return usage;
+	}
+	const char *keys[SYS_ANSI_N], *vals[SYS_ANSI_N];
+	int         n   = 0;
+	bool        all = strcasecmp(argv[1], "ALL") == 0;
+	for (int i = 0; i < SYS_ANSI_N; i++) {
+		if (s_ansi[i].dbg == dbg && (all || strcasecmp(argv[1], s_ansi[i].ifc) == 0)) {
+			keys[n]   = s_ansi[i].key;
+			vals[n++] = argv[2];
+		}
+	}
+	if (n == 0) {
+		return dbg ? "usage: ANSI DEBUG ALL|UART|USB 0|1" : "usage: ANSI PRINT ALL|UART|USB|TELNET|WEB|BLE 0|1";
+	}
+	const char *err = nvSetMany(n, keys, vals, NULL);
+	if (err) {
+		return err;
+	}
+	sysAnsiShow(-1, reply);
 	return NULL;
 }
 

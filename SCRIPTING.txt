@@ -7,7 +7,7 @@ implementation:
     pre-compiled at load); load still checks blocks, names, VARS, files.
   - onWait / onConnect: before, instead and after are three separate
     runs (each starts with fresh globals); before / after of onWait and
-    all of onConnect run while the console waits (client lines are
+    all of onConnect run while the UI waits (client lines are
     taken afterwards), so INPUT there only times out.
   - Watchdog: the script yields one tick every second (no task-watchdog
     registration needed).
@@ -21,7 +21,7 @@ implementation:
   - Scripts live on the SD card in /scripts/, named name.s; names are
     letters, digits and '_' only, case-insensitive.
   - ASCII text, one or more statements per line, max 200 chars per line
-    (same as the console). Line endings CR, LF or CR LF are all accepted;
+    (same as the UI). Line endings CR, LF or CR LF are all accepted;
     a UTF-8 BOM at the start is ignored; any other non-ASCII character is
     a load error (naming the line).
   - File names: max 31 characters, not counting .s.
@@ -35,11 +35,16 @@ implementation:
   - Edit the files on a PC (FILES gives USB disk access).
 
 
-2. CONSOLE COMMANDS
+2. UI COMMANDS
 -------------------
 
   RUN name [args]       start name.s; args become $arg (section 4)
                         (RUN alone: ERR usage; LIST lists the scripts)
+  CALL file.fn [args]   run only function fn of file.s (its top-level code
+                        does not run); args fill its parameters as in a
+                        script's CALL. file.fn is required; /sys/x.fn too.
+                        ERR not found / no function fn in file / the
+                        file's load error.
   STOP                  kill the running script at once ("kill -9");
                         only the command in progress finishes (WAIT ms
                         and WAIT EVENT end at once)
@@ -54,9 +59,9 @@ implementation:
   Debugging (section 2a): LOAD  STEP  BPT  VARS  LIST  STACK
 
   While a script runs, only STOP, STOP NOW and PAUSE are accepted; every
-  other console line is refused:
+  other UI line is refused:
     ERR script running
-  While it is paused, every console command works (normal commands for
+  While it is paused, every UI command works (normal commands for
   inspection, plus STOP, CONT and the debug commands).
   Only one script runs at a time.
 
@@ -68,13 +73,15 @@ implementation:
                         the debug console before a client connects.
 
   EVENTS                list what the client receives:
-                          BTN:1 IMU:1 UI:1 SCRIPT:1
-  EVENTS src 0|1        src = BTN | IMU | UI | SCRIPT | ALL
+                          BTN:1 IMU:1 UI:1 SYS:1 SCRIPT:1
+  EVENTS src 0|1        src = BTN | IMU | UI | SYS | SCRIPT | ALL
                         0 = the client no longer receives <<src ...>>
                         events. This session only (all 1 after reboot).
-                        Scripts always receive every event.
+                        In a script EVENTS switches the script's own
+                        sources instead (section 10).
 
-  Messages to the UI (never seen by scripts):
+  Messages to the UI (never seen by scripts; name is file.fn when only a
+  function runs - UI CALL, system scripts' before / instead / after):
     <<SCRIPT name END>>                    finished or EXIT
     <<SCRIPT name STOPPED>>                killed by STOP
     <<SCRIPT name ERR file:n: reason>>     stopped by an error (file and
@@ -83,7 +90,7 @@ implementation:
                                            line n of file
 
 
-2a. DEBUGGING (console)
+2a. DEBUGGING (UI)
 -----------------------
 
   LOAD name [args]      load name.s and pause before its first line
@@ -118,7 +125,7 @@ implementation:
                         system scripts started automatically, so they can
                         be debugged. If no client is connected (e.g. in
                         onBoot or onWait), the USB serial port acts as
-                        the console while the script is paused.
+                        the UI while the script is paused.
 
 
 3. LINES AND TEXT
@@ -130,7 +137,7 @@ implementation:
     a '#' inside quotes is text.
   - Blank lines and comment-only lines are ignored.
   - Keywords and command names are case-insensitive.
-  - Any line that is not a script statement is a console command
+  - Any line that is not a script statement is a UI command
     (CLS 0,0,0, IMU TAP 1 0 0, ...). Before it runs, every $variable in
     it is replaced by its value; "\$" is a literal '$'.
       FBOX $x $y 10 10 255,0,0
@@ -154,7 +161,7 @@ implementation:
     base 2..36 (digits 0-9, then A-Z). A negative value gets a '-' in
     front of the digits. Decimal places apply to base 10 only; in other
     bases the fraction is dropped (2.7 -> 2, -2.5 -> -2).
-  - Script keywords and console commands never share a name (section 3a).
+  - Script keywords and UI commands never share a name (section 3a).
 
   Word rule (used for $v[n], $arg[n] - everywhere):
     words are split on  space  tab  ':'  '|'  '\n'  '\r'
@@ -165,23 +172,27 @@ implementation:
 
   Script statements:
     LET GET VARS DEL INS IF ELIF ELSE END LOOP TO STEP WHILE TIMES FOREVER BREAK
-    NEXT SWITCH GOTO EXIT FN RETURN CALL INSERT ON OFF ONERROR QUIET TRACE
-    PRINT DEBUG FWRITE FREAD FTELL FSEEK FCLOSE RNG TIMER BPT!  .STACK .CONST
+    NEXT SWITCH GOTO EXIT FN RETURN CALL INSERT ON OFF ONERROR TRACE
+    PRINT DEBUG FWRITE FREAD FTELL FSEEK FCLOSE RNG TIMER BPT! INK PAPER
+    .STACK .CONST
     (VARS SAVE / VARS LOAD; SAVE is reserved too)
   Also reserved: EVENT (WAIT EVENT), NOW (STOP NOW), INPUT
-  Console only: RUN STOP PAUSE CONT LOAD STEP BPT VARS LIST STACK
-  Console and scripts: LOG EVENTS
+  UI only: RUN STOP PAUSE CONT LOAD STEP BPT VARS LIST STACK (and CALL
+  file.fn, see below)
+  UI and scripts: LOG EVENTS
   Functions: INT ROUND ABS MIN MAX SQRT SIN COS ATAN2 LEN UPPER LOWER MID
              FIND RND
 
-  None of these may be used as a console command name.
+  None of these may be used as a UI command name.
   Not collisions:
     STEP     in LOOP ... STEP n it is part of the LOOP line, not a verb
-    VARS     special case: declaration in a script, variable dump at the
-             console
+    VARS     special case: declaration in a script, variable dump on the
+             UI
+    CALL     special case: the statement in a script (CALL fn / file.fn),
+             a run of one function on the UI (CALL file.fn only)
     WAIT     WAIT ms and WAIT EVENT [ms] are two forms of one verb
     ACC GYR  the x y z targets are required in a script and not allowed
-             at the console (section 6)
+             on the UI (section 6)
 
 
 4. VARIABLES
@@ -343,7 +354,7 @@ implementation:
                          (also $$v++ / $$v--)
   LET $v = $v $new       two values side by side, with no operator between
                          them, are joined with one space (also in IF etc.)
-  GET $v = command       run the console command, keep its reply in $v
+  GET $v = command       run the UI command, keep its reply in $v
                          (lines joined with '|', final OK not included);
                          sets $.ok / $.err; nothing goes to the UI.
                          A failing command does not trigger ONERROR:
@@ -353,16 +364,16 @@ implementation:
   ACC $x $y $z           one IMU snapshot into three variables (g)
   GYR $x $y $z           same for the gyroscope (dps)
                          (the names are targets, not substituted; in a
-                         script the three targets are required, at the
-                         console they are not allowed)
+                         script the three targets are required, on the
+                         UI they are not allowed)
 
 
 7. OUTPUT
 ---------
 
   TEXT n text      to text box n on the glass (existing command)
-  PRINT text       to the UI (the console client)
-  DEBUG text       to the log port(s), as dbgf()
+  PRINT text       to the UI (the client)
+  DEBUG text       to the console, as dbgf()
 
   TLEN n text takes the text as TEXT does and replies its width in pixels
   (nothing drawn):  GET $w = TLEN 1 "Score: $s"  -> $w = 132
@@ -388,11 +399,33 @@ implementation:
         \$        a literal $
         \1..\9    font 1..9 for the rest of this TEXT (TEXT / TLEN only;
                   PRINT and DEBUG drop them)
+        \iN       ink N (PRINT / DEBUG / INPUT prompt); N a digit or a
+                  lower-case letter: 0/k black 1/r red 2/g green
+                  3/y yellow 4/b blue 5/m magenta 6/c cyan 7/w white
+        \ilN      light (bright) ink N (also \i9N): \ilr = \i91
+        \pN / \plN  paper / light paper
+        \id \pd   ink / paper back to the script's INK / PAPER (the
+                  terminal's default when not set); also \i8 \p8;
+                  \ip = both
+      Colour escapes last to the end of the line. A bad one (\ix, \iR,
+      \ild, \i9 alone) is an error. FAPP and FWRITE drop them; TEXT and TLEN
+      ignore them (the glass has TINK / TPAPER). They become ANSI codes,
+      sent only where NV <if>.ansi.ui (PRINT) / <if>.ansi.con (DEBUG) is
+      1 (UI command: ANSI), else stripped; the web UI colours them.
+
+  INK [l]N         ink for every following PRINT / DEBUG line of this run
+  PAPER [l]N       paper the same (N 0..7 or k r g y b m c w; l or 9
+                   before it = light; d or 8 = none: the terminal's
+                   default); until the script ends
+    Each coloured line starts with INK / PAPER, ends with them again,
+    then ESC[K when PAPER is set (the rest of the line in the paper) and
+    a reset, so nothing bleeds into OK / ERR or later replies.
+      INK y ; PAPER b ; PRINT "warning: \ilrhot\id again"
 
   FAPP file text   append text plus a new line to file (name.txt or
                    name.var in <data>, section 7a; name.nvram in /sys/
                    scripts only; no folder; folder and file created if
-                   missing; same text rules as PRINT). Also a console
+                   missing; same text rules as PRINT). Also a UI
                    command.
 
 7a. DATA FILES
@@ -405,10 +438,10 @@ implementation:
   FAPP / FCAT / FSTAT / FDELETE always take the full name: name.txt /
   name.var = <data>; name.nvram = SD:/sys/name.nvram (only from /sys/
   scripts). A script never gives a folder: it is tied to the home of its
-  root script (RUN root). On the console /sys/name.txt|var reaches
+  root script (RUN root). On the UI /sys/name.txt|var reaches
   SD:/sys/data. FDIR lists both data folders with full names.
 
-  Console and scripts:
+  UI and scripts:
     FAPP file text                  append text + new line (section 7)
     FCAT file [start [count]] [>DEBUG]
                                     show the file / from line start, count
@@ -471,13 +504,16 @@ implementation:
     VARS SAVE / LOAD may be used anywhere (VARS $a ... declarations only
     at the start of a body).
 
-  QUIET 0|1|2|3    what the client sees of the script (default 2):
-                     0  everything
-                     1  no replies / OKs of the commands the script runs
-                     2  as 1, and no <<BTN|IMU|UI>> events (default)
-                     3  as 2, and no ERRs of those commands
-                   PRINT output and <<SCRIPT ...>> messages are always sent;
-                   the script itself always gets every event.
+  UI EVENTS [0|1|2|3]  what the client sees of the script (volume,
+                   default 1; script only - on the UI ERR script only):
+                     3  everything
+                     2  no replies / OKs of the commands the script runs
+                     1  as 2, and no events of the sources the script
+                        turned on (default)
+                     0  as 1, and no ERRs of those commands
+                   PRINT output is never hidden; <<SCRIPT ...>> messages
+                   (END, STOPPED, ERR, PAUSED) cannot be silenced.
+                   UI EVENTS alone replies vol:n.
   TRACE 1|0        each line is logged with DEBUG as it runs (default 0)
 
 
@@ -550,7 +586,7 @@ implementation:
   CALL name [args]                 function in the same file
   CALL file.name [args]            function in file.s (loaded on first
                                    use, kept for the run)
-                                   e.g. CALL shapes.drawPoly $x $y $r
+                                   e.g. CALL shapes.drawPoly 6 $x $y $r 255,0,0
     only that function runs - the other file's top-level code never runs.
     Every file named in a literal CALL file.x or ON ... file.x is loaded
     and checked when the script loads, so its errors show before the
@@ -584,7 +620,7 @@ implementation:
       argument).
     - Constants also work as data file names (section 7a).
     - Names follow the variable rule, are case-insensitive, and must not
-      equal a reserved word, a function or a console command (load
+      equal a reserved word, a function or a UI command (load
       error). Pick names that cannot be a command argument (e.g. not P,
       AUTO, NONE) - such a word would be replaced too. UPPER-CASE names
       are the convention.
@@ -600,11 +636,19 @@ implementation:
 10. EVENTS
 ----------
 
-  ON BTN function        register a handler for a source
-  ON IMU function        (function may be file.name)
+  Every script starts with all its sources off: nothing is queued for it.
+  EVENTS src 1|0         turn source src on / off for this script (src =
+                         BTN IMU UI TIMER SYS ALL); EVENTS alone replies
+                         BTN:0 IMU:1 UI:0 TIMER:0 SYS:0. In a script
+                         EVENTS is this statement, not the UI's
+                         EVENTS (what the client sees).
+  ON BTN function        register a handler for a source, and turn the
+  ON IMU function        source on (function may be file.name)
   ON UI  function
   ON TIMER function
-  ON BTN OFF             remove it
+  ON SYS function
+  ON BTN OFF             remove it, and turn the source off
+  TIMER n ms (ms > 0) turns TIMER on too.
   One handler per source; a new ON replaces the old one (the handler can
   SWITCH on $arg to deal with every event of its source).
 
@@ -612,19 +656,23 @@ implementation:
         <<BTN 1 SHORT>>    ON BTN handler    $arg[1]=1     $arg[2]=SHORT
         <<IMU STEP 120>>   ON IMU handler    $arg[1]=STEP  $arg[2]=120
         <<UI LINK UP>>     ON UI handler     $arg[1]=LINK  $arg[2]=UP
-  - All events are queued from the moment the script starts (queue of
-    16; when full the oldest is dropped).
+  - Events of the sources that are on are queued (queue of 16; when full
+    the oldest is dropped). Events of sources that are off are not
+    queued: the client gets them as if no script ran.
   - Handlers run between script lines and in WAIT EVENT (not during
     WAIT ms), one at a time; a handler is never re-entered, and WAIT EVENT
     inside a handler is an error.
-  - Events still go to the UI client as before.
+  - The client sees the events of sources that are on only at UI
+    EVENTS 2 or 3.
 
   WAIT EVENT [ms]
     Events of a source WITH a handler are handled between lines as they
     come, so they are normally gone before WAIT EVENT; queued events of
     sources WITHOUT a handler stay queued for WAIT EVENT.
     WAIT EVENT takes the oldest queued event at once, or waits for the
-    next event of any source (or the time-out). If its source has a
+    next event of any source that is on (or the time-out); with no
+    time-out and every source off it is an error ("no events enabled").
+    If its source has a
     handler, the handler runs first and $.ret is its return value;
     otherwise $.ret is empty. $.event = the full event text (empty on
     time-out).
@@ -645,14 +693,14 @@ implementation:
   INPUT ["prompt"] $v [ms]
     sends the prompt (if given; quoted, PRINT text rules - $vars and
     escapes - but NO line end, so the answer follows it on the same line),
-    then waits for the next console line from the client and puts it in $v
+    then waits for the next UI line from the client and puts it in $v
     (it is not run as a command). Time-out: $v = "" and $.ok = 0.
     While INPUT waits only !!STOP, !!STOP NOW and !!PAUSE (any case)
     are commands; any other line is the input text (so "stop" is a
     valid answer). Outside INPUT, STOP and !!STOP both work.
     Events stay queued; handlers run after INPUT returns.
     No client connected: INPUT returns at once with $.ok = 0 and a
-    UI DISCONNECT event is queued.
+    UI DISCONNECT event is queued (if UI is on).
       INPUT "name? " $name 30000
 
   Event list (after the renames in section 14)
@@ -664,6 +712,9 @@ implementation:
     UI CONNECT | DISCONNECT
     UI LINK UP | LINK DOWN
     TIMER n [cnt]                                    (scripts only)
+    SYS TIME yyyymmdd_hhmmss adj:+n|-n|0|new         the browser set the
+                        clock (web UI page connects, SD manager opens);
+                        adj = seconds it moved, new = it was not set
 
 
 11. ERRORS
@@ -679,7 +730,7 @@ implementation:
   Covered: a command replying ERR (e.g. NV SET with a bad value), a bad
   expression, divide by zero, SQRT of a negative number, stack overflow,
   an unknown function, reading an unset variable, a name not in VARS,
-  LET to an NV name, a console-only command in a script.
+  LET to an NV name, a UI-only command in a script.
 
   Allowed in scripts: REBOOT, FILES, IMU SLEEP (any level).
   Not allowed (error): RUN STOP CONT LOAD STEP BPT VARS LIST STACK;
@@ -717,7 +768,7 @@ implementation:
 
   onWait.s       runs each time a Wait screen is shown.
   onConnect.s    runs when a client connects (built-in: splash).
-  reset.s        run from the RESET! Wait screen (Script / FULL modes;
+  onReset.s      run from the RESET! Wait screen (Script / FULL modes;
                   README section 5), whatever sys.autorun says; $arg is
                   SCRIPT or FULL (FULL: NV is already reset and the board
                   reboots when it ends). Plain top-level code; no client.
@@ -783,8 +834,8 @@ implementation:
 
   1. all hardware init, boot square
   2. onBoot (if sys.autorun 1), with the 3 s BOOT watcher active;
-     no interface is up: no Wi-Fi, no BLE advertising, no serial console
-     (PRINT goes nowhere; DEBUG reaches the log ports)
+     no interface is up: no Wi-Fi, no BLE advertising, no serial UI
+     (PRINT goes nowhere; DEBUG reaches the console)
   3. the boot interface (NV sys.ui) starts
   4. serial UI: the start-up banner (still the last start-up line)
   5. Wait screen (built-in and/or onWait)
@@ -805,7 +856,7 @@ implementation:
   - New commands: RUN STOP PAUSE CONT LOAD STEP BPT VARS LIST STACK PRINT DEBUG
     RNG EVENTS LOG.
   - NV: sys.autorun; wifi.ssid, wifi.pwd, ble.name refuse ':' and '|'.
-  - WAIT ms (console and scripts), WAIT EVENT ms and INPUT ms use the
+  - WAIT ms (UI and scripts), WAIT EVENT ms and INPUT ms use the
     high-resolution timer: 1 ms resolution (the 200 Hz tick is unchanged).
   - Boot order (section 13a): the boot interface starts after onBoot.
   - ACC / GYR: optional  $x $y $z  targets in scripts.
@@ -848,15 +899,32 @@ implementation:
 16. EXAMPLE
 -----------
 
-  # shapes.s
-  FN drawPoly $n $cx $cy $r          # n sides, centre cx cy, radius r
-    VARS $i $a $x1 $y1 $x2 $y2
+  # shapes.s (header comment with the help text left out here)
+  FN drawPoly
+    VARS $n $cx $cy $r $c $f $i $a $x1 $y1 $x2 $y2
+    IF $arg[0] < 5 OR $arg[0] > 6
+      PRINT "usage: drawPoly n cx cy r colour [fill] (n 3..64, r > 0, fill 0|1)"
+      RETURN
+    END
+    LET $n = $arg[1] ; LET $cx = $arg[2] ; LET $cy = $arg[3] ; LET $r = $arg[4]
+    LET $c = $arg[5] ; LET $f = 0
+    IF $arg[0] == 6
+      LET $f = $arg[6]
+    END
+    IF $n < 3 OR $n > 64 OR $r <= 0 OR ($f != 0 AND $f != 1)
+      PRINT "usage: drawPoly n cx cy r colour [fill] (n 3..64, r > 0, fill 0|1)"
+      RETURN
+    END
     LET $x1 = ROUND($cx + $r) ; LET $y1 = ROUND($cy)
     LOOP $i = 1 TO $n
       LET $a = 360 * $i / $n
       LET $x2 = ROUND($cx + $r * COS($a))
       LET $y2 = ROUND($cy + $r * SIN($a))
-      LINE $x1 $y1 $x2 $y2 255,255,255
+      IF $f
+        FTRI $cx $cy $x1 $y1 $x2 $y2 $c
+      ELSE
+        LINE $x1 $y1 $x2 $y2 $c
+      END
       LET $x1 = $x2 ; LET $y1 = $y2
     END
   END
@@ -874,7 +942,7 @@ implementation:
 
   FN onBtn
     SWITCH $arg[2]
-    SHORT)  CALL shapes.drawPoly 6 86 160 40
+    SHORT)  CALL shapes.drawPoly 6 86 160 40 255,255,255
     DOUBLE) LET $$run = 0
     END
   END

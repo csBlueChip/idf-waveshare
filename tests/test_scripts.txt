@@ -10,9 +10,9 @@ Setup
   - Copy the contents of the project's sd/ folder to the card (FILES, or
     the card in a PC). SD:/sys/ then has the system scripts; they only
     run with NV sys.autorun 1 (section G).
-  - Scripts start with QUIET 2: no command OKs and no <<BTN|IMU|UI>>
-    events on the console while they run.
-  - Web or telnet console. USB serial terminal open for the log.
+  - Scripts start with UI EVENTS 1: no command OKs, and no events of the
+    sources they turned on, on the UI while they run.
+  - Web or telnet UI. USB serial terminal open for the log.
   - NV sys.autorun 0 (NV GET sys.autorun).
 
 
@@ -84,7 +84,7 @@ D. EVENTS AND INPUT
 D1  > RUN demo
     = OK, "demo: BOOT short = hexagon ...", screen black
 D2  * press BOOT once
-    = a white hexagon is drawn; nothing on the console (no OKs, no event)
+    = a white hexagon is drawn; nothing on the UI (no OKs, no event)
 D3  * tap the board
     = "tap - ax=..." (no <<IMU TAP>>); a double tap clears the screen
       (no W:/H:/OK reply)
@@ -150,8 +150,8 @@ H3  > NV GET sys.autorun
     = 0
 
 
-I. USB CONSOLE (BPT! with no client)
-------------------------------------
+I. USB UI (BPT! with no client)
+-------------------------------
 
 I1  * copy SD:/scripts/dbg.s over SD:/sys/onBoot.s
     > NV SET sys.autorun 1

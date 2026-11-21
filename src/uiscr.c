@@ -6,6 +6,7 @@
 #include "font.h"
 #include "img.h"
 #include "imu.h"
+#include "script.h"
 #include "lcd.h"
 #include "nv.h"
 #include "scrtr.h"
@@ -66,7 +67,8 @@ void uiScrStart(uiIf_t ifc)
 	}
 
 	/* Wait: ROT 1|3 ; SCR AUTO 0 ; SCR TR FADE 200 ; <details> ; SCR UPD ;
-	 * IMU ORIENT L AUTO (details turn 180 deg with the device) */
+	 * IMU ORIENT L AUTO (details turn 180 deg with the device) - only when
+	 * onWait did not run (it sets ORIENT in 'before'); RESET! always */
 	uint8_t rot = lcdGetRotation();
 	if ((rot & 1) == 0) {
 		lcdSetRotation(rot + 1);		/* landscape: 0 -> 1, 2 -> 3 */
@@ -76,7 +78,9 @@ void uiScrStart(uiIf_t ifc)
 	s_ifc   = ifc;
 	s_shown = true;
 	uiScrFade(UISCR_FADE_IN_MS);
-	imuOrientSet(IMU_OR_L, true);
+	if (ifc == UI_RESET || !scriptWaitRan()) {
+		imuOrientSet(IMU_OR_L, true);
+	}
 }
 
 void uiScrFm(const char *url)
@@ -119,10 +123,10 @@ void uiScrDisconnect(uiIf_t ifc)
 
 void uiScrConnect(void)
 {
-	/* IMU ORIENT NONE (view flip off) ; SCR AUTO 0 ; ROT 0 ; SCR TR FADE 200 ;
-	 * CLS 0,0,0 ; SCR UPD ; IMG splash ; SCR TR FADE 800 ; SCR UPD ; SCR AUTO 1 */
+	/* SCR AUTO 0 ; ROT 0 ; SCR TR FADE 200 ; CLS 0,0,0 ; SCR UPD ; IMG splash ;
+	 * SCR TR FADE 800 ; SCR UPD ; SCR AUTO 1. IMU ORIENT: set by the caller
+	 * (P AUTO, or onConnect before). */
 	s_shown = false;
-	imuOrientSet(IMU_OR_OFF, false);
 	lcdSetAutoUpdate(false);
 	lcdSetRotation(0);
 	lcdCls(0, 0, 0);

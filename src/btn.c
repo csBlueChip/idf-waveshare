@@ -123,7 +123,7 @@ esp_err_t btnInit(void)
 		return ESP_ERR_NO_MEM;
 	}
 	return cmdRegister("BTN", 0, 5, btnCmd,
-	                   "BTN [n [s l d [TACT|TOUCH]]] | BTN LIST | BTN [n] SET deb|long|dbl|rpt ms | BTN CAL");
+	                   "BTN [n|* | n s l d [TACT|TOUCH]] | BTN LIST | BTN [n|*] SET deb|long|dbl|rpt ms | BTN [n|*] RESET | BTN CAL");
 }
 
 /* ================= Event sources (ISR context) ================= */
@@ -209,9 +209,7 @@ static void btnOnRelease(int n, int64_t now)
 	}
 	if (b->longActive) {
 		b->longActive = false;
-		if (b->t.r == 0) {
-			btnEmit(n, "UP");
-		}
+		btnEmit(n, "UP");			/* after every DOWN */
 		return;
 	}
 	if (b->eDouble) {
@@ -292,7 +290,7 @@ static void btnTask(void *arg)
 					btnEmit(n, "SHORT");			/* typematic repeat */
 				} else if (!b->longActive) {
 					b->longActive = true;
-					btnEmit(n, b->t.r ? "REPEAT" : "DOWN");
+					btnEmit(n, "DOWN");			/* then REPEAT every rpt, if set */
 				} else {
 					btnEmit(n, "REPEAT");
 				}
@@ -416,7 +414,18 @@ static void btnDisable(int n)
 		b->chan = NULL;
 		btnTouchStart(NULL);			/* restart for the remaining pads */
 	}
+	btnTiming_t t = b->t;				/* kept: turning it on again restores them */
 	memset(b, 0, sizeof(*b));
+	b->t = t;
+}
+
+/* BTN n RESET: off, timings 0 (the next enable takes the global ones). */
+static void btnReset(int n)
+{
+	if (s_btn[n].type != BTN_OFF) {
+		btnDisable(n);
+	}
+	memset(&s_btn[n].t, 0, sizeof(s_btn[n].t));
 }
 
 static esp_err_t btnEnable(int n, btnType_t type, bool s, bool l, bool d, cmdReply_t reply)
@@ -426,10 +435,14 @@ static esp_err_t btnEnable(int n, btnType_t type, bool s, bool l, bool d, cmdRep
 	if (b->type != BTN_OFF) {
 		btnDisable(n);
 	}
+	btnTiming_t t = b->t;				/* its own timings, kept while off */
+	if (!t.b && !t.l && !t.d && !t.r) {
+		t = s_global;				/* never set / BTN RESET: the global ones */
+	}
 
 	*b = (btn_t) {
 		.eShort = s, .eLong = l, .eDouble = d,
-		.t      = s_global,			/* inherit global timings */
+		.t      = t,
 		.raw    = -1,
 	};
 
@@ -491,23 +504,18 @@ static const char *btnSetTiming(btnTiming_t *t, const char *key, const char *val
 	return NULL;
 }
 
+/* BTN: global timings and which buttons are on, one line of field:value
+ * words: deb:30 long:600 dbl:300 rpt:0 b1:1 b2:0 ... bN:0 (N = NV btn.gpio). */
 static void btnList(cmdReply_t reply)
 {
-	char line[96];
-	snprintf(line, sizeof(line), "global deb=%d long=%d dbl=%d rpt=%d\n",
-	         s_global.b, s_global.l, s_global.d, s_global.r);
-	reply(line);
+	char line[160];
+	int  len = snprintf(line, sizeof(line), "deb:%d long:%d dbl:%d rpt:%d", s_global.b, s_global.l, s_global.d,
+	                    s_global.r);
 	for (int n = 1; n <= s_count; n++) {
-		const btn_t *b = &s_btn[n];
-		if (b->type == BTN_OFF) {
-			snprintf(line, sizeof(line), "%d GP%d off\n", n, s_gpio[n]);
-		} else {
-			snprintf(line, sizeof(line), "%d GP%d %s %d %d %d deb=%d long=%d dbl=%d rpt=%d\n", n, s_gpio[n],
-			         b->type == BTN_TACT ? "TACT" : "TOUCH", b->eShort, b->eLong, b->eDouble,
-			         b->t.b, b->t.l, b->t.d, b->t.r);
-		}
-		reply(line);
+		len += snprintf(line + len, sizeof(line) - len, " b%d:%d", n, s_btn[n].type != BTN_OFF);
 	}
+	snprintf(line + len, sizeof(line) - len, "\n");
+	reply(line);
 }
 
 /* BTN n: one button as field:value words (':' splits words in scripts). */
@@ -516,7 +524,8 @@ static void btnReport(int n, cmdReply_t reply)
 	const btn_t *b = &s_btn[n];
 	char         line[160];
 	if (b->type == BTN_OFF) {
-		snprintf(line, sizeof(line), "n:%d gpio:%d type:off\n", n, s_gpio[n]);
+		snprintf(line, sizeof(line), "n:%d gpio:%d type:off t_deb:%d t_long:%d t_dbl:%d t_rpt:%d\n", n,
+		         s_gpio[n], b->t.b, b->t.l, b->t.d, b->t.r);
 	} else {
 		snprintf(line, sizeof(line),
 		         "n:%d gpio:%d type:%s short:%d long:%d double:%d t_deb:%d t_long:%d t_dbl:%d t_rpt:%d\n",
@@ -558,6 +567,31 @@ static const char *btnCmd(int argc, char *argv[], cmdReply_t reply)
 		}
 	} else if (strcasecmp(argv[0], "SET") == 0 && argc == 3) {
 		err = btnSetTiming(&s_global, argv[1], argv[2]);
+	} else if (strcasecmp(argv[0], "RESET") == 0 && argc == 1) {
+		for (int i = 1; i <= s_count; i++) {		/* every button, and the global timings */
+			btnReset(i);
+		}
+		s_global = (btnTiming_t) {
+			.b = nvGetInt("btn.deb"), .l = nvGetInt("btn.long"), .d = nvGetInt("btn.dbl"), .r = nvGetInt("btn.rpt"),
+		};
+	} else if (strcmp(argv[0], "*") == 0 && argc == 2 && strcasecmp(argv[1], "RESET") == 0) {
+		for (int i = 1; i <= s_count; i++) {
+			btnReset(i);
+		}
+	} else if (strcmp(argv[0], "*") == 0 && argc == 4 && strcasecmp(argv[1], "SET") == 0) {
+		btnTiming_t t = s_global;			/* checks key / value once */
+		err = btnSetTiming(&t, argv[2], argv[3]);
+		for (int i = 1; i <= s_count && !err; i++) {	/* active buttons only */
+			if (s_btn[i].type != BTN_OFF) {
+				btnSetTiming(&s_btn[i].t, argv[2], argv[3]);
+			}
+		}
+	} else if (strcmp(argv[0], "*") == 0 && argc == 1) {
+		for (int i = 1; i <= s_count; i++) {		/* BTN n for every button */
+			btnReport(i, reply);
+		}
+	} else if (strcmp(argv[0], "*") == 0) {
+		err = "usage: BTN * [SET deb|long|dbl|rpt ms | RESET]";
 	} else if (!cmdParseInt(argv[0], 1, s_count, &n)) {
 		static char msg[32];
 		snprintf(msg, sizeof(msg), "button must be 1..%d", s_count);
@@ -566,6 +600,8 @@ static const char *btnCmd(int argc, char *argv[], cmdReply_t reply)
 		btnReport(n, reply);
 	} else if (argc == 4 && strcasecmp(argv[1], "SET") == 0) {
 		err = (s_btn[n].type == BTN_OFF) ? "button not enabled" : btnSetTiming(&s_btn[n].t, argv[2], argv[3]);
+	} else if (argc == 2 && strcasecmp(argv[1], "RESET") == 0) {
+		btnReset(n);
 	} else if (argc < 4) {
 		err = "usage: BTN n short long double [TACT|TOUCH]";
 	} else if (!cmdParseInt(argv[1], 0, 1, &s) || !cmdParseInt(argv[2], 0, 1, &l) ||

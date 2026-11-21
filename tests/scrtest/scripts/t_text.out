@@ -25,6 +25,7 @@ CMD: NV SET a 42
 CMD: FBOX 42mm 172
 > inserted: yes
 CMD: CLS 0,0,0
+> OK
 CMD: CLS 1,1,1
 > OK
 DEBUG: t_text:33 LET $y = 1 ; LET $z = 2

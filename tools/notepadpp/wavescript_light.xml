@@ -30,12 +30,12 @@
             <Keywords name="Folders in comment, open"></Keywords>
             <Keywords name="Folders in comment, middle"></Keywords>
             <Keywords name="Folders in comment, close"></Keywords>
-            <Keywords name="Keywords1">LET GET VARS DEL INS IF ELIF ELSE END LOOP TO STEP WHILE TIMES FOREVER BREAK NEXT SWITCH GOTO EXIT FN RETURN CALL INSERT ON OFF ONERROR QUIET TRACE PRINT DEBUG FWRITE FREAD FTELL FSEEK FCLOSE RNG TIMER BPT! WAIT INPUT</Keywords>
+            <Keywords name="Keywords1">LET GET VARS DEL INS IF ELIF ELSE END LOOP TO STEP WHILE TIMES FOREVER BREAK NEXT SWITCH GOTO EXIT FN RETURN CALL INSERT ON OFF ONERROR TRACE PRINT DEBUG FWRITE FREAD FTELL FSEEK FCLOSE RNG TIMER BPT! WAIT INPUT INK PAPER</Keywords>
             <Keywords name="Keywords2">START SET OFFS TAG EOL EVENT STOP CONT TRNG PRNG SAVE LOAD ALL NOW</Keywords>
             <Keywords name="Keywords3">INT ROUND ABS MIN MAX SQRT SIN COS ATAN2 LEN UPPER LOWER MID FIND RND</Keywords>
             <Keywords name="Keywords4">AND OR</Keywords>
-            <Keywords name="Keywords5">ACC BAT BL BOX BPT BTN CIRC CLS EVENTS FBOX FCAT FCIRC FDELETE FDIR FILES FLOG FONT FSTAT FTRI GYR HELP IMG IMU INFO LED LINE LIST LOG MEM NV PAUSE PLOT REBOOT ROT RUN SCR STACK TBOX TCLS TEMP TEXT TINK TLEN TPAPER TRI TSCRL TYX UI</Keywords>
-            <Keywords name="Keywords6">$.</Keywords>
+            <Keywords name="Keywords5">ACC ANSI BAT BL BOX BPT BTN CIRC CLS EVENTS FBOX FCAT FCIRC FDELETE FAPP FDIR FILES FONT FSTAT FTRI GYR HELP IMG IMU INFO LED LINE LIST LOG MEM NV PAUSE PLOT REBOOT ROT RUN SCR STACK TBOX TCLS TEMP TEXT TINK TLEN TPAPER TRI TSCRL TYX UI</Keywords>
+            <Keywords name="Keywords6">$. \ip \i0 \i1 \i2 \i3 \i4 \i5 \i6 \i7 \i8 \ik \ir \ig \iy \ib \im \ic \iw \id \i90 \i91 \i92 \i93 \i94 \i95 \i96 \i97 \i9k \i9r \i9g \i9y \i9b \i9m \i9c \i9w \il0 \il1 \il2 \il3 \il4 \il5 \il6 \il7 \ilk \ilr \ilg \ily \ilb \ilm \ilc \ilw \p0 \p1 \p2 \p3 \p4 \p5 \p6 \p7 \p8 \pk \pr \pg \py \pb \pm \pc \pw \pd \p90 \p91 \p92 \p93 \p94 \p95 \p96 \p97 \p9k \p9r \p9g \p9y \p9b \p9m \p9c \p9w \pl0 \pl1 \pl2 \pl3 \pl4 \pl5 \pl6 \pl7 \plk \plr \plg \ply \plb \plm \plc \plw</Keywords>
             <Keywords name="Keywords7">$</Keywords>
             <Keywords name="Keywords8">: .STACK .CONST .FILES</Keywords>
             <Keywords name="Delimiters">00&quot; 01\ 02&quot; 03' 04\ 05' 06 07 08 09 10 11 12 13 14 15 16 17 18 19 20 21 22 23</Keywords>
@@ -57,8 +57,8 @@
             <WordsStyle name="FOLDER IN CODE1" fgColor="0050A0" bgColor="FFFFFF" colorStyle="1" fontName="" fontStyle="1" nesting="0" />
             <WordsStyle name="FOLDER IN CODE2" fgColor="000000" bgColor="FFFFFF" colorStyle="1" fontName="" fontStyle="0" nesting="0" />
             <WordsStyle name="FOLDER IN COMMENT" fgColor="808080" bgColor="FFFFFF" colorStyle="1" fontName="" fontStyle="0" nesting="0" />
-            <WordsStyle name="DELIMITERS1" fgColor="207020" bgColor="FFFFFF" colorStyle="1" fontName="" fontStyle="0" nesting="0" />
-            <WordsStyle name="DELIMITERS2" fgColor="207020" bgColor="FFFFFF" colorStyle="1" fontName="" fontStyle="0" nesting="0" />
+            <WordsStyle name="DELIMITERS1" fgColor="207020" bgColor="FFFFFF" colorStyle="1" fontName="" fontStyle="0" nesting="32768" />
+            <WordsStyle name="DELIMITERS2" fgColor="207020" bgColor="FFFFFF" colorStyle="1" fontName="" fontStyle="0" nesting="32768" />
             <WordsStyle name="DELIMITERS3" fgColor="000000" bgColor="FFFFFF" colorStyle="1" fontName="" fontStyle="0" nesting="0" />
             <WordsStyle name="DELIMITERS4" fgColor="000000" bgColor="FFFFFF" colorStyle="1" fontName="" fontStyle="0" nesting="0" />
             <WordsStyle name="DELIMITERS5" fgColor="000000" bgColor="FFFFFF" colorStyle="1" fontName="" fontStyle="0" nesting="0" />

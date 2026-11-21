@@ -61,6 +61,7 @@ static const char *nvChkGcal(const char *in, int min, int max, char *out);
 static bool        nvPinOk(int g);
 static const char *nvCrossIp(char (*vals)[NV_VAL_MAX]);
 static const char *nvCrossPins(char (*vals)[NV_VAL_MAX]);
+static const char *nvCrossBl(char (*vals)[NV_VAL_MAX]);
 
 static const nvKey_t s_keys[] = {
 	/* key               default          check       min  max    flags */
@@ -78,13 +79,19 @@ static const nvKey_t s_keys[] = {
 	{ "uart.tx",          "43",            nvChkPin,   0,   0,     0 },
 	{ "uart.rx",          "44",            nvChkPin,   0,   0,     0 },
 	{ "ser.echo",         "1",             nvChkInt,   0,   1,     0 },
+	{ "uart.ansi.ui",     "1",             nvChkInt,   0,   1,     0 },
+	{ "usb.ansi.ui",      "1",             nvChkInt,   0,   1,     0 },
+	{ "telnet.ansi.ui",   "1",             nvChkInt,   0,   1,     0 },
+	{ "web.ansi.ui",      "1",             nvChkInt,   0,   1,     0 },
+	{ "ble.ansi.ui",      "0",             nvChkInt,   0,   1,     0 },
+	{ "uart.ansi.con",    "1",             nvChkInt,   0,   1,     0 },
+	{ "usb.ansi.con",     "1",             nvChkInt,   0,   1,     0 },
 	{ "web.name",         "",              nvChkText,  0,   32,    0 },
 	{ "web.port",         "80",            nvChkInt,   1,   65535, 0 },
 	{ "web.captive",      "1",             nvChkInt,   0,   1,     0 },
 	{ "telnet.port",      "23",            nvChkInt,   1,   65535, 0 },
-	{ "scr.bl",           "100",           nvChkInt,   0,   100,   0 },
-	{ "scr.pflip",        "0",             nvChkInt,   0,   1,     0 },
-	{ "scr.lflip",        "0",             nvChkInt,   0,   1,     0 },
+	{ "scr.bl",           "20",            nvChkInt,   0,   100,   0 },	/* <= scr.bl.steps (nvCrossBl) */
+	{ "scr.bl.steps",     "20",            nvChkInt,   2,   100,   0 },
 	{ "btn.deb",          "30",            nvChkInt,   0,   200,   0 },
 	{ "btn.long",         "600",           nvChkInt,   50,  5000,  0 },
 	{ "btn.dbl",          "300",           nvChkInt,   50,  5000,  0 },
@@ -124,6 +131,7 @@ static bool         s_dry;		/* nvSetMany(): check only, store nothing */
 static EXT_RAM_BSS_ATTR char s_save[NV_COUNT][NV_VAL_MAX];	/* nvResetImport() */
 static const char   s_noSet[] = "no settings in file";
 static nvs_handle_t s_nvs;
+static int          s_order[NV_COUNT];	/* key indices sorted by name (listings) */
 
 static int         nvFind(const char *key);
 static void        nvDefault(int i, char *out);
@@ -134,8 +142,19 @@ static const char *nvCmd(int argc, char *argv[], cmdReply_t reply);
 
 /* ================= Public API ================= */
 
+/* qsort: two key indices by key name, ignoring case */
+static int nvOrderCmp(const void *a, const void *b)
+{
+	return strcasecmp(s_keys[*(const int *)a].key, s_keys[*(const int *)b].key);
+}
+
 esp_err_t nvInit(void)
 {
+	for (int i = 0; i < NV_COUNT; i++) {
+		s_order[i] = i;
+	}
+	qsort(s_order, NV_COUNT, sizeof(s_order[0]), nvOrderCmp);
+
 	esp_err_t err = nvs_open(NV_NAMESPACE, NVS_READWRITE, &s_nvs);
 	if (err != ESP_OK) {
 		ESP_LOGE(TAG, "nvs_open: %s", esp_err_to_name(err));
@@ -173,6 +192,10 @@ esp_err_t nvInit(void)
 		strcpy(s_val[nvFind("uart.tx")], "43");
 		strcpy(s_val[nvFind("uart.rx")], "44");
 		strcpy(s_val[nvFind("btn.gpio")], "0 2 4 5 6 7 8 9 10 11");
+	}
+	if (nvCrossBl(s_val) != NULL) {				/* level above the steps */
+		ESP_LOGW(TAG, "scr.bl > scr.bl.steps, using scr.bl.steps");
+		strcpy(s_val[nvFind("scr.bl")], s_val[nvFind("scr.bl.steps")]);
 	}
 
 	return cmdRegister("NV", 1, NV_CMD_ARGS, nvCmd,
@@ -603,7 +626,16 @@ static int nvFind(const char *key)
 static const char *nvCross(char (*vals)[NV_VAL_MAX])
 {
 	const char *e = nvCrossIp(vals);
-	return e ? e : nvCrossPins(vals);
+	if (!e) {
+		e = nvCrossPins(vals);
+	}
+	return e ? e : nvCrossBl(vals);
+}
+
+/* scr.bl (boot backlight level) 0..scr.bl.steps. */
+static const char *nvCrossBl(char (*vals)[NV_VAL_MAX])
+{
+	return atoi(vals[nvFind("scr.bl")]) > atoi(vals[nvFind("scr.bl.steps")]) ? "scr.bl must be 0..scr.bl.steps" : NULL;
 }
 
 /* uart.tx != uart.rx, and neither in btn.gpio. */
@@ -704,7 +736,8 @@ const char *nvExport(const char *name)
 		return "cannot write file";
 	}
 	bool ok = true;
-	for (int i = 0; i < NV_COUNT && ok; i++) {
+	for (int o = 0; o < NV_COUNT && ok; o++) {
+		int i = s_order[o];				/* sorted by name */
 		ok = fprintf(f, "%s%s=%s\n", (s_keys[i].flags & NV_SECRET) ? "!" : "", s_keys[i].key, s_val[i]) > 0;
 	}
 	ok = (fclose(f) == 0) && ok;
@@ -719,6 +752,7 @@ const char *nvImport(const char *name, cmdReply_t reply)
 	 * time: the console's NV IMPORT is refused while the SD manager is open. */
 	static EXT_RAM_BSS_ATTR char skipped[NV_FILE_LINE];	/* read-only keys found */
 	static EXT_RAM_BSS_ATTR char redacted[NV_FILE_LINE];	/* keys whose value is [redacted] */
+	static EXT_RAM_BSS_ATTR char unknown[NV_FILE_LINE];	/* keys this firmware does not have */
 	static EXT_RAM_BSS_ATTR char lines[NV_FILE_PAIRS][NV_FILE_LINE];
 	static EXT_RAM_BSS_ATTR char buf[NV_FILE_LINE];
 	static EXT_RAM_BSS_ATTR char text[NV_FILE_LINE + 40];
@@ -729,6 +763,7 @@ const char *nvImport(const char *name, cmdReply_t reply)
 
 	skipped[0]  = '\0';
 	redacted[0] = '\0';
+	unknown[0]  = '\0';
 
 	const char *e = nvFilePath(name, path, sizeof(path));
 	if (e) {
@@ -778,7 +813,14 @@ const char *nvImport(const char *name, cmdReply_t reply)
 			}
 			continue;				/* key keeps its value */
 		}
-		if (ki >= 0 && (s_keys[ki].flags & NV_RO)) {
+		if (ki < 0) {					/* not a key (any more): warn, skip */
+			if (!strstr(unknown, k) && strlen(unknown) + strlen(k) + 2 < sizeof(unknown)) {
+				strcat(unknown, " ");
+				strcat(unknown, k);
+			}
+			continue;
+		}
+		if (s_keys[ki].flags & NV_RO) {
 			if (!strstr(skipped, s_keys[ki].key) &&
 			    strlen(skipped) + strlen(s_keys[ki].key) + 2 < sizeof(skipped)) {
 				strcat(skipped, " ");
@@ -801,6 +843,13 @@ const char *nvImport(const char *name, cmdReply_t reply)
 	}
 	if (redacted[0] && reply && !s_dry) {
 		snprintf(text, sizeof(text), "warning:%s ignored (redacted)\n", redacted);
+		reply(text);
+	}
+	if (unknown[0] && !s_dry) {
+		ESP_LOGW(TAG, "%s:%s ignored (unknown)", name, unknown);
+	}
+	if (unknown[0] && reply && !s_dry) {
+		snprintf(text, sizeof(text), "warning:%s ignored (unknown)\n", unknown);
 		reply(text);
 	}
 	if (n == 0) {
@@ -858,7 +907,8 @@ static const char *nvCmd(int argc, char *argv[], cmdReply_t reply)
 		/* NV GET: all; NV GET xxx: every key starting with xxx (key=value lines) */
 		size_t plen  = (argc == 2) ? strlen(argv[1]) : 0;
 		bool   found = false;
-		for (int i = 0; i < NV_COUNT; i++) {
+		for (int o = 0; o < NV_COUNT; o++) {
+			int i = s_order[o];			/* sorted by name */
 			if (plen == 0 || strncasecmp(s_keys[i].key, argv[1], plen) == 0) {
 				snprintf(text, sizeof(text), "%s=%s\n", s_keys[i].key, s_val[i]);
 				reply(text);

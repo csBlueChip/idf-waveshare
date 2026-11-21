@@ -53,6 +53,7 @@ static esp_err_t   fmList(httpd_req_t *req);
 static esp_err_t   fmGetFile(httpd_req_t *req);
 static esp_err_t   fmView(httpd_req_t *req);
 static esp_err_t   fmSyntax(httpd_req_t *req);
+static esp_err_t   fmAnsi(httpd_req_t *req);
 static esp_err_t   fmDel(httpd_req_t *req);
 static esp_err_t   fmRen(httpd_req_t *req);
 static esp_err_t   fmMkdir(httpd_req_t *req);
@@ -202,6 +203,7 @@ void fmRegister(httpd_handle_t hd)
 		{ .uri = "/fm/put",   .method = HTTP_POST, .handler = fmPut },
 		{ .uri = "/fm/nvimport", .method = HTTP_POST, .handler = fmNvImport },
 		{ .uri = "/fm/run",   .method = HTTP_POST, .handler = fmRun },
+		{ .uri = "/fm/ansi",  .method = HTTP_GET,  .handler = fmAnsi },
 	};
 	for (int i = 0; i < FM_URI_COUNT; i++) {
 		if (httpd_register_uri_handler(hd, &uris[i]) != ESP_OK) {
@@ -577,14 +579,28 @@ static esp_err_t fmView(httpd_req_t *req)
 
 /* GET /fm/syntax[?builtin=1]: viewer colours - SD:/sys/syntax.cfg if
  * present (header X-Syntax-Source: card), else the built-in (builtin). */
+static esp_err_t fmSyntaxSend(httpd_req_t *req);
+
 static esp_err_t fmSyntax(httpd_req_t *req)
+{
+	if (fmOff(req)) {
+		return ESP_OK;
+	}
+	return fmSyntaxSend(req);
+}
+
+/* /fm/ansi: the same file for the web console (its ansi.* colour keys); also
+ * served while the SD manager is off. */
+static esp_err_t fmAnsi(httpd_req_t *req)
+{
+	return fmSyntaxSend(req);
+}
+
+static esp_err_t fmSyntaxSend(httpd_req_t *req)
 {
 	static EXT_RAM_BSS_ATTR char buf[FM_CHUNK];
 	char q[32], v[4] = "";
 
-	if (fmOff(req)) {
-		return ESP_OK;
-	}
 	if (httpd_req_get_url_query_str(req, q, sizeof(q)) == ESP_OK) {
 		httpd_query_key_value(q, "builtin", v, sizeof(v));
 	}

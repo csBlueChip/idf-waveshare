@@ -6,7 +6,7 @@ Manual test: type each command, check the result before the next step.
   =  expected reply / what you should see
   *  action on the board
 
-Setup: telnet or web console (UI TELNET / UI WEB), board on a still
+Setup: telnet or web UI (UI TELNET / UI WEB), board on a still
 surface, firmware with LED hide (led.c with ledHide).
 
 
@@ -99,7 +99,7 @@ D3  * leave it still for 30 s
     = stays dark; SSID stays gone
 D4  * move the board
     = Wait screen fades in; LED blue; SSID back
-D5  * reconnect the console
+D5  * reconnect the UI
     = connects (no <<IMU WAKE>> - client was not there)
 D6  > IMU
     = ... tap1:0 tap2:0 tap3:0 still:.. motion:1 ... (detectors kept)

@@ -15,7 +15,7 @@ EXIT
 
 FN onBtn
   SWITCH $arg[2]
-  SHORT)  CALL shapes.drawPoly 6 86 160 40
+  SHORT)  CALL shapes.drawPoly 6 86 160 40 255,255,255
   DOUBLE) LET $$run = 0
   END
 END

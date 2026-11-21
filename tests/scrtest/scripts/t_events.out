@@ -1,3 +1,5 @@
+> start: BTN:0 IMU:0 UI:0 TIMER:0 SYS:0
+> none on: no events enabled (EVENTS src 1, ON src fn)
 > 1st: BTN 1 SHORT ret=[]
 > handler IMU [TAP] 1=TAP
 > handler IMU [2TAP] 1=2TAP
@@ -12,6 +14,10 @@
 > got TIMER 2 ret=2
 > got TIMER 2 ret=2
 > got TIMER 2 ret=2
+> after OFF: BTN:1 IMU:0 UI:0 TIMER:0 SYS:0
+> btn off: []
+> ERR usage: EVENTS [BTN|IMU|UI|TIMER|SYS|ALL 1|0]
+> bad: usage: EVENTS [BTN|IMU|UI|TIMER|SYS|ALL 1|0]
 > input: [hello there] ok=1
 > input timeout: [] ok=0
 > ui handler: LINK UP

@@ -733,8 +733,7 @@ static scrVal_t strLit(const char **pp)
 		return scrText("", 0);
 	}
 	const char *sub = scrSubst(raw, SUB_TEXT, 0);
-	char       *out = scrArenaStr(sub, strlen(sub));
-	scrUnescape(out);
+	char       *out = scrUnescape(sub);
 	return scrText(out, strlen(out));
 }
 
@@ -1341,9 +1340,11 @@ const char *scrUnquote(const char *in)
 	return out;
 }
 
-void scrUnescape(char *s)
+char *scrUnescape(const char *s)
 {
-	char *o = s;
+	size_t l = strlen(s);
+	char  *out = scrArena(l * 4 + 1);	/* \ip (3 chars) gives 10 bytes of SGR */
+	char  *o   = out;
 	for (const char *p = s; *p; p++) {
 		if (p[0] == '\\' && p[1] == 'n') {
 			*o++ = '\n';
@@ -1353,9 +1354,20 @@ void scrUnescape(char *s)
 			p++;
 		} else if (p[0] == '\\' && p[1] >= '1' && p[1] <= '9') {
 			p++;
+		} else if (p[0] == '\\' && (p[1] == 'i' || p[1] == 'p')) {
+			char sgr[ANSI_SEQ_MAX];
+			int  u = ansiEscape(p + 1, sgr);
+			if (u < 0) {
+				scrFail("bad colour escape \\%.3s (\\iN \\ilN \\pN \\plN \\ip; N 0..8 krgybmcwd)", p + 1);
+			}
+			size_t sl = strlen(sgr);
+			memcpy(o, sgr, sl);
+			o += sl;
+			p += u;
 		} else {
 			*o++ = *p;
 		}
 	}
 	*o = '\0';
+	return out;
 }

@@ -15,7 +15,7 @@ FWRITE scratch hello
 FDELETE scratch.txt
 GET $s = FSTAT scratch.txt
 PRINT "scratch deleted: $.ok"
-CALL shapes.drawPoly 3 10 10 5
+CALL shapes.drawPoly 3 10 10 5 255,255,255
 GET $s = FSTAT cardlog
 PRINT "no extension: $.ok $.err"
 GET $s = FSTAT /sys/default.nvram

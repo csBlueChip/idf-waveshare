@@ -1,0 +1,19 @@
+> plain
+> <33>yellow<39> back <91>bright red <44>on blue<49> <39><49> done<39><49><0>
+> a<32><39><49><0>
+b
+> <36>cyan line <31>red<36> cyan<36><49><0>
+> <36><104>on bright blue<36><104><K><0>
+DEBUG: <36><104>dbg <32>x<36><104><K><0>
+> <36><104>var: <35>mag<36><104><K><0>
+> <36><104>file: [xy]<36><104><K><0>
+> uncoloured
+> bad: bad colour escape \ix (\iN \ilN \pN \plN \ip; N 0..8 krgybmcwd)
+> bad ink: usage: INK [9|l]0..8|k r g y b m c w d
+> letters: <31> r<92> G<44> B<49>x <37>d<30> k<36>c<35>m<33>y<93>Y<100>p<39><49><39><49><0>
+> <91><40>INK lr PAPER k<91><40><K><0>
+> bad: bad colour escape \iR (\iN \ilN \pN \plN \ip; N 0..8 krgybmcwd)
+> bad: bad colour escape \ild (\iN \ilN \pN \plN \ip; N 0..8 krgybmcwd)
+> bad ink: usage: INK [9|l]0..8|k r g y b m c w d
+<<SCRIPT t_ansi END>>
+[result END]

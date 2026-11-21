@@ -76,5 +76,7 @@ esp_err_t textInit(void);
 const char *textUnquote(const char *in, char *out, size_t n);
 
 /* Escapes for PRINT / DEBUG / FAPP: \n new line, \\ \# \$ literal,
- * \1..\9 dropped, any other \x kept as is. out may be the same buffer as in. */
-void textUnescape(const char *in, char *out, size_t n);
+ * \1..\9 dropped, \iN \ilN \pN \plN \id \pd \ip -> ANSI SGR codes (ansi.h;
+ * FAPP strips them), any other \x kept as is. out may be the same buffer as
+ * in. Returns NULL or an error (bad colour escape). */
+const char *textUnescape(const char *in, char *out, size_t n);

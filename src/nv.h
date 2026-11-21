@@ -34,15 +34,17 @@
  *   uart.tx      43               UART TX GPIO: 2..11, 43, 44 (next boot; not 0 = BOOT)
  *   uart.rx      44               UART RX GPIO, same set; tx != rx, neither in btn.gpio
  *   ser.echo     1                1 = serial UIs echo typed characters
+ *   uart.ansi.ui / usb.ansi.ui / telnet.ansi.ui / web.ansi.ui   1, ble.ansi.ui 0
+ *                                 0|1 colour codes (ANSI) in PRINT output on that UI
+ *   uart.ansi.con / usb.ansi.con  1   0|1 colour codes in DEBUG lines on the console
  *   web.name     (empty)          web page title, 0..32 chars, no spaces (empty:
  *                                 the default "wavedemo"; SD:/sys/uiname.txt wins)
  *   web.port     80               1..65535 web console port
  *   web.captive  1                1 = captive portal (DNS answers every name,
  *                                 unknown URLs redirect); 0 = off (plain 404)
  *   telnet.port  23               1..65535 telnet console port
- *   scr.bl     100              backlight 0..100 %
- *   scr.pflip  0                1 = portrait upside down (ROT 0 <-> 2)
- *   scr.lflip  0                1 = landscape upside down (ROT 1 <-> 3)
+ *   scr.bl     20               backlight level at boot, 0..scr.bl.steps
+ *   scr.bl.steps 20             backlight levels 2..100 (perceptual, CIE L*)
  *   btn.deb    30               0..200 ms     (global button timings: debounce)
  *   btn.long   600              50..5000 ms   (long press)
  *   btn.dbl    300              50..5000 ms   (double-click window)

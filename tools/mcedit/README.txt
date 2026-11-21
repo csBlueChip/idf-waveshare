@@ -4,7 +4,9 @@ MCEDIT SYNTAX COLOURS FOR WAVEDEMO SCRIPTS
 wavescript.syntax colours script files (*.s) in mcedit (Midnight
 Commander's editor): statements and option words yellow, built-in
 functions blue, AND / OR and numbers cyan, $x $$x ${x} green, $.x system
-variables magenta, strings green (escapes and $vars inside bright),
+variables magenta, strings green (escapes and $vars inside bright;
+colour escapes \i3 \ir \ilb \pd \ip ... bold white, also outside
+quotes; mcedit matches them in any case),
 :labels and .STACK .CONST .FILES red, # comments brown, firmware
 commands cyan.
 

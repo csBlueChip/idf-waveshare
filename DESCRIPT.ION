@@ -10,9 +10,11 @@ SCRIPTING.txt script language specification
 SCRIPTING_REF.txt script language quick reference
 NOTES.txt working notes: rules, build setup, hardware facts, decisions, progress
 TODO.txt todo list
+CHANGELOG.txt what changed in each version (one or two lines each)
 DESCRIPT.ION file descriptions for this folder
 src firmware sources (ESP-IDF component)
 assets files built into the firmware
 tools helper scripts for developers
 tests board test procedures and PC tests
 sd SD card layout: copy the contents to the card
+attic shelved experiments (not built, not on the card)

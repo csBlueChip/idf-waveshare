@@ -7,7 +7,7 @@ Manual test: do each step, check the result before the next one.
   =  expected reply / what you should see
 
 Setup
-  - Console on TELNET or WEB (control console).
+  - UI on TELNET or WEB (control UI).
   - For section F: a terminal on the USB-C port (local echo off).
   - SD card inserted (section E).
 
@@ -34,10 +34,27 @@ B2  * Press and hold BOOT ~1 s, release.
 B3  > BTN 1 SET rpt 200
     = OK
 B4  * Press and hold BOOT ~1.5 s, release.
-    = <<BTN 1 REPEAT>> at ~600 ms, then every ~200 ms; no UP
+    = <<BTN 1 DOWN>> at ~600 ms, <<BTN 1 REPEAT>> every ~200 ms after it,
+      <<BTN 1 UP>> on release
 B5  > BTN 1 SET rpt 0
     = OK
 B6  > BTN 1 0 0 0
+    = OK
+B6a > BTN 1
+    = n:1 gpio:0 type:off t_deb:30 t_long:600 t_dbl:300 t_rpt:0 (timings kept)
+B6b > BTN 1 1 1 0 ; BTN 1 SET long 900 ; BTN 1 0 0 0 ; BTN 1 1 1 0 ; BTN 1
+    = ... t_long:900 (kept while off, not the global 600)
+    > BTN 1 0 0 0 ; BTN 1 SET long 700
+    = ERR button not enabled
+B6c > BTN 1 RESET ; BTN 1
+    = type:off t_deb:0 t_long:0 t_dbl:0 t_rpt:0; BTN 1 1 1 0 -> t_long:600
+B6d > BTN 1 1 1 0 ; BTN * SET rpt 150 ; BTN *
+    = button 1 t_rpt:150, the off buttons unchanged; BTN SET rpt 50 ; BTN
+    = rpt:50 ... b1:1 (global only)
+B6e > BTN RESET ; BTN ; BTN *
+    = deb:30 long:600 dbl:300 rpt:0 b1:0 ... (NV values, all off); every
+      button t_deb:0 t_long:0 t_dbl:0 t_rpt:0
+B6f > BTN 1 0 0 0
     = OK
 
 
@@ -45,7 +62,7 @@ C. EVENTS FILTER
 ----------------
 
 C1  > EVENTS
-    = BTN:1 IMU:1 UI:1 SCRIPT:1
+    = BTN:1 IMU:1 UI:1 SYS:1 SCRIPT:1
       OK
 C2  > IMU TAP 1 0 0
     = OK
@@ -54,30 +71,30 @@ C3  * Tap the device firmly.
 C4  > EVENTS IMU 0
     = OK
 C5  > EVENTS
-    = BTN 1 IMU 0 UI 1 SCRIPT 1
+    = BTN:1 IMU:0 UI:1 SYS:1 SCRIPT:1
       OK
 C6  * Tap the device.
     = nothing
 C7  > EVENTS ALL 0
     = OK
 C8  > EVENTS
-    = BTN 0 IMU 0 UI 0 SCRIPT 0
+    = BTN:0 IMU:0 UI:0 SYS:0 SCRIPT:0
       OK
 C9  > EVENTS ALL 1
     = OK
 C10 * Tap the device.
     = <<IMU TAP>>
 C11 > EVENTS FOO 1
-    = ERR usage: EVENTS [BTN|IMU|UI|SCRIPT|ALL 0|1]
+    = ERR usage: EVENTS [BTN|IMU|UI|SYS|SCRIPT|ALL 0|1]
 C12 > EVENTS IMU 2
-    = ERR usage: EVENTS [BTN|IMU|UI|SCRIPT|ALL 0|1]
+    = ERR usage: EVENTS [BTN|IMU|UI|SYS|SCRIPT|ALL 0|1]
 C13 > EVENTS IMU 0
     = OK
-C14 > REBOOT   (web console)
+C14 > REBOOT   (web UI)
     = OK, then at once: [disconnected - device rebooting]; the page
       reconnects by itself once Wi-Fi is back: <<UI CONNECT>>
 C15 > EVENTS
-    = BTN:1 IMU:1 UI:1 SCRIPT:1      (filter is this boot only)
+    = BTN:1 IMU:1 UI:1 SYS:1 SCRIPT:1      (filter is this boot only)
       OK
 C16 > IMU TAP NONE
     = OK
@@ -124,10 +141,10 @@ D13 > TEXT 1 \n\2big \$5
 D14 > TEXT 1 "x" y
     = ERR text after closing quote
 D15 > DEBUG test "a b"
-    = OK on the console; the log port shows: test "a b"
+    = OK on the UI; the console shows: test "a b"
       (with a network UI: both UART and USB terminals)
 D16 > DEBUG "quoted \"debug\""
-    = OK; log port shows: quoted "debug"
+    = OK; console shows: quoted "debug"
 
 
 E. FAPP / FCAT / FDIR (were APPEND / LOGCAT, then FLOG)
@@ -145,7 +162,7 @@ E4  > FILES   (or remove the card and read it on a PC)
           second, quoted
         a
         b
-E5  * Back to the console (reboot after FILES as usual).
+E5  * Back to the UI (reboot after FILES as usual).
 E6  > FAPP bad-name.txt x
     = ERR file: letters, digits, '_' only
 E7  > FAPP abcdefghijabcdefghijabcdefghijab.txt x
@@ -171,7 +188,7 @@ E12 > FCAT log1.txt
       b
       OK
 E13 > FCAT log1.txt >debug
-    = OK on the console; the four lines appear on the log port(s)
+    = OK on the UI; the four lines appear on the console
 E14 > FAPP empty.txt ""
     = OK
     > FCAT empty.txt
@@ -270,7 +287,7 @@ I6  > NV SET ble.name *
 J. WEB HEARTBEAT
 ----------------
 
-J1  * Web console connected, leave it idle 30 s.
+J1  * Web UI connected, leave it idle 30 s.
     = nothing shown (pings/pongs are hidden); still connected
 J2  > WAIT 20000      then wait 10 s without typing
     = still connected (the board answers <<PING>> while WAIT runs);
@@ -281,7 +298,7 @@ J3  * Unplug the device's power (or press RESET).
 J4  * Power the device again; rejoin its Wi-Fi if the PC doesn't.
     = page reconnects by itself: <<UI CONNECT>>
 J5  > FILES
-    = [disconnected] at once (FILES stops the web console); after the
+    = [disconnected] at once (FILES stops the web UI); after the
       eject / 30 s restart the page reconnects by itself
 J6  * Walk out of Wi-Fi range (or switch PC Wi-Fi off) for 10 s.
     = [disconnected - no reply] within ~6 s; reconnects when back

@@ -39,7 +39,6 @@ context default
     keyword whole ON yellow
     keyword whole OFF yellow
     keyword whole ONERROR yellow
-    keyword whole QUIET yellow
     keyword whole TRACE yellow
     keyword whole PRINT yellow
     keyword whole DEBUG yellow
@@ -53,6 +52,8 @@ context default
     keyword whole BPT! yellow
     keyword whole WAIT yellow
     keyword whole INPUT yellow
+    keyword whole INK yellow
+    keyword whole PAPER yellow
 
 # option words (FSEEK START END SET OFFS TAG, FREAD EOL, WAIT EVENT,
 # ONERROR STOP CONT GOTO, RNG TRNG PRNG, VARS SAVE LOAD ALL, STOP NOW)
@@ -115,6 +116,7 @@ context default
 
 # commands registered by the firmware
     keyword whole ACC cyan
+    keyword whole ANSI cyan
     keyword whole BAT cyan
     keyword whole BL cyan
     keyword whole BOX cyan
@@ -129,7 +131,7 @@ context default
     keyword whole FDELETE cyan
     keyword whole FDIR cyan
     keyword whole FILES cyan
-    keyword whole FLOG cyan
+    keyword whole FAPP cyan
     keyword whole FONT cyan
     keyword whole FSTAT cyan
     keyword whole FTRI cyan
@@ -163,11 +165,23 @@ context default
     keyword whole TYX cyan
     keyword whole UI cyan
 
+# colour escapes in unquoted text (PRINT text)
+    keyword \\i\{9l\}\{01234567krgybmcw\} white
+    keyword \\p\{9l\}\{01234567krgybmcw\} white
+    keyword \\ip white
+    keyword \\i\{012345678krgybmcwd\} white
+    keyword \\p\{012345678krgybmcwd\} white
+
 # comments: '#' to the end of the line
 context # \n brown
 
 # strings, with escapes and substituted variables
 context " " green
+    keyword \\i\{9l\}\{01234567krgybmcw\} white
+    keyword \\p\{9l\}\{01234567krgybmcw\} white
+    keyword \\ip white
+    keyword \\i\{012345678krgybmcwd\} white
+    keyword \\p\{012345678krgybmcwd\} white
     keyword \\n brightgreen
     keyword \\\\ brightgreen
     keyword \\# brightgreen
@@ -179,6 +193,11 @@ context " " green
     keyword $\{abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_\}\[abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789\] brightgreen
 
 context ' ' green
+    keyword \\i\{9l\}\{01234567krgybmcw\} white
+    keyword \\p\{9l\}\{01234567krgybmcw\} white
+    keyword \\ip white
+    keyword \\i\{012345678krgybmcwd\} white
+    keyword \\p\{012345678krgybmcwd\} white
     keyword \\n brightgreen
     keyword \\\\ brightgreen
     keyword \\# brightgreen
