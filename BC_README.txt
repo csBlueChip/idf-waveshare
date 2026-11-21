@@ -1,477 +1,57 @@
- ,----------.
-(  Power On  )=========================================================================================================
- `----------'
-
-When the device is powered on, it will flash the LED for 100ms
-	Autorun Enabled  : Default=Green
-	Autorun Disabled : Default=Red
-
-NVRAM variables [system]:
-	sys.autorun = <0|1>    [0]        # En/Dis-able Autorun
-	sys.aron    = <R G B>  [0,255,0]  # 'Enabled'  flash colour ... <0 0 0> -> flash disabled
-	sys.aroff   = <R G B>  [255,0,0]  # 'Disabled' flash colour ... <0 0 0> -> flash disabled
-	sys.bootcnt = <n>      [0]        # Boot counter
-
-If an Autorun script [discussed later] (onBoot.s or onWait.s) hangs the device (eg. "LOOP FOREVER ; NEXT"),
-hold the BOOT button for 3 seconds to kill it and set  sys.autorun=0
-
-============
- <DATETIME>
-============
-
-The system often requires a timestamp.
-This device does NOT have a Real Time Clock [RTC]
-If it has been connected to a Web Browser it will know the real time
-	YYYYMMDD_HHMMSS[_n]
-Otherwise it uses the boot counter, and the uptime
-	bXXXX_HHMMSS[_n]
-
-If required, _n will be appended to resolve naming clashes.
-
-The boot counter is read-only and increments every time the device boots.
-
-NVRAM variables [system]:
-	sys.bootcnt = <n>  [0]  # Boot counter
-
-
- ,---------------.
-(  Boot Sequence  )====================================================================================================
- `---------------'
-
-This is only of technical interest...
-
-This is the boot order from app_main in src/main.c:
-
- 1	sysNvsInit        NVS flash partition (erased only if corrupt)
- 2	cmdInit           command table
- 3	nvInit            NV settings loaded (per-board defaults made if missing), NV command
- 4	serInit           UART0 on uart.tx/uart.rx, USB serial/JTAG, serial task
- 5	logInit           log routing to UART / USB
- 6	sysInit           sys.bootcnt +1, INFO/file commands
- 7	ledInit           RGB LED
- 8	sdInit            SD card mounted
- 9	resetBootFile     /sys/reset.nvram handled, if present
-10	mainAutorunFlash  LED flashes sys.aron/sys.aroff for 100 ms (unless colour BLACK)
-11	logLoadCfg        /sys/debug.cfg log volumes
-12	lcdInit           LCD (172x320)
-13a	gfxInit           drawing
-13b	textInit          text boxes
-13c	fontInit          fonts
-14	i2cInit           I2C bus
-15	imuInit           QMI8658 IMU
-16	batInit           battery ADC
-17	imgInit           image decoder
-18	usbDiskInit       USB disk (MSC) support, not started
-19	fmInit            SD manager command
-20	uiInit            BLE controller and NimBLE stack.
-	                  Advertising starts once the stack is ready, then is disabled again.
-	                  Boot screen: black, backlight scr.bl, boot square. UI/EVENTS commands
-21  btnInit           btn.gpio read, button task, BTN command
-22  scriptInit        script commands
-23  scriptBoot        /sys/onBoot.s runs to the end, only if sys.autorun is 1.
-	                  BOOT held 3 s: sys.autorun 0 and reboot
-24  uiBegin           *24
-25  appRun            console loop
-
-*24 : uiBegin:
-	Reads sys.ui and starts that interface:
-		BLE        : advertising on.
-		TELNET/WEB : Wi-Fi access point ; DHCP ; Telnet server
-		WEB        : Wi-Fi access point ; DHCP ; Web server .. plus DNS if web.captive is 1.
-		UART       : switches to uart.baud.
-		USB/MSC    : nothing to start.
-	If the start fails, it falls back to BLE.
-
-	Wait screen:
-		Wi-Fi link state noted.
-		onWait.s "before" runs, if sys.autorun is 1.
-		If it has an "instead" function, that replaces the built-in Wait screen.
-		Otherwise: landscape, details drawn, 200 ms fade in, IMU orientation on.
-		BOOT watched for long press and double press.
-		Serial UIs only: the [Startup Complete - UART|USB UI active] banner.
-
-
- ,--------------.
-(  UI Selection  )=====================================================================================================
- `--------------'
-
-Under "normal" boot conditions (ie. no Autorun scripts are overriding/augmenting the boot sequence),
-the device will offer a list of UI's (in a loop):
-
-	.-> WEB -> TELNET -> BLE -> USB -> UART -> MSC -> RESET! -.
-	`---------------------------------------------------------'
-
-Double-Tap BOOT to select the next UI in the loop.
-NB. It can take up to 2 seconds to reconfigure the radio.
-
-NVRAM variables [sys]:
-	sys.ui = <Mode>  [BLE]  # Default UI: BLE|TELNET|WEB|UART|USB|MSC
-
-
- ,-----------.
-(  Emergency  )--------------------------------------------------------------------------------------------------------
- `-----------'
-
-If you have managed to configure the device so nothing works...
-
-If you do not see the UI menu, hold BOOT for 3 seconds to disable Autorun.
-
-You may now use the boot menu to select UI: RESET!
-
-
- ,--------------------------.
-(  UI : WiFi / Web & Telnet  )-----------------------------------------------------------------------------------------
- `--------------------------'
-
-"WEB" and "TELNET" both use WiFi, which is controlled by the following NVRAM variables:
-
-NVRAM variables [wifi]:
-*1	wifi.ssid    = <ssid>       [CS_wave_xx-yy-zz]  # {1..32} chars. Banned: <space>, ':', '|'
-*2	wifi.pwd     = <password>   [ChangeMe_nnnn]     # {8..63} chars. Banned: <space>, ':', '|'
-	wifi.ip      = <PrivateIP>  [192.168.4.1]       # IP Address of WiFi Access Point
-	wifi.cidr    = <CIDR>       [/24]               # /8 .. /30
-	wifi.pwr     = <pwr_dBm>    [8.5]               # WiFi TX power 2..20 dBm (0.25 steps)
-	wifi.maxconn = <n>          [1]                 # Maximum concurrent WiFi clients {1..4}
-	wifi.gw      = <1|0>        [1]                 # 0 = DHCP offers no gateway (engineering)
-
-*1	xx-yy-zz are the last three octets of the device's WiFi MAC
-*2	nnnn     is a random number [see UI selection screen]
-
-Android:
-	I cannot work out how to get Android to route LAN IPs over WiFi,
-	   and everything else over the SIM card
-	I have found a workaround for the WEB interface, but not TELNET.
-	As such, I recommend BLE.
-
-Windows:
-	I recommend WEB - this is the most powerful interface.
-
-
- ,-------------.
-(  UI : WEB:80  )------------------------------------------------------------------------------------------------------
- `-------------'
-
-,------------------------------.
-| UI  : WEB:<web.port>         |
-| SSID: <wifi.ssid>            |
-| Pwd : (hold BOOT)            |
-| IP  : <wifi.ip> <wifi.cidr>  |
-| WiFi: Waiting...             |
-`------------------------------'
-
-Hold the BOOT button to show the password.
-
-When WiFi connects, you will see  "Waiting..."  ->  "Link Active"
-When the Client connects, you will see the Splash Screen.
-
-NVRAM variables [web]:
-	web.port     = <n>     [80]  # Web port {1..65535}
-	web.captive  = <1|0>   [1]   # 1 = Enable "Captive Portal"
-	web.name     = <name>  []    # {0..32} chars, no spaces [qv. uiname.txt]
-	web.hist     = <n>     [50]  # Command history size {10..500}
-
-Debug Log Port(s) [dbgf()]:
-	UART & USB
-
-Android:
-	Never answer the "no internet, stay connected?" question.
-		Yes -> Game works ; Internet Stops
-		No  -> Game disconnects ; Internet works
-		--- -> Game works in the Captive Portal window ; Internet Works
-	...I cannot work out how to get Android to route LAN IPs over WiFi,
-	   and everything else over the SIM card
-
-	Play with the Captive Portal browser
-
-Windows:
-	Connect to WiFi ; Do NOT enable "discovery"
-
-	Play with any browser:  http://<wifi.ip>
-
- ,----------------.
-(  UI : Telnet:23  )---------------------------------------------------------------------------------------------------
- `----------------'
-
-,------------------------------.
-| UI  : TELNET:<telnet.port>   |
-| SSID: <wifi.ssid>            |
-| Pwd : (hold BOOT)            |
-| IP  : <wifi.ip> <wifi.cidr>  |
-| WiFi: Waiting...             |
-`------------------------------'
-
-Hold the BOOT button to show the password.
-
-When WiFi connects, you will see  "Waiting..."  ->  "Link Active"
-When the Client connects, you will see the Splash Screen.
-
-NVRAM variables [telnet]:
-	telnet.port  = <n>  [23]  # Telnet port {1..65535}
-
-Debug Log Port(s) [dbgf()]:
-	UART & USB
-
-Android:
-	"No internet, stay connected?"  ->  Yes  ->  Game works ; Internet Stops
-	...I cannot work out how to get Android to route LAN IPs over WiFi,
-	   and everything else over the SIM card
-
-	This is my favourite Telnet app:
-		https://play.google.com/store/apps/details?id=de.kai_morich.serial_wifi_terminal&hl=en
-		<burger> -> Settings -> Terminal -> Show Timestamps -> OFF
-		<burger> -> Devices -> Add -> Host=<wifi.ip>, Protocol=Telnet, Port=<telnet.port> -> v/ Save
-	In future, just press the connect button  "-<| |>-"  (next to the dustbin)
-
-Windows:
-	Use PuTTY to connect to <wifi.ip>:<telnet.port>
-		https://portableapps.com/apps/internet/putty_portable
-	Press <return> a couple of times
-
-
- ,----------.
-(  UI : BLE  )---------------------------------------------------------------------------------------------------------
- `----------'
-
-,---------------------------.
-| UI  : BLE                 |
-| Name: <ble.name>          |
-`---------------------------'
-
-NVRAM variables [ble]:
-*1	ble.name = <name>     [CS_wave_xx-yy-zz]  # {1..29} chars. Banned: <space>, ':', '|'
-*2	ble.pwr  = <pwr_DbM>  [9]                 # BLE TX power
-
-*1	xx-yy-zz are the last three octets of the device's BLE MAC
-*2	Options are {-24, -21, -18, -15, -12, -9, -6, -3, 0, +3, +6, +9, +12, +15, +18, +20}
-
-Debug Log Port(s) [dbgf()]:
-	UART & USB
-
-Android:
-	Do *NOT* connect with the Android->Config->Bluetooth (the "normal" way)
-	If <ble.name> is listed in your Android Bluetooth menu - you MUST "forget" it!
-
-	This is my favourite BLE app:
-		https://play.google.com/store/apps/details?id=de.kai_morich.serial_bluetooth_terminal&hl=en
-		<burger> -> Settings -> Terminal -> Show Timestamps -> OFF
-		<burger> -> Devices -> Bluetooth LE -> SCAN -> <ble.name>
-	In future, just press the connect button  "-<| |>-"  (next to the dustbin)
-
-iPhone:
-	This looks like it might be a good choice [untested]
-		https://apps.apple.com/us/app/bleserial-nrf/id1632235163
-
-
-Windows:
-	Do *NOT* connect with Windows->Bluetooth (the "normal" way)
-	If <ble.name> is listed as a "Paired Device" - you MUST "delete" it!
-
-	This is horrific, but it works, and it is open source!
-		https://github.com/healthywalk/BLE-Serial-Terminal/tree/main/BLE_Serial_Terminal/bin/Release
-
-
- ,-------------------.
-(  UI : USB - Serial  )------------------------------------------------------------------------------------------------
- `-------------------'
-
-,---------------------------.
-| UI  : USB - Serial        |
-`---------------------------'
-
-NVRAM variables [serial]:
-	ser.echo = <1|0>   [1]       # echo input to terminal
-
-Debug Log Port(s) [dbgf()]:
-	UART
-
-Android:
-	This is my favourite USB Serial app:
-		https://play.google.com/store/apps/details?id=de.kai_morich.serial_usb_terminal&hl=en
-		<burger> -> Settings -> Terminal -> Show Timestamps -> OFF
-		Press the connect button  "-<| |>-"  (next to the dustbin)
-		Press Send [=>] a couple of times
-
-iPhone:
-	USB Serial is not supported
-
-Windows:
-	Run:  cmd.exe
-	Run:  mode | findstr /B Status
-	Connect the device - and wait a few seconds (for windows UDSB enumeration)
-	Run:  mode | findstr /B Status   (again)
-	The COM port that has just appeared is your Game module ... eg. COM5
-	...yes, Windows UART handling is horrific!
-
-	Now use PuTTY to connect to that COM port
-		https://portableapps.com/apps/internet/putty_portable
-	...it's actually a "Virtual COM Port", so the baud value is meaningless
-	Press <return> a couple of times to activate the interface.
-
-
-Linux:
-	Just as ugly as Windows here
-
-	for d in /sys/bus/usb/devices/*; do \
-		grep -qx Espressif "$d/manufacturer" 2>/dev/null && \
-		for t in "$d"/*/tty/*; do \
-			[ -e "$t" ] && echo "/dev/${t##*/}"; \
-		done; \
-	done | head -1
-
-	--> eg. /dev/ttyACM0
-
-	picocom /dev/ttyACM0
-		Keys:  ^A ^H  :  Help
-		       ^A ^X  :  Exit
-
-	Press <return> a couple of times to activate the interface.
-
-
- ,-----------.
-(  UI : UART  )--------------------------------------------------------------------------------------------------------
- `-----------'
-
-,---------------------------.
-| UI  : UART                |
-| Baud: <uart.baud> @8N1    |
-| Pins: Tx:43 Rx:44         |
-`---------------------------'
-
-NVRAM variables [serial]:
-	ser.echo  = <1|0>   [1]       # echo input to terminal
-
-*1	uart.baud = <baud>  [115200]  # 9600|19200|38400|57600|115200|230400|460800|921600
-*2	uart.tx   = <n>     [43]      # {2..11, 43, 44}
-*2	uart.rx   = <n>     [44]      # {2..11, 43, 44}
-
-*1	This is only read when the serial port is initialised
-
-*2	These values cannot be the same
-	On the Waveshare, GPIO43 and GPIO44 are labelled "Tx" and "Rx" (respectively)
-	Early boot messages will ALWAYS be on GPIO43 ("Tx")
-	{2..11} are normally mapped to BTN 1..10, so you will need to
-		UN-map the BTN assignments before you can use them for the UART
-
-Pin re-assignment only occurs after a reboot.
-
-Debug Log Port(s) [dbgf()]:
-	USB
-
-This is a raw UART port.
-It runs at 3v3, and has an internal pull-up on Rx (Tx drives).
-
-This is a low-level interface, for external device support.
-If you don't know what you're doing here, just ignore it!
-
-Remember to press <return> a couple of times to activate the interface.
-
-
- ,------------------------.
-(  UI : MSC - Flash Drive  )-------------------------------------------------------------------------------------------
- `------------------------'
-
-,---------------------------.
-| UI  : MSC - Flash Drive   |
-| BOOT: hold to start       |
-`---------------------------'
-
-NVRAM variables [disk]:
-	disk.read  = <r g b>  [0 255 0]  # LED colour during read  operations - {0 0 0} -> disabled
-	disk.write = <r g b>  [255 0 0]  # LED colour during write operations - {0 0 0} -> disabled
-
-This will allow you to use the SDCard as a flash drive.
-
-Any OS:
-	Your favourite Flash Drive compatible File Manager
-
-When active  SD:/sys/usbdrive.png  is displayed
-"Eject" or "umount" to the disk to reboot the device.
-
-Windows takes forever to mount it <sigh>, but once it is going, it runs smoothly.
-
-
- ,-------------.
-(  UI : RESET!  )------------------------------------------------------------------------------------------------------
- `-------------'
-
-You may reset either:
-*1	# NVRAM  : Just the NVRAM variables (to factory default)
-	# Script : Just run the reset script (SD:/sys/reset.s)
-	# FULL   : Do both
-
-*1	wifi.pwd gets a new random number "ChangeMe_XXXX"
-
-Single-tap BOOT to select: NVRAM, Script, or FULL/Both
-Long-hold BOOT to start the reset process
-Within 5 seconds, Long-hold BOOT *again* to confirm, or reset will be cancelled.
-
-NVRAM and FULL reboot when done; Script returns to the RESET! screen.
-
-A failed backup still resets.
-
-With no SD card, the only mode is "NVRAM - no backup".
-
-Script and FULL need reset.s, otherwise they give an error and do nothing.
-
-If NVRAM or FULL are selected
-*a	1.	If there is an SDCard, NVRAM will be backed up to SD:/sys/<timestamp>.nvram
-	2. 	NVRAM will be set to default values
-If Script or FULL are selected
-	3.	SD:/sys/reset.s will be executed
-
-*a	<timestamp> will be "bXXXX_hhmmss" where
-		XXXX    is the boot count in hex
-		hhmmss  is the uptime (probably only 1 or 2 seconds [untested])
-
-You can also reset NVRAM variables by creating  SD:/sys/reset.nvram
-and specifying the values you want to apply.
-NVRAM is cleared to defaults, and then every value in reset.nvram is applied/
-After being applied, it will then be renamed to either:  reset.done
-                              or, if there were errors:  reset.bad
-
-
  ,---------------.
 (  SDCard Layout  )====================================================================================================
  `---------------'
 
 /
-+--	/images/
-|	+--	<images and sprites> .. Screen is 172x320
++--	/images/          : <images and sprites> .. Screen is 172x320
+|	+-- *.png         : RGB or RGBA
 |
-+--	/imu/
-|	+--	*.csv        : IMU recordings
++--	/imu/             : Inertial Measurement Unit
+|	+--	imu_cal.log   : IMU calibration & test data
+|	+--	*.csv         : IMU recordings
 |
-+--	/scripts/
-|	+--	*.s          : scripts
++--	/scripts/         : Libraries and User scripts.
+|	+--	*.s           : scripts
 |	|
 |	+--	/data/
-|		+-- *.txt    : script assets
-|		+-- *.var    : script state files
+|		+-- *.txt     : script assets
+|		+-- *.var     : script state files
 |
 +--	/scrshots/
-|	+--	*.png        : screenshots .. default: <timestamp>.png
+|	+--	*.png         : screenshots .. default: <timestamp>.png
 |
 +--	/sys/
-|	+--	*.nvram      : NVRAM exports .. default: <timestamp>.nvram
-|	+--	debug.cfg    : output stream volume levels
+|	+--	default.nvram : override firmware defaults
+|	+--	reset.nvram   : if exists, loaded at boot time
+|	+--	reset.bad     : ...import failed
+|	+--	reset.done    : ...import succeeded
 |	|
-|	+--	onBoot.s     : onBoot script .. after early boot
-|	+--	onWait.s     : before/instead/after functions for the Wait screen
-|	+--	onConnect.s  : before/instead/after functions for the Splash Screen
+|	+--	*.nvram       : NVRAM exports .. default: <timestamp>.nvram
+|	+--	debug.cfg     : console log volume, per device
+|	|
+|	+--	onBoot.s      : onBoot script .. after early boot
+|	+--	onWait.s      : before/instead/after functions for the Wait screen
+|	+--	onConnect.s   : before/instead/after functions for the Splash Screen
+|	+--	onReset.s     : run during a system reset [qv. UI: RESET!]
 |	+--	/data/
-|	|	+-- *.txt    : script assets
-|	|	+-- *.var    : script state files
+|	|	+-- *.txt     : script assets
+|	|	+-- *.var     : script state files
 |	|
-|	+--	splash.png   : splash screen shown when a client connects
-|	+--	usbdrive.png : splash screen shown when USB Flash Drive is active
+|	+--	splash.png    : splash screen shown when a client connects
+|	+--	usbdrive.png  : splash screen shown when USB Flash Drive is active
+	+--	uiname.txt    : Web page Title (overrides web.name)
 |	|
-|	+--	fm.html      : user provided web-based File Manager
-|	+--	syntax.cfg   : user provided web syntax higlighter
+|	+--	fm.html       : user provided web-based File Manager
+|	+--	syntax.cfg    : user provided web syntax higlighter
+|	|
+|	+--	alias.cfg     : UI aliases
 |
 +--	/www/
-	+--	favicon.ico  : www favicon
-	+--	index.html   : replacement Web UI
-	+--	uiname.txt   : Web page Title (overrides web.name)
+	+--	favicon.ico   : www favicon
+	+--	index.html    : replacement Web UI
+	+--	cfg           : reserved
+	+--	ws            : reserved
+	+--	*.*           : any file in this folder will be served
 
 The built-in web-based file manager supports 4DOS 'DESCRIPT.ION' files.
 (one per folder, one file per line)
@@ -515,6 +95,10 @@ All Input is ASCII .. ^ (circumflex) is used as the degrees symbol (eg. 37.1^C)
 
 A brief summary of commands and usage can be requested with:
 	HELP
+
+Help for additional parameters, add a "?" where you are stuck:
+	BTN 1     # n:1 gpio:0 type:tact short:1 long:1 double:1 t_deb:30 t_long:600 t_dbl:300 t_rpt:100
+	BTN 1 ?   # usage: BTN n short long double [TACT|TOUCH]
 
 
  ,-------------------------.
@@ -616,17 +200,24 @@ Although the screen only supports 65536 colours, <rgb> is still specified as {0.
  Backlight |-----------------------------------------------------------------------------------------------------------
 ===========
 
-The backlight level is set as a percentage
-	  0 : Off
-	100 : Full brightness
+The backlight level is calculated using a perceived brightness curve.
+The true range is the width of the PWM DAC (eg. 10bit {0..1023})
+The value in NVRAM `scr.bl.steps` defined the number of steps you desire
+Whatever you choose 0 is off and the last step will be full-brightness
+With finer (perceived) control at lower levels.
 
-	BL <n>  # set backlight brightness {0..100}
+NVRAM variables [screen]:
+	scr.bl.steps = <n>   # integer value for full brightness [default: 20]
+	scr.bl       = <n>   # default level at boot {0..scr.bl.steps}
+
+Set the level with:	
+	BL <n>               # set backlight brightness {0..scr.bl.steps}
 
 ==========
  ROTATION |------------------------------------------------------------------------------------------------------------
 ==========
 
-The screen can be oriented in 4 ways {0..3}
+The screen can be rotated in 4 ways {0..3}
 
 	0 : Rotate Clockwise by (0 *90 =   0) degrees - Portrait/Tall  : USB at the bottom
 	1 : Rotate Clockwise by (1 *90 =  90) degrees - Landscape/Wide : USB on the right
@@ -643,16 +234,22 @@ If you specify a value >3, it will be taken modulo 4
 
 Rotation ONLY effects the coordinate system, it does NOT cause the current image to rotate.
 
-===========
- AUTO-FLIP |-----------------------------------------------------------------------------------------------------------
-===========
+=============
+ SCREEN-FLIP |---------------------------------------------------------------------------------------------------------
+=============
 
-The gyroscope can be used to flip the screen when the device is turned.
+The screen coordinates can be flipped:
+	SCR FLIP P      # perform coordinate flip for [P]ortrait
+	SCR FLIP L      # perform coordinate flip for [L]andscape
+	SCR FLIP PL     # perform coordinate flip for [L]andscape & [P]ortrait
+	SCR FLIP NONE   # disable coordinate flip [default]
 
-	SCR FLIP P      # perform gyro flip for [P]ortrait  layouts (ROT = 0 or 2)
-	SCR FLIP L      # perform gyro flip for [L]andscape layouts (ROT = 1 or 3)
-	SCR FLIP PL     # perform gyro flip for [L]andscape & [P]ortrait layouts
-	SCR FLIP NONE   # disable gryo flip
+If, eg., you install the device "upside down", and you want the screen to be flipped by default,
+add `SCR FLIP <mode>` to SD:/sys/onBoot.s
+
+For engineering/debug reasons the code draws a random coloured square, randomly on the edge of the screen.
+...If this annoys you, add `CLS <colour>` to SD:/sys/onBoot.s
+
 
 =============
  SCREEN-SHOT |---------------------------------------------------------------------------------------------------------
@@ -746,19 +343,19 @@ You may clear the entire screen to a single colour:
 
 An image may be any size (realistically, up to the size of the screen)
 
-RGBA PNG files are supported. So you CAN paint holes in your image.
+RGBA PNG files are supported. So you CAN paint holes and translucency in your image.
 
-Eg. You can display an image, and then overlay a sprite
+Eg. You can display an image, and then overlay a sprite (and use Alpha for anti-aliasing)
 
 Images are stored in SD:/images/ and must be PNG format.
 
-For test purposed, the first 64 images may be enumerated:
-	IMG  # enumerate the first 64 images
+For test purposes, the first 64 images may be enumerated:
+	IMG  # enumerate the first 20 images
 
 ...During testing, you may use the number in place of the name.
 
 An image may be displayed anywhere on the screen.
-The Top-Left of the screen is {0,0}
+The Top-Left of the screen is {0,0} ...relative to the current ROT(ation)
 
 If it attempts to print off the edge of the screen, it will be clipped.
 If you do not specify {x,y}, then {0,0} is assumed.
@@ -809,6 +406,13 @@ Circles:
 
 {cx,cy} is the coordinate for the CENTRE of the circle
 <rad>   is the radius in pixels
+
+A Script library called shapes.s is provided.
+It contains:
+	drawPoly()
+
+Eg.
+	CALL shapes.drawPoly <sides> <cy> <cy> <radius> <rgb> [<fill>]    # fill:<0|1>, default 0
 
 ============
  Text Boxes |----------------------------------------------------------------------------------------------------------
@@ -955,18 +559,52 @@ You may position the cursor by hand.
 
 For simplicity: Just wrap all your strings up in "quotes", and read the bit about "escapes".
 
-*	Escapes:
-		\n      ->  new line.
-		\1..\9  ->  select font (for the rest of this TEXT)
+*	Escapes PRINT/DEBUG/TEXT:
+		\n        ->  new line.
 
-		\#      ->  #  .. *ALL* #'s in strings MUST be escaped (or they will start a comment)
-		\$      ->  $  .. an unescaped $ will be interpreted as a variable name prefix
-		\\      ->  \  .. a way to print the escape character
+		\#        ->  #  .. *ALL* #'s in strings MUST be escaped (or they will start a comment)
+		\$        ->  $  .. an unescaped $ will be interpreted as a variable name prefix
+		\\        ->  \  .. a way to print the escape character
 
-		\"      ->  "\"" -> "  ..  '\"' -> \"  .. If a string is quoted, that encapsulation quote
-		\'      ->  '\'' -> '  ..  "\'" -> \'  ..    needs to be escaped inside the encapsulated string
+		\"        ->  "\"" -> "  ..  '\"' -> \"  .. If a string is quoted, that encapsulation quote
+		\'        ->  '\'' -> '  ..  "\'" -> \'  ..    needs to be escaped inside the encapsulated string
 
-		...anything not listed above is literal text:  "\#\H" -> |#\H|
+	[FONTS] - TEXT only:
+		\1 .. \9  ->  select font (for the rest of this TEXT)
+
+	[COLOURS] - PRINT/DEBUG only .. may be disabled with the ANSI command.
+		\i<c>    ->  ink   colour <c>
+		\p<c>    ->  paper colour <c>
+		\i8 \p8  ->  use "default" colour for ink/paper
+		\ip      ->  use "default" colour for ink and paper
+
+		<c> Colours (ANSI standard):
+			Web colours are set in SD:/sys/syntax.cfg
+			Terminal colours are set by your terminal software/"emulator"
+			These are the (generally expected/accepted) colours
+
+			0  / k   -> blK
+			1  / r   -> Red           2 / g  ->  Grn         4 / b  ->  Blu
+			6  / c   -> Cyn(b+g)      5 / m  ->  Mag(b+r)    3 / y  ->  Yel(r+g)
+			7  / w   -> Wht(r+g+b)
+
+			9x / lx  ->  Light(/Bright/Bold)  <x>
+			90 / lk  ->  Light(/Bright/Bold)  blK  (aka. Dark Gry)
+			93 / ly  ->  Light(/Bright/Bold)  Yel  (making Yel -> Brn)
+			97 / lw  ->  Light(/Bright/Bold)  Wht  (making Wht -> Light Gry)
+
+			8  / d   ->  <active default>
+				Either: The active INK and PAPER colours (if set in the running script)
+					or: ansi.id/ansi.pd                  (in the Web UI)
+					or: ANSI SGR 0/39/49
+
+			synonyms:  K  R G B  C M Y  W  [L]ight [D]efault  ... always lower-case
+
+			FYI:
+				Lum Order:  0:blk, 4:blu, 1:red, 5:mag, 2:grn, 6:cyn, 3:yel, 7:wht
+				Shades   :  0:blk, 90:DGry, 7:LGry, 97:Wht
+
+	...anything not listed above is literal text:  "\#\H" -> |#\H|
 
 In detail, there are a number of rules in play:
 
@@ -1021,6 +659,7 @@ NVRAM settings are persistent between boots, and do not require an SDCard.
 
 	NV GET                    | List all current NVRAM settings
 	NV GET <var.name>         | Show a specific NVRAM setting
+	NV GET <startsWith>       | Show all NVRAM vars that start with the specified string
 							  |
 	NV SET <var.name> <value> | Change a specific NVRAM setting
 							  |
@@ -1037,6 +676,73 @@ NVRAM settings are persistent between boots, and do not require an SDCard.
 *2	sys.bootcnt  is ignored (with a warning)
 	all lines are validated before import - any error aborts the import (with an error)
 
+A List of all NV RAM Variables (probably out of date by now - sorry):
+	ble.name=*                       # <name> - Bluetooth advertising name [* -> use firmware default]
+	ble.pwr=9                        # <dBm> radio power
+	ble.ansi.ui=0                    # enable ANSI colour codes for the UI
+
+	wifi.pwr=8.5                     #
+	wifi.ssid=*                      #
+	!wifi.pwd=[redacted]             #
+	wifi.ip=192.168.4.1              #
+	wifi.cidr=/24                    #
+	wifi.gw=1                        #
+	wifi.maxconn=1                   #
+
+	web.port=80                      #
+	web.name=                        #
+	web.captive=1                    #
+	web.hist=50                      #
+	web.ansi.ui=1                    # enable ANSI colour codes for the UI
+
+	ser.echo=1                       #
+
+	telnet.port=23                   # <1..65535> port number
+	telnet.ansi.ui=1                 # <1|0> enable ANSI colour codes for the UI
+
+	usb.ansi.ui=1                    # <1|0> enable ANSI colour codes for the UI
+	usb.ansi.con=1                   # <1|0> enable ANSI colour codes for the Console
+
+	uart.baud=115200                 # Baud rate @8n1
+	uart.rx=44                       # <gp>  GPIO pin for UART Rx
+	uart.tx=43                       # <gp>  GPIO pin for UART Tx
+	uart.ansi.ui=1                   # <1|0> enable ANSI colour codes for the UI
+	uart.ansi.con=1                  # <1|0> enable ANSI colour codes for the Console
+
+	disk.read=0,255,0                #
+	disk.write=255,0,0               #
+
+	btn.gpio=0 2 4 5 6 7 8 9 10 11   # GPIO pins assignments: first pin is button #1, etc.
+	btn.deb=30                       # <ms> debounce time
+	btn.dbl=300                      # <ms> double-tap slowest speed
+	btn.long=600                     # <ms> long-press time
+	btn.rpt=0                        # <ms> repeat/typeomatic timer
+	btn.touch=0.015                  # <> touch sensor sensitivity
+
+	imu.arange=4                     # accelerometer range
+	imu.arate=224                    # accelerometer sample rate
+	imu.grange=512                   # gyroscope range
+	imu.grate=224                    # gyroscope sample rate
+	imu.gcal=                        # gyroscope calibration
+	imu.mot.thr=100                  #
+	imu.orient.flat=30               #
+	imu.orient.hold=500              #
+	imu.step.min=10                  # step counter - DISABLED
+	imu.step.thr=200                 # step counter - DISABLED
+	imu.still.thr=64                 #
+	imu.tap.gap=500                  #
+	imu.tap.thr=1.3                  #
+	imu.wom=100                      #
+
+	run.files=4                      # script: default max open files
+
+	scr.bl.steps=20                  # maximum screen backlight level (perception curve)
+	scr.bl=20                        # default screen backlight level
+
+	sys.autorun=0                    # <1|0> autorun (startup scripts) is enabled
+	sys.aron=0,255,0                 # <rgb> boot flash colour for : auto-run:on
+	sys.aroff=255,0,0                # <rgb> boot flash colour for : auto-run:off
+	sys.ui=BLE                       # default UI: {BLE, WEB, TELNET, USB, UART}
 
  ,-------------.
 (  System Info  )======================================================================================================
@@ -1207,7 +913,20 @@ Running any of those commands without argument will return the current settings:
 	IMU GYR     # range:<n> rate:<hz>
 	IMU WOM     # mg:<n>
 
-NB.	TAP, ORIENT, STILLM MOTION and SIGMO are all DISABLED at boot.
+The IMU can work out which way up a handheld device is being held and flip the coordinate system
+	IMU ORIENT                     # mode:P auto:1                             [default:disabled]
+	IMU ORIENT NONE|P|L|ROT        # send Event when the device rotates (update on next redraw)
+	IMU ORIENT NONE|P|L|ROT AUTO   # send Event when the device rotates (update now)
+		NONE : disable
+		P    : Portrait
+		L    : Landscape
+		ROT  : ROTation rules
+
+Detect lack of motion:
+	IMU STILL <ms>                 # send an event when motion stops for <ms>  [default:disabled]
+	IMU MOTION <1|0>               # send an event when motion starts for <ms> [default:disabled]
+
+//!! TAP & SIGMO need to be explained here!
 
 The IMU core settings can be retrieved:
 	IMU SET     # tap.thr:1.3   tap.gap:500  orient.hold:500   orient.flat:30       [a single line
@@ -1403,7 +1122,7 @@ Features include:
 	# NVRAM files have an Import option
 	# Images are displayed
 	# Text files can be edited ... a simple textarea - with line & column indicators
-	
+
 You must press [Exit] to let the interface know you are finished with the File Manager
 If you see "ERR SD manager active", you can kill it with:
 	FILES WEB STOP|EXIT
@@ -1457,46 +1176,235 @@ Show some-or-all of a file to the UI or DEBUG console [USB/UART]:
 You can append a line of text to any file SD:/scripts/data/<filename>.txt
 	FAPP <filename>.txt|.var|.nvram <text>   # append  <text>"\n" to specified file
 
-CARFUL : Erase a file:
-WARNING: There is no confirmation, and no trashcan!
-	FDELETE <filename>.txt|.var|.nvram       # Permanently delete a file
+Erase a file:   ***WARNING***: There is no confirmation, and no trashcan!
+	FDELETE <filename>.txt|.var|.nvram       # Permanently delete a file <sic> [qv. photorec]
 
 
- ,----------------------.
-(  System/Debug Logging  )=============================================================================================
- `----------------------'
+ ,-----------------.
+(  Console Logging  )==================================================================================================
+ `-----------------'
 
 The early boot debug info is forced to both UART and USB.
 
 Once the system is stable, debug logging can be redirected.
-	LOG  # log:AUTO debug:0
-	LOG <UART|USB|BOTH|AUTO>
+	LOG                        # log:AUTO debug:0
+	LOG <UART|USB|BOTH|AUTO>   # Set logging device
 
-$ log debug [all]
-BLE=4
-WIFI=4
-WEB=4
-SD=4
-SCRIPT=4
-IMU=4
-SYS=4
+All logging options are valid in all UIs.
+By default, logging goes to both, unless one is in use as the UI:
+	UI = Web    : Debug -> UART + USB
+	     Telnet : Debug -> UART + USB
+	     BLE    : Debug -> UART + USB
+	     USB    : Debug -> UART
+	     UART   : Debug -> USB
 
-$ log debug ble
-BLE=4
+Inline Logging can only be enabled when the UI is either UART or USB.
+...It simply doesn't make sense in any other UI.
+To enable/disable Inline Logging (view logging messages in the UI):
+	ENable  : Type "+++" (sans quotes) ; do NOT press <enter> ; wait 1 second  ... (LOG -> log:... debug:1)
+	DISable : Type "---" (sans quotes) ; do NOT press <enter> ; wait 1 second  ... (LOG -> log:... debug:0)
 
-$ log debug ble <0..4> [save]
+Logging noise is on a scale of {0..4}:
+	0 : silent
+	1 : errors              ESP_LOGE (text starts "E (")
+	2 : 1 + warnings        ESP_LOGW (text starts "W (")
+	3 : 2 + information     ESP_LOGI (text starts "I (")
+	4 : 3 + debug messages  ESP_LOGI (text starts "DBG") and ESP_LOGD & ESP_LOGV
 
-0=silent
-1=errors
-2=warnings
-3=info
-4=debug
+Each devices/code section has its own noise level:
+	LOG DEBUG [ALL]   # ble:4 wifi:4 web:4 sd:4 script:4 imu:3 sys:4
+	LOG DEBUG BLE     # ble:4
+	LOG DEBUG imu     # imu:3
 
-LOG DEBUG SAVE
+You can set any device to any volume.
+	LOG DEBUG <ALL|BLE|WIFI|WEB|SD|SCRIPT|IMU|SYS> <volume>
+
+To make the changes survive a reboot, append SAVE
+	LOG DEBUG <ALL|BLE|WIFI|WEB|SD|SCRIPT|IMU|SYS> <volume> SAVE
+...Hand edits to your debug.cfg file will be KKEPT, only the specific flag byte will be edited.
+
+You can create a new template debug.cfg
+	LOG DEBUG SAVE
+...Hand edits to your debug.cfg file will be LOST, The old file will be dumped to the UI & the Console (as a backup).
+
+To send a message to the Debug Console, WITH a terminating <cr>
+	DEBUG <text>    # normal text rules apply
+
+Test DEBUG command:
+	PRINT <text>    # will produce the same result to the UI
+
+To refresh your memory on text escaping:
+	\n      ->  new line.
+
+	\#      ->  #  .. *ALL* #'s in strings MUST be escaped (or they will start a comment)
+	\$      ->  $  .. only required in scripts (to prevent variable expansion)
+	\\      ->  \  .. a way to print the escape character
+
+	\"      ->  "\"" -> "  ..  '\"' -> \"  .. If a string is quoted, that encapsulation quote
+	\'      ->  '\'' -> '  ..  "\'" -> \'  ..    needs to be escaped inside the encapsulated string
+
+	\i[9]c  ->  ink   colour   9 -> light/bright/bold
+	\p[9]c  ->  paper colour   c = {0:blk, 4:blu, 1:red, 5:mag, 2:grn, 6:cyn, 3:yel, 7:wht}
+	\i8 \p8 ->  ink/paper     -> system default
+	\ip     ->  ink AND paper -> system default
+
+	"double" or 'single' quotes are optional
+	\" -> produce a " inside a "double-quoted" string
+	\' -> produce a ' inside a 'single-quoted' string
+	\" or \' as the first character -> used Unquoted-Text rules
 
 
+ ,--------.
+(  Events  )===========================================================================================================
+ `--------'
 
+Events act as interrupts.
+The core can queue 16 EVENTS, after which, the oldest is lost.
 
+In the UI:   All (active) events are seen as they happen, asynchronously.
+
+In a Script: The queue is cleared when a script starts
+             Events arrive between script lines
+			 ...You can therefore build "atomic" code with (eg.) `TYX 1 3 10 ; TEXT 1 "hello"`
+
+Each Event type can be enabled/disabled individually:
+	EVENTS                              - BTN:1 IMU:1 UI:1 SYS:1 SCRIPT:1
+	EVENTS BTN|IMU|UI|SYS|SCRIPT <1|0>  - Enable/Disable Event class
+
+...The UI and the running script each have their own set of flags
+
+Userland Events (may be hidden):
+	BTN    <n> SHORT                   - short press (and typematic repeat)
+	       <n> DOUBLE                  - double press
+
+	       <n> DOWN                    - long-press
+	       <n> REPEAT                  - typomatic inside a Long-Press
+	       <n> UP                      - long-release
+
+	IMU    TAP                         - taps (IMU TAP 1 d t)
+	       2TAP                        - taps (IMU TAP s 1 t)
+	       3TAP                        - taps (IMU TAP s d 1)
+	       MOTION                      - movement starts
+	       STILL                       - quiet after motion
+	       SIGMO                       - significant motion
+	       STEP n                      - never sent (STEP not implemented)
+	       ORIENT {0..3}|FLAT          - orientation change
+	       WAKE                        - woke from IMU SLEEP (or SLEEP failed)
+
+	UI     CONNECT                     - client connects
+	       LINK UP|DOWN                - Wi-Fi link established/lost
+
+	SYS    TIME stamp adj:+n|-n|0|new  - clock set from the browser
+
+UI-only Events:
+	SCRIPT <name> END                  - script finished normally
+	       <name> STOPPED              - script was stopped
+	       <name> ERR [file:line] msg  - script error
+	       <name> PAUSED file:line     - paused (breakpoint, PAUSE)
+
+Script-only Events (always hidden from UI):
+	UI     DISCONNECT                  - client disconnected (never seen by the client)
+	TIMER  <n> [cnt]                   - script timers [scripts only]
+
+Timer ticks are merged in to a single Event.
+Ie. If you set a 2ms Timer, and read the event 10ms later, you will see a single event of 5 ticks, not 5 2ms events.
+
+=========
+ Scripts |-------------------------------------------------------------------------------------------------------------
+=========
+
+Scripts start with all Events off
+
+Events may be explicitly enabled/disabled with:
+	EVENTS BTN|IMU|UI|SYS|TIMER <1|0>   - Enable/Disable Event class
+
+Or implicitly enabled/disabled with:
+	ON BTN|IMU|UI|SYS|TIMER <function>  - enable event  for handler-attach
+	ON BTN|IMU|UI|SYS|TIMER OFF         - disable event for handler-detach
+
+	TIMER <n> <ms>                      - enable Timer Events
+
+Scripts can block or release Events to the UI:
+	UI EVENTS <n>
+		       Errors | Events | Replies + OKs
+		      ---------------------------------
+		 0  ->    ~   |   ~    |    ~    [silent]
+		 1  ->    1   |   ~    |    ~    [*default]
+		 2  ->    1   |   1    |    ~    [debug]
+		 3  ->    1   |   1    |    1    [verbose]
+
+ ,---------.
+(  Buttons  )==========================================================================================================
+ `---------'
+
+Each available GPIO pin can be assigned to a Button.
+
+A Button is either:
+	# Tact [PtM] -> Gnd  (Internal pull-up)
+	# Touch      -> Capacitive sensor
+
+A Tact (Push-to-Make) switch must connect the GPIO pin to Gnd when pressed.
+
+A Touch sensory is a capacitive sensor - not all controllers offer this on all pins (incl. "all" and "none").
+The Waveshare happens to offer this on every exposed GPIO pin!
+
+Touch sensors do not require a physical switch, but do require occasional (re-)calibration.
+
+NVRAM variables [buttons]:
+	btn.gpio = <list>  [0 2 4 5 6 7 8 9 10 11]   # button GPIO pins {1..N}
+	btn.deb  = <ms>    [30]                      # debounce
+	btn.long = <ms>    [600]                     # long press
+	btn.dbl  = <ms>    [300]                     # double click timeout
+	btn.rpt  = <ms>    [0]                       # typomatic control
+	
+Show Button assignments and default timings:
+	BTN              # deb:<ms> long:<ms> dbl:<ms> rpt:<ms> b1:<1|0> ... b10:<1|0>
+		deb :<ms>    #   debounce   - wait <ms> for reading to stabalise              [default: 30      ]
+		long:<ms>    #   long-press - hold for at least <ms>                          [default: 600     ]
+		dbl :<ms>    #   double-tap - two presses within <ms>                         [default: 300     ]
+		rpt :<ms>    #   repeat     - repeat key event every <ms> (after first event) [default: 0       ]
+		bN  :<1|0>   #   button #N enabled/disabled                                   [default: disabled]
+
+	BTN <n>          # disabled: n:1 gpio:0 type:off
+	                 # enabled : n:1 gpio:0 type:tact short:1 long:0 double:1 t_deb:30 t_long:600 t_dbl:300 t_rpt:0
+	
+	BTN <n> <s l d> [TACT|TOUCH]
+		n : {1..N}   # Button number
+		s : <1|0>    # enable/disable single-tap Events
+		l : <1|0>    # enable/disable long-press Events
+		d : <1|0>    # enable/disable double-tap Events
+		TACT         # GPIO goes via an SPST PtM to Gnd
+		TOUCH        # GPIO is a capacitive touch sensor
+	...calling this form, sets all timings to the system default, every time it is called
+
+As mentioned previously, TOUCH sensors need calibration.
+This is more an "environment" thing (warm/cold, dry/wet, etc.), than a "per user" thing.
+Calibration takes about 1500ms (1.5s) - DO NOT touch it during calibration!
+	BTN CAL                               # calibrate a touch sensor
+
+You have a LOT of control over the button timing!
+	BTN <n|*> RESET                       # disable all controls, and clear the timings  [* -> all buttons]
+	BTN <n|*> <s l d> [TACT|TOUCH]        # Keep current timing, or initilaise if clear  [* -> all buttons]
+	BTN <n|*> <0 0 0> [TACT|TOUCH]        # notably does NOT reset the timings!          [* -> all buttons]
+	BTN <n|*> SET DEB|LONG|DBL|RPT <ms>   # sets a specific timing value                 [* -> all buttons]
+	
+	BTN SET DEB|LONG|DBL|RPT <ms>         # sets the global timings, used to initialise buttons [default: NVRAM]
+	BTN RESET                             # as BTN * RESET, plus the global timings are reloaded from NVRAM
+
+With some lateral thinking, every timing option is available:
+	You want DOWN [REPEAT] UP events, but don't want to wait a "long" time for it to start?
+		...BTN n 0 1 0 ; BTN n SET LONG 50 ; BTN n SET RPT 120
+	You want a held button to auto-repeat {TAP TAP TAP ...}?
+		...BTN n 1 0 0 ; BTN n SET SHORT 50 ; BTN n SET RPT 120
+
+It is reasonable to have different user profiles saved as SD:/sys/user1_btn_prefs.nvram
+Then when 'user1' takes control:
+	NV LOAD user1_btn_prefs
+	BTN RESET
+	CALL buttonSetup()
+
+Scripts may find it useful to get a list of active buttons:
+	BTN LIST                              # returns "1 3 4 5 7" to say "buttons 1,3,4,5,7 are active"
 
 
 =======================================================================================================================
@@ -1504,53 +1412,27 @@ LOG DEBUG SAVE
 =======================================================================================================================
 -----------------------------------------------------------------------------------------------------------------------
 
+=======================================================================================================================
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-PRINT text  reply text {\n \\ \# \$}
-DEBUG text  text to the log port(s)
-
-
-
-
-
-EVENTS [BTN|IMU|UI|SCRIPT|ALL 0|1]  events sent to the client
-
-BTN [n s l d [TACT|TOUCH]] | BTN [n] SET deb|long|dbl|rpt ms | BTN CAL
+=======================================================================================================================
+=======================================================================================================================
 
 LIST [name [from [to]]]  list a script
 
-RUN [name [args]]  list / start a script
 LOAD name [args]  load, pause at the first line
-STOP [NOW]  stop the script
+RUN [name [args]]  list / start a script
+
 PAUSE  pause the script
 CONT  resume a paused script
+STOP [NOW]  stop the script
+
 STEP [IN|OUT]  run one line (paused)
 BPT [[file:]n | DEL ALL|#n|[file:]n]  breakpoints
+
 VARS  variables (paused)
 STACK  call stack (paused)
 
+=======================================================================================================================
 
 
 
@@ -1628,6 +1510,40 @@ FN drawPoly $n $cx $cy $r          # n sides, centre cx cy, radius r
     LET $x1 = $x2 ; LET $y1 = $y2
   END
 END
+
+ ,---------------------------------.
+(  Appendix C : Smooth light curve  )==================================================================================
+ `---------------------------------'
+
+It has no formal algorithm name. 
+It’s usually called CIE L* lightness correction or a perceptual brightness (gamma) correction table.
+
+In LED and maker circles it’s often mislabelled a “CIE 1931 correction curve”, 
+but the L* formula actually comes from CIE 1976.
+
+int  list[STEPS] = {0};
+
+int*  getSteps (int max,  int steps)
+{
+	list[0] = 0;
+	for (int i = 1;  i <= steps;  i++) {
+		list[i] = getStep(max, steps, i);
+	}
+	return list;
+}
+
+int  getStep (int max,  int steps,  int i)
+{
+    double L = (100.0 * i) / steps;
+    double Y;
+    if (L > 8.0) {
+        double t = (L + 16.0) / 116.0;
+        Y = t * t * t;
+    } else {
+        Y = L / 903.3;
+    }
+    return (int)(Y * max + 0.5);
+}
 
 -----------------------------------------------------------------------------------------------------------------------
 =======================================================================================================================
